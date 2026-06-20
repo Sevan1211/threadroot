@@ -4,7 +4,7 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
-## Unreleased
+## 0.1.5 - Website integration contracts
 
 ### Added
 
