@@ -22,10 +22,9 @@ describe("harness manifest schema", () => {
     expect(manifest.tools.allow).toEqual([]);
   });
 
-  it("rejects an empty adapter list", () => {
-    expect(() =>
-      harnessManifestSchema.parse({ name: "demo", version: 1, profile: "node-cli", adapters: [] }),
-    ).toThrow();
+  it("allows an empty adapter list for local-only harnesses", () => {
+    expect(harnessManifestSchema.parse({ name: "demo", version: 1, profile: "node-cli", adapters: [] }).adapters).toEqual([]);
+    expect(harnessManifestSchema.parse({ name: "demo", version: 1, profile: "node-cli" }).adapters).toEqual([]);
   });
 });
 

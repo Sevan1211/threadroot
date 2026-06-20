@@ -17,7 +17,7 @@ export type ObjectScope = z.infer<typeof objectScopeSchema>;
 export const riskLevelSchema = z.enum(["low", "medium", "high"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
-/** Compile targets enabled for a repo (spec §6). */
+/** Optional compile targets enabled for a repo (spec §6). Empty means local-only. */
 export const adapterIdSchema = z.enum(["agents", "claude", "copilot", "cursor"]);
 export type AdapterId = z.infer<typeof adapterIdSchema>;
 
@@ -43,7 +43,7 @@ export const harnessManifestSchema = z.object({
   name: z.string().min(1),
   version: z.literal(1),
   profile: profileIdSchema,
-  adapters: z.array(adapterIdSchema).min(1),
+  adapters: z.array(adapterIdSchema).default([]),
   references: z.array(referenceSchema).default([]),
   memory: z
     .object({

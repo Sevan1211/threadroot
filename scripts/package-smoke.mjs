@@ -66,7 +66,8 @@ try {
 
   const bin = path.join(packageDir, "dist", "index.js");
   await run(bin, ["--version"], { cwd: projectDir });
-  await run(bin, ["init", "--no-import", "--profile", "node-cli", "--adapters", "agents"], { cwd: projectDir });
+  await run(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir });
+  await run(bin, ["expose", "codex"], { cwd: projectDir });
   await run(bin, ["packs", "list"], { cwd: projectDir });
   await run(bin, ["doctor"], { cwd: projectDir });
 } finally {

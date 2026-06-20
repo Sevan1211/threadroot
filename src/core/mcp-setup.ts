@@ -75,7 +75,7 @@ Repository:
 ${repoRoot}
 
 Goal:
-Initialize Threadroot so this repo has portable AI-agent instructions, durable memory, curated skills, executable tools, and vendor-specific adapter files generated from one canonical harness.
+Initialize Threadroot so this repo has a portable AI-agent harness in one canonical \`.threadroot/\` directory.
 
 Rules:
 - Prefer deterministic CLI commands.
@@ -88,9 +88,9 @@ Steps:
 3. Run \`threadroot status\` to check whether a harness already exists.
 4. If no harness exists, run \`threadroot init\`. Use \`--no-import\` only when the user explicitly wants a blank-slate harness.
 5. Run \`threadroot status\` again.
-6. If status reports drift, run \`threadroot diff\` and summarize the drift before changing generated files.
+6. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` or \`threadroot expose all\`.
 7. Run \`threadroot context "current task"\` with the user's actual task to find relevant skills, rules, tools, and memory.
-8. If project-local MCP config is useful, run \`threadroot mcp setup --write\` and tell the user to reload their agent surface.
+8. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
 
 Final response:
 Say exactly:

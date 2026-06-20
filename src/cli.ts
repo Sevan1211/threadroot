@@ -3,11 +3,13 @@ import { runCompileCommand, type CompileCliOptions } from "./commands/compile.js
 import { runContext } from "./commands/context.js";
 import { runDiff } from "./commands/diff.js";
 import { runDoctor } from "./commands/doctor.js";
+import { runExpose, type ExposeCliOptions } from "./commands/expose.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runInstall, type InstallCliOptions } from "./commands/install.js";
 import { runMcp, runMcpSetup, type McpSetupOptions } from "./commands/mcp.js";
 import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
 import { runSkillsInspect, runSkillsList, runSkillsValidate, type SkillsValidateOptions } from "./commands/skills.js";
+import { runSetup, type SetupCliOptions } from "./commands/setup.js";
 import { runStatus } from "./commands/status.js";
 import { runPacksInspect, runPacksInstall, runPacksList, runPacksValidate } from "./commands/packs.js";
 import {
@@ -32,17 +34,40 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Git for your AI agent harness: one canonical source, compiled to every vendor format.")
-    .version("0.1.0");
+    .description("Git for your AI agent harness: one canonical .threadroot source, optional provider exposure.")
+    .version("0.1.1");
 
   program
     .command("init")
-    .description("Scaffold a Threadroot harness, import existing vendor files once, and compile.")
+    .description("Scaffold a local-only Threadroot harness and import existing vendor files once.")
     .option("--force", "Re-initialize over an existing harness.")
     .option("--no-import", "Skip importing existing vendor files (blank-slate init).")
     .option("--profile <profile>", "Override the detected project profile.")
     .option("--adapters <list>", "Comma-separated adapters: agents,claude,copilot,cursor.")
+    .option("--expose <list>", "Comma-separated provider skill shims to write: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
     .action((options: InitCliOptions) => runInit(repoRoot, options));
+
+  program
+    .command("expose")
+    .argument("[agent]", "Provider(s) to expose: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--dry-run", "Show project files that would be written.")
+    .option("--check", "Check current project exposure state.")
+    .option("--undo", "Remove Threadroot-managed project exposure files.")
+    .option("--force", "Replace an existing unmanaged threadroot skill.")
+    .description("Write thin provider project skills that point agents at `.threadroot/`.")
+    .action((agent: string | undefined, options: ExposeCliOptions) => runExpose(repoRoot, agent, options));
+
+  program
+    .command("setup")
+    .option("--global", "Install machine-level Threadroot agent bootstrap skills/config.")
+    .option("--agent <list>", "Provider(s): codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--dry-run", "Show global files that would be written.")
+    .option("--check", "Check global Threadroot setup state.")
+    .option("--undo", "Remove Threadroot-managed global setup files/blocks.")
+    .option("--force", "Replace an existing unmanaged threadroot skill.")
+    .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
+    .description("Set up Threadroot once per machine for supported coding agents.")
+    .action((options: SetupCliOptions) => runSetup(repoRoot, options));
 
   program
     .command("status")

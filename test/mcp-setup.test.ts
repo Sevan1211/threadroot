@@ -35,8 +35,9 @@ describe("mcp setup guide", () => {
   it("uses real commands in the agent prompt", () => {
     const prompt = agentLaunchPrompt("/tmp/demo");
     expect(prompt).toContain("threadroot init");
-    expect(prompt).toContain("threadroot diff");
+    expect(prompt).toContain("threadroot expose <agent>");
     expect(prompt).toContain("threadroot mcp setup --write");
+    expect(prompt).toContain("ask before running");
     for (const contract of removedContracts) {
       expect(prompt).not.toContain(contract);
     }

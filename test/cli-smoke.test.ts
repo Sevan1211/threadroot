@@ -43,9 +43,11 @@ describe("CLI smoke", () => {
   it("walks the core first-run command flow", async () => {
     const init = await run("init", "--no-import");
     expect(init).toContain("Initialized harness `demo`");
+    expect(init).toContain("adapters: none (local-only)");
 
     const status = await run("status");
     expect(status).toContain("harness: demo");
+    expect(status).toContain("adapters: none (local-only)");
 
     const context = await run("context", "write tests");
     expect(context).toContain("task: write tests");
@@ -58,7 +60,10 @@ describe("CLI smoke", () => {
     expect(diff).toContain("No drift");
 
     const doctor = await run("doctor");
-    expect(doctor).toContain("Threadroot doctor:");
+    expect(doctor).toContain("Threadroot doctor: clean");
     expect(process.exitCode).toBeUndefined();
+
+    const expose = await run("expose", "codex", "--dry-run");
+    expect(expose).toContain(".agents");
   });
 });

@@ -84,6 +84,6 @@ export async function runDiff(repoRoot: string): Promise<void> {
   }
 
   if (changed === 0) {
-    console.log("No drift: every vendor file matches the canonical harness.");
+    console.log("No drift: optional compiled outputs match the canonical harness.");
   }
 }

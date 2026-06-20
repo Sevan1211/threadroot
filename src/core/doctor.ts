@@ -7,9 +7,10 @@ import { projectLockPath, userLockPath } from "./harness/paths.js";
 import { externalSkillNames, externalToolNames, readLockFile } from "./install/lock.js";
 import { validateResolvedSkillsDeep } from "./skills.js";
 import { checkConnection } from "./connections/index.js";
+import { hasGlobalThreadrootSkill } from "./setup.js";
 import { checkToolHealth } from "./tools/index.js";
 
-export type DoctorSeverity = "error" | "warning";
+export type DoctorSeverity = "error" | "warning" | "info";
 
 export type DoctorFinding = {
   severity: DoctorSeverity;
@@ -24,6 +25,7 @@ export type DoctorReport = {
   summary: {
     errors: number;
     warnings: number;
+    info: number;
   };
 };
 
@@ -52,7 +54,7 @@ function finding(
   return pathValue ? { severity, code, message, path: pathValue } : { severity, code, message };
 }
 
-async function mcpConfigWarnings(repoRoot: string): Promise<DoctorFinding[]> {
+async function mcpConfigHints(repoRoot: string): Promise<DoctorFinding[]> {
   const configs = [".vscode/mcp.json", ".cursor/mcp.json", ".mcp.json"];
   const present = await Promise.all(configs.map((config) => exists(path.join(repoRoot, config))));
   if (present.some(Boolean)) {
@@ -60,9 +62,22 @@ async function mcpConfigWarnings(repoRoot: string): Promise<DoctorFinding[]> {
   }
   return [
     finding(
-      "warning",
+      "info",
       "mcp_config_missing",
-      "No project-local MCP config found. Run `threadroot mcp setup --write` if this repo should expose Threadroot tools to local agents.",
+      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot mcp setup --write` only when this repo should expose MCP tools to local agents.",
+    ),
+  ];
+}
+
+async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
+  if (await hasGlobalThreadrootSkill(home, "codex")) {
+    return [];
+  }
+  return [
+    finding(
+      "info",
+      "global_setup_missing",
+      "Codex global Threadroot setup was not detected. Run `threadroot setup --global --agent codex` for one-time machine setup.",
     ),
   ];
 }
@@ -242,12 +257,14 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
     }
   }
 
-  findings.push(...(await mcpConfigWarnings(repoRoot)));
+  findings.push(...(await globalSetupHints(options.home)));
+  findings.push(...(await mcpConfigHints(repoRoot)));
   return summarize(findings);
 }
 
 function summarize(findings: DoctorFinding[]): DoctorReport {
   const errors = findings.filter((entry) => entry.severity === "error").length;
   const warnings = findings.filter((entry) => entry.severity === "warning").length;
-  return { ok: errors === 0, findings, summary: { errors, warnings } };
+  const info = findings.filter((entry) => entry.severity === "info").length;
+  return { ok: errors === 0, findings, summary: { errors, warnings, info } };
 }

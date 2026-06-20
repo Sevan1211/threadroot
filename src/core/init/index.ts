@@ -17,10 +17,11 @@ import { inferProfile, readJson } from "../scan/package.js";
 import { walkRepo } from "../scan/walk.js";
 import { stringify as stringifyYaml } from "yaml";
 import type { ProfileId } from "../../types.js";
+import { exposeProject } from "../expose.js";
 import { PROJECT_MEMORY_TEMPLATE, writeBuiltinSkills } from "./builtins.js";
 import { type ImportReport, importVendorFiles } from "./import.js";
 
-const DEFAULT_ADAPTERS: AdapterId[] = ["agents", "claude", "copilot", "cursor"];
+const DEFAULT_ADAPTERS: AdapterId[] = [];
 const AGENTS_FILE = "AGENTS.md";
 
 export class InitError extends Error {
@@ -39,8 +40,10 @@ export type InitOptions = {
   importFiles?: string[];
   /** Override the detected profile. */
   profile?: ProfileId;
-  /** Override the default big-four adapters. */
+  /** Enable legacy compiled adapter outputs. Defaults to local-only. */
   adapters?: AdapterId[];
+  /** Write thin provider project skill shims after init. */
+  expose?: string;
   home?: string;
 };
 
@@ -54,6 +57,7 @@ export type InitReport = {
   rules: string[];
   import?: ImportReport;
   compiled: string[];
+  exposed: string[];
 };
 
 async function pathExists(target: string): Promise<boolean> {
@@ -167,7 +171,7 @@ async function writeStarterTools(repoRoot: string, profile: ProfileId, force: bo
 /**
  * Scaffold a Threadroot harness for the repo (spec §6.1, §12): detect the
  * profile, seed built-in skills + starter tools + memory, import existing vendor
- * files once, then compile canonical -> vendor outputs. Idempotent-friendly:
+ * files once, then optionally compile canonical -> vendor outputs. Idempotent-friendly:
  * refuses to clobber an existing harness unless `force` is set.
  */
 export async function initHarness(repoRoot: string, options: InitOptions = {}): Promise<InitReport> {
@@ -205,6 +209,11 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   }
 
   const { written } = await runCompile(repoRoot, { home: options.home });
+  const exposed = options.expose
+    ? (await exposeProject(repoRoot, { agents: options.expose })).entries
+        .filter((entry) => entry.status !== "missing" && entry.status !== "skipped")
+        .map((entry) => entry.path)
+    : [];
 
-  return { name, profile, adapters, skills, tools, memory, rules, import: report, compiled: written };
+  return { name, profile, adapters, skills, tools, memory, rules, import: report, compiled: written, exposed };
 }

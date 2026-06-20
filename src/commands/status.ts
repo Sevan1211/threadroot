@@ -8,7 +8,7 @@ export async function runStatus(repoRoot: string): Promise<void> {
   }
 
   console.log(`harness: ${status.manifest.name} (${status.manifest.profile})`);
-  console.log(`adapters: ${status.manifest.adapters.join(", ")}`);
+  console.log(`adapters: ${status.manifest.adapters.length > 0 ? status.manifest.adapters.join(", ") : "none (local-only)"}`);
   console.log(
     `objects: ${status.counts.skills} skills, ${status.counts.rules} rules, ${status.counts.tools} tools, ${status.counts.memory} memory`,
   );

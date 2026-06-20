@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { exposeProject } from "../src/core/expose.js";
 import { resolveHarness } from "../src/core/harness/index.js";
 import { InitError, initHarness } from "../src/core/init/index.js";
 import { importVendorFiles } from "../src/core/init/import.js";
@@ -25,13 +26,14 @@ async function write(rel: string, content: string): Promise<void> {
 }
 
 describe("initHarness", () => {
-  it("scaffolds built-ins, detects the profile, and compiles", async () => {
+  it("scaffolds built-ins, detects the profile, and stays local-only by default", async () => {
     await write("package.json", JSON.stringify({ name: "demo-app", bin: { demo: "cli.js" }, scripts: { test: "vitest", build: "tsup" } }));
 
     const report = await initHarness(repo, { import: false });
 
     expect(report.name).toBe("demo-app");
     expect(report.profile).toBe("node-cli");
+    expect(report.adapters).toEqual([]);
     expect(report.skills.length).toBe(9);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
 
@@ -45,9 +47,8 @@ describe("initHarness", () => {
     expect(harness.manifest.tools.allow).toEqual(expect.arrayContaining(["test", "build"]));
     expect(harness.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["test", "build"]));
 
-    const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
-    expect(agents).toContain("<!-- threadroot:begin");
-    expect(report.compiled).toContain("AGENTS.md");
+    await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(report.compiled).toEqual([]);
   });
 
   it("refuses to clobber an existing harness without force", async () => {
@@ -56,14 +57,36 @@ describe("initHarness", () => {
     await expect(initHarness(repo, { import: false, force: true })).resolves.toBeDefined();
   });
 
-  it("imports existing AGENTS.md prose into canonical, preserved through compile", async () => {
+  it("imports existing AGENTS.md prose without injecting adapter output by default", async () => {
     await write("AGENTS.md", "# Demo\n\nAlways run the tests before committing.\n");
 
     await initHarness(repo, {});
 
     const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
     expect(agents).toContain("Always run the tests before committing.");
-    expect(agents).toContain("<!-- threadroot:begin");
+    expect(agents).not.toContain("<!-- threadroot:begin");
+  });
+
+  it("can expose provider project skills on init or after init", async () => {
+    const report = await initHarness(repo, { import: false, expose: "codex" });
+    expect(report.exposed).toContain(path.join(".agents", "skills", "threadroot", "SKILL.md"));
+
+    const skill = await readFile(path.join(repo, ".agents/skills/threadroot/SKILL.md"), "utf8");
+    expect(skill).toContain("name: threadroot");
+    expect(skill).toContain("threadroot context");
+
+    const all = await exposeProject(repo, { agents: "claude,cursor,copilot,gemini,windsurf,antigravity,opencode" });
+    expect(all.entries.map((entry) => entry.path)).toEqual(
+      expect.arrayContaining([
+        path.join(".claude", "skills", "threadroot", "SKILL.md"),
+        path.join(".cursor", "skills", "threadroot", "SKILL.md"),
+        path.join(".github", "skills", "threadroot", "SKILL.md"),
+        path.join(".gemini", "skills", "threadroot", "SKILL.md"),
+        path.join(".windsurf", "skills", "threadroot", "SKILL.md"),
+        path.join(".agent", "skills", "threadroot", "SKILL.md"),
+        path.join(".opencode", "skills", "threadroot", "SKILL.md"),
+      ]),
+    );
   });
 });
 

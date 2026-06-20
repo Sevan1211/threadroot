@@ -7,6 +7,7 @@ export type InitCliOptions = {
   import?: boolean;
   profile?: string;
   adapters?: string;
+  expose?: string;
 };
 
 function parseAdapters(value: string | undefined): AdapterId[] | undefined {
@@ -26,12 +27,13 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
     import: options.import,
     profile: options.profile ? profileIdSchema.parse(options.profile) : undefined,
     adapters: parseAdapters(options.adapters),
+    expose: options.expose,
   };
 
   try {
     const report = await initHarness(repoRoot, initOptions);
     console.log(`Initialized harness \`${report.name}\` (profile: ${report.profile}).`);
-    console.log(`adapters: ${report.adapters.join(", ")}`);
+    console.log(`adapters: ${report.adapters.length > 0 ? report.adapters.join(", ") : "none (local-only)"}`);
     console.log(`skills: ${report.skills.length}, tools: ${report.tools.length}, memory: ${report.memory.length}`);
 
     if (report.import?.canonicalSource) {
@@ -47,6 +49,9 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
       console.log(`imported ${report.rules.length} cursor rule(s)`);
     }
     console.log(`compiled ${report.compiled.length} vendor file(s).`);
+    if (report.exposed.length > 0) {
+      console.log(`exposed ${report.exposed.length} provider skill shim(s).`);
+    }
   } catch (error) {
     if (error instanceof InitError) {
       console.error(error.message);

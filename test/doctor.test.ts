@@ -31,13 +31,14 @@ describe("doctor", () => {
   it("reports a clean initialized harness without errors", async () => {
     await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
     await initHarness(repo, { import: false, home: repo });
-    await write(".vscode/mcp.json", JSON.stringify({ servers: { threadroot: { command: "threadroot", args: ["mcp"] } } }));
 
     const report = await doctor(repo, { home: repo });
 
     expect(report.ok).toBe(true);
     expect(report.summary.errors).toBe(0);
+    expect(report.summary.warnings).toBe(0);
     expect(codes(report)).not.toContain("compiled_output_missing");
+    expect(codes(report)).toContain("global_setup_missing");
   });
 
   it("reports a missing harness as an error", async () => {
@@ -57,7 +58,7 @@ describe("doctor", () => {
   });
 
   it("reports missing and drifted compiled outputs", async () => {
-    await initHarness(repo, { import: false, home: repo });
+    await initHarness(repo, { import: false, home: repo, adapters: ["agents"] });
     const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
 
     await unlink(path.join(repo, "AGENTS.md"));

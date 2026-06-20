@@ -1,8 +1,8 @@
 # Threadroot
 
-Threadroot is **git for your AI agent harness**: you author skills, rules, tools, and
-memory once in a canonical `.threadroot/` directory, and Threadroot compiles them into
-every vendor format (AGENTS.md, Claude, Copilot, Cursor) so your agents stay in sync.
+Threadroot is **git for your AI agent harness**: you author skills, rules, tools,
+memory, connections, and agent setup once in a canonical `.threadroot/` directory.
+Provider-specific files are opt-in, thin exposure shims.
 
 It is local-first: a `tr` CLI for humans and CI, plus a local MCP server that exposes the
 same harness to coding agents. V1 does not require a cloud account, API key, or hosted
@@ -13,10 +13,12 @@ service.
 Run Threadroot without adding it to your project:
 
 ```bash
+npx threadroot setup --global --dry-run
+npx threadroot setup --global
+npx threadroot init
+# or
 pnpm dlx threadroot init
 # or
-npx threadroot init
-# or, explicitly with npm exec
 npm exec --package=threadroot -- threadroot init
 ```
 
@@ -25,7 +27,6 @@ After initialization:
 ```bash
 threadroot doctor
 threadroot context "write tests"
-threadroot mcp setup --write
 ```
 
 For local development on Threadroot itself:
@@ -39,12 +40,12 @@ node dist/index.js --help
 ## Quick start
 
 ```bash
-tr init                 # detect the repo, scaffold a harness, import existing
-                        # vendor files once, and compile
-tr status               # authored objects vs compiled outputs, with drift
+tr setup --global       # one-time machine setup for supported coding agents
+tr init                 # detect the repo and scaffold local-only .threadroot/
+tr status               # authored objects and optional compiled outputs
 tr context "write tests" # task-relevant skills, rules, tools, and memory
-tr doctor               # health check for harness validity, drift, MCP hints, tool trust
-tr diff                 # line diff between canonical sources and vendor files
+tr doctor               # health check for harness validity, setup hints, tool trust
+tr expose codex         # optional: write a thin project skill shim for Codex
 ```
 
 `threadroot` is the full name; `tr` is the short alias.
@@ -52,7 +53,9 @@ tr diff                 # line diff between canonical sources and vendor files
 ## CLI surface
 
 ```bash
-tr init [--force] [--no-import] [--profile <p>] [--adapters <list>]
+tr setup --global [--agent <list>] [--dry-run] [--check] [--undo] [--mcp]
+tr init [--force] [--no-import] [--profile <p>] [--adapters <list>] [--expose <list>]
+tr expose [agent|all] [--dry-run] [--check] [--undo] [--force]
 tr status
 tr diff
 tr doctor
@@ -91,8 +94,48 @@ The canonical, vendor-neutral source of truth:
   lock.json             # provenance for installed objects (commit SHA + integrity)
 ```
 
-`tr compile` turns the harness into the big-four vendor formats. Hand-authored prose in a
+By default, `tr init` keeps the repo clean and writes only `.threadroot/`. `tr compile`
+turns the harness into legacy vendor instruction formats only when adapters are enabled
+in `harness.yaml` or when you run `tr compile --adapter <name>`. Hand-authored prose in a
 vendor file is preserved; Threadroot only owns the block it marks as generated.
+
+## Global setup and exposure
+
+The best experience is one-time global setup plus local-only project harnesses:
+
+```bash
+tr setup --global --dry-run
+tr setup --global
+tr init
+```
+
+Global setup installs a tiny `threadroot` skill into supported agent user-skill
+directories so agents know to call `threadroot doctor` and `threadroot context "<task>"`
+when they see `.threadroot/`.
+
+Supported global skill targets:
+
+| Agent | Project exposure path | Global setup path |
+| --- | --- | --- |
+| Codex | `.agents/skills/` | `~/.agents/skills/` |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` |
+| Cursor | `.cursor/skills/` | `~/.cursor/skills/` |
+| GitHub Copilot | `.github/skills/` | `~/.copilot/skills/` |
+| Gemini CLI | `.gemini/skills/` | `~/.gemini/skills/` |
+| Windsurf | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` |
+| Antigravity | `.agent/skills/` | `~/.gemini/antigravity/skills/` |
+| OpenCode | `.opencode/skills/` | `~/.config/opencode/skills/` |
+
+Use project exposure only when you want repo-local native skill discovery:
+
+```bash
+tr expose codex
+tr expose all
+tr expose all --undo
+```
+
+`tr expose` writes one managed `threadroot/SKILL.md` shim per provider. It does not copy
+every Threadroot skill into provider directories.
 
 ## Built-in content
 
@@ -103,7 +146,9 @@ vendor file is preserved; Threadroot only owns the block it marks as generated.
 - **Starter tools:** wrapped from the repo's detected command surface (scripts, Make/just),
   auto-added to `tools.allow`.
 - **Profile presets:** node-cli, web, python, etc. (detected by the scanner).
-- **Adapters:** agents, claude, copilot, cursor enabled by default.
+- **Adapters:** disabled by default to keep new repos local-only; use `tr expose` for
+  skill-compatible providers or `tr compile --adapter <name>` for legacy instruction
+  files.
 
 Modern skills use the Agent Skills-style folder shape:
 
@@ -193,7 +238,7 @@ Threadroot runs a local MCP server over stdio that exposes the harness to agents
 ```bash
 tr mcp
 tr mcp setup            # print config snippets and a pasteable agent bootstrap prompt
-tr mcp setup --write    # write project-local MCP config for supported agents
+tr mcp setup --write    # opt-in: write project-local MCP config for supported agents
 ```
 
 Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `tools_run`,
@@ -201,8 +246,8 @@ Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `too
 `memory_append`, `status`, `doctor`.
 
 `tr mcp setup` also prints a copy/paste agent prompt that follows the real CLI flow:
-check availability, run `threadroot init` when needed, inspect `status`, review `diff` on
-drift, and optionally write MCP config.
+check availability, run `threadroot init` when needed, inspect `status`, use
+`threadroot context`, and ask before writing MCP config.
 
 ## Profiles
 
@@ -243,6 +288,8 @@ TMP_REPO="$(mktemp -d /tmp/threadroot-smoke.XXXXXX)"
 rsync -a --exclude .git --exclude node_modules --exclude dist ./ "$TMP_REPO/"
 cd "$TMP_REPO"
 node "$THREADROOT_ROOT/dist/index.js" init --no-import
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" setup --global --agent codex --dry-run
+node "$THREADROOT_ROOT/dist/index.js" expose codex
 node "$THREADROOT_ROOT/dist/index.js" status
 node "$THREADROOT_ROOT/dist/index.js" context "write tests"
 node "$THREADROOT_ROOT/dist/index.js" skills validate
