@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { Dirent } from "node:fs";
 import { ignoredDirectories } from "./rules.js";
 
 function toPosix(relativePath: string): string {
@@ -7,7 +8,14 @@ function toPosix(relativePath: string): string {
 }
 
 export async function walkRepo(repoRoot: string, directory = repoRoot): Promise<string[]> {
-  const entries = await fs.readdir(directory, { withFileTypes: true });
+  let entries: Dirent[];
+  try {
+    entries = await fs.readdir(directory, { withFileTypes: true });
+  } catch {
+    // Skip directories we cannot read (permissions, races) instead of aborting the whole scan.
+    return [];
+  }
+
   const files: string[] = [];
 
   for (const entry of entries) {

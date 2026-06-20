@@ -1,12 +1,21 @@
 import path from "node:path";
 
-export const CONFIG_PATH = ".threadroot/config.json";
-export const MANIFEST_PATH = ".threadroot/manifest.json";
-export const SKILLS_INDEX_PATH = ".threadroot/skills-index.json";
-export const REPO_MAP_PATH = ".threadroot/repo-map.json";
-export const MEMORY_REPORT_PATH = ".threadroot/memory-report.json";
-export const AUTOMATION_PATH = ".threadroot/automation.json";
-
+/**
+ * Resolve a repo-relative path, refusing any path that escapes the repository
+ * root (parent-directory traversal, absolute paths, or the root itself).
+ */
 export function toRepoPath(repoRoot: string, relativePath: string): string {
-  return path.join(repoRoot, relativePath);
+  if (path.isAbsolute(relativePath)) {
+    throw new Error(`Refusing to access an absolute repository path: ${relativePath}`);
+  }
+
+  const root = path.resolve(repoRoot);
+  const resolved = path.resolve(root, relativePath);
+  const relative = path.relative(root, resolved);
+
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Refusing to access a path outside the repository: ${relativePath}`);
+  }
+
+  return resolved;
 }

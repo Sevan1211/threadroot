@@ -35,6 +35,11 @@ export function inferProfile(files: string[], packageJson: unknown): ProfileId |
     return "dbt";
   }
 
+  const packageMeta =
+    packageJson && typeof packageJson === "object"
+      ? (packageJson as { bin?: unknown; scripts?: Record<string, unknown>; type?: unknown })
+      : undefined;
+
   const dependencies =
     packageJson && typeof packageJson === "object"
       ? {
@@ -49,6 +54,16 @@ export function inferProfile(files: string[], packageJson: unknown): ProfileId |
 
   if ("vite" in dependencies || files.some((file) => file.startsWith("vite.config."))) {
     return "vite-react";
+  }
+
+  if (
+    packageMeta?.bin ||
+    "commander" in dependencies ||
+    "ink" in dependencies ||
+    "tsup" in dependencies ||
+    files.some((file) => file.startsWith("src/commands/"))
+  ) {
+    return "node-cli";
   }
 
   if (files.includes("pyproject.toml")) {

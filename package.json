@@ -1,10 +1,11 @@
 {
   "name": "threadroot",
   "version": "0.1.0",
-  "description": "Create AI-ready VS Code repos for Codex and Copilot.",
+  "description": "Git for your AI agent harness: author skills, rules, tools, and memory once and compile them to every vendor format.",
   "type": "module",
   "bin": {
-    "threadroot": "./dist/index.js"
+    "threadroot": "./dist/index.js",
+    "tr": "./dist/index.js"
   },
   "files": [
     "dist"
@@ -13,20 +14,22 @@
     "build": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "commander": "^12.1.0",
-    "ink": "^5.0.1",
-    "react": "^18.3.1",
+    "yaml": "^2.9.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9",
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.18",
+    "eslint": "^9",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8",
     "vitest": "^2.1.8"
   },
   "engines": {

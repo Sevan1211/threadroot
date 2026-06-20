@@ -1,25 +1,21 @@
-import { runDoctor } from "../core/doctor.js";
+import { doctor } from "../core/doctor.js";
 
-export async function runDoctorCommand(repoRoot: string): Promise<void> {
-  const result = await runDoctor(repoRoot);
+export async function runDoctor(repoRoot: string): Promise<void> {
+  const report = await doctor(repoRoot);
 
-  if (result.issues.length === 0) {
-    console.log("Threadroot doctor: clean.");
+  if (report.findings.length === 0) {
+    console.log("Threadroot doctor: clean");
     return;
   }
 
-  for (const issue of result.issues) {
-    console.log(`${issue.level === "error" ? "error" : "warning"}: ${issue.message}`);
+  console.log(`Threadroot doctor: ${report.summary.errors} error(s), ${report.summary.warnings} warning(s)`);
+  for (const finding of report.findings) {
+    const label = finding.severity === "error" ? "error" : "warning";
+    const suffix = finding.path ? ` (${finding.path})` : "";
+    console.log(`- ${label} ${finding.code}: ${finding.message}${suffix}`);
   }
 
-  if (result.actions.length > 0) {
-    console.log("\nRecommended next commands:");
-    for (const action of result.actions) {
-      console.log(`- ${action.command} - ${action.reason}`);
-    }
-  }
-
-  if (!result.ok) {
+  if (!report.ok) {
     process.exitCode = 1;
   }
 }
