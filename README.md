@@ -109,10 +109,12 @@ tr start "current task"
 
 Without `--yes`, `tr bootstrap` prints a dry-run plan. With `--yes`, it installs global
 agent bootstrap skills, initializes `.threadroot/` if needed, runs doctor, and prints
-task context. With `--mcp`, it also writes Codex MCP config using the current CLI entry
-(`node /path/dist/index.js mcp` when Threadroot can resolve the package path, or
-`threadroot mcp` as a fallback) and verifies the stdio server handshake. It does not write
-provider-specific project files unless you pass `--expose`.
+task context. With `--mcp`, it also writes Codex MCP config using a durable command for
+the current launch path. `npx` runs write a pinned `npx --yes threadroot@<version> mcp`
+command instead of a transient npm cache path; local dev runs use
+`node /path/dist/index.js mcp`; unknown launch paths fall back to `threadroot mcp`. The
+setup verifies the stdio server handshake. It does not write provider-specific project
+files unless you pass `--expose`.
 
 Global setup installs a tiny `threadroot` skill into supported agent user-skill
 directories so agents know to call `threadroot bootstrap --yes` when setup is missing

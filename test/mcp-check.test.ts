@@ -4,8 +4,14 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { checkCodexMcp, readCodexThreadrootMcpEntry, REQUIRED_MCP_TOOLS } from "../src/core/mcp-check.js";
+import {
+  checkCodexMcp,
+  mcpEntryForScriptPath,
+  readCodexThreadrootMcpEntry,
+  REQUIRED_MCP_TOOLS,
+} from "../src/core/mcp-check.js";
 import { setupGlobal } from "../src/core/setup.js";
+import { THREADROOT_VERSION } from "../src/core/version.js";
 
 let home: string;
 let repo: string;
@@ -44,6 +50,20 @@ async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS]): Promise<stri
 }
 
 describe("checkCodexMcp", () => {
+  it("uses a stable npx command when setup is run from npm's npx cache", () => {
+    const entry = mcpEntryForScriptPath(
+      path.join(home, ".npm", "_npx", "abc123", "node_modules", "threadroot", "dist", "index.js"),
+    );
+
+    expect(entry).toEqual({ command: "npx", args: ["--yes", `threadroot@${THREADROOT_VERSION}`, "mcp"] });
+  });
+
+  it("uses the current node entry for direct local dist runs", () => {
+    const scriptPath = path.join(repo, "dist", "index.js");
+
+    expect(mcpEntryForScriptPath(scriptPath)).toEqual({ command: process.execPath, args: [scriptPath, "mcp"] });
+  });
+
   it("warns when Codex MCP config is missing", async () => {
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("warning");

@@ -13,6 +13,7 @@ import { doctor } from "../core/doctor.js";
 import { harnessStatus } from "../core/status.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
 import { checkConnections } from "../core/connections/index.js";
+import { THREADROOT_VERSION } from "../core/version.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -332,7 +333,7 @@ export async function handleMessage(
     if (request.method === "initialize") {
       return resultResponse(request, {
         protocolVersion: "2024-11-05",
-        serverInfo: { name: "threadroot", version: "0.1.3" },
+        serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
         capabilities: { tools: {} },
         instructions:
           "Threadroot exposes the repository's AI agent harness. Call `context` before broad coding work, `doctor` for health and trust checks, inspect skills/tools before risky actions, and use `memory_append` for durable handoffs.",

@@ -4,6 +4,12 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.4 - Stable npx MCP config
+
+### Fixed
+
+- `bootstrap --mcp` and `setup --global --mcp` now detect npm's `_npx` cache path and write a stable pinned `npx --yes threadroot@<version> mcp` Codex MCP command instead of pointing Codex at a transient npm cache file.
+
 ## 0.1.3 - Verified Codex MCP setup
 
 ### Added

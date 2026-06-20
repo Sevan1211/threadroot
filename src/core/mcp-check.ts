@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import type { McpServerEntry } from "./mcp-config.js";
+import { THREADROOT_VERSION } from "./version.js";
 
 export const REQUIRED_MCP_TOOLS = [
   "context",
@@ -39,15 +40,21 @@ export function codexConfigPath(home = homedir()): string {
 }
 
 export function mcpEntryForCurrentProcess(): McpServerEntry {
-  const scriptPath = currentScriptPath();
+  return mcpEntryForScriptPath(process.argv[1]);
+}
+
+export function mcpEntryForScriptPath(rawScriptPath: string | undefined): McpServerEntry {
+  const scriptPath = currentScriptPath(rawScriptPath);
+  if (scriptPath && isNpxPackagePath(scriptPath)) {
+    return { command: "npx", args: ["--yes", `threadroot@${THREADROOT_VERSION}`, "mcp"] };
+  }
   if (scriptPath && path.basename(scriptPath) === "index.js" && scriptPath.includes(`${path.sep}dist${path.sep}`)) {
     return { command: process.execPath, args: [scriptPath, "mcp"] };
   }
   return { command: "threadroot", args: ["mcp"] };
 }
 
-function currentScriptPath(): string | undefined {
-  const scriptPath = process.argv[1];
+function currentScriptPath(scriptPath: string | undefined): string | undefined {
   if (!scriptPath) {
     return undefined;
   }
@@ -56,6 +63,11 @@ function currentScriptPath(): string | undefined {
   } catch {
     return scriptPath;
   }
+}
+
+function isNpxPackagePath(scriptPath: string): boolean {
+  const normalized = scriptPath.split(path.sep).join("/");
+  return normalized.includes("/.npm/_npx/") && normalized.includes("/node_modules/threadroot/");
 }
 
 export async function readCodexThreadrootMcpEntry(home = homedir()): Promise<McpServerEntry | undefined> {
@@ -283,7 +295,7 @@ function runMcpHandshake(
         params: {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "threadroot-check", version: "0.1.3" },
+          clientInfo: { name: "threadroot-check", version: THREADROOT_VERSION },
         },
       })}\n`,
     );
@@ -310,7 +322,7 @@ async function runOneShotMcpHandshake(
           params: {
             protocolVersion: "2024-11-05",
             capabilities: {},
-            clientInfo: { name: "threadroot-check", version: "0.1.3" },
+            clientInfo: { name: "threadroot-check", version: THREADROOT_VERSION },
           },
         }),
         JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),

@@ -31,13 +31,14 @@ import {
   runConnectionsList,
   type ConnectionAddOptions,
 } from "./commands/connections.js";
+import { THREADROOT_VERSION } from "./core/version.js";
 
 export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
     .description("Git for your AI agent harness: one command to bootstrap, one .threadroot source.")
-    .version("0.1.3");
+    .version(THREADROOT_VERSION);
 
   program
     .command("bootstrap")

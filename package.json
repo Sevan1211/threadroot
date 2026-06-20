@@ -1,6 +1,6 @@
 {
   "name": "threadroot",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Git for your AI agent harness: keep skills, tools, memory, rules, and agent setup in one local-first .threadroot directory.",
   "license": "MIT",
   "type": "module",
