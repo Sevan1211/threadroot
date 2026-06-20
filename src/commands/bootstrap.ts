@@ -1,4 +1,5 @@
 import { bootstrapProject } from "../core/bootstrap.js";
+import { mcpEntryForCurrentProcess } from "../core/mcp-check.js";
 import { profileIdSchema } from "../types.js";
 import { printBootstrapReport } from "./session-output.js";
 
@@ -27,6 +28,7 @@ export async function runBootstrap(repoRoot: string, options: BootstrapCliOption
     noInit: options.init === false,
     import: options.import,
     profile: options.profile ? profileIdSchema.parse(options.profile) : undefined,
+    mcpEntry: options.mcp ? mcpEntryForCurrentProcess() : undefined,
   });
   printBootstrapReport(report);
 
@@ -34,4 +36,3 @@ export async function runBootstrap(repoRoot: string, options: BootstrapCliOption
     process.exitCode = 1;
   }
 }
-

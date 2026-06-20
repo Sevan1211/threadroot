@@ -1,4 +1,5 @@
 import { setupGlobal, type SetupMode } from "../core/setup.js";
+import { checkCodexMcp, mcpEntryForCurrentProcess } from "../core/mcp-check.js";
 
 export type SetupCliOptions = {
   global?: boolean;
@@ -30,6 +31,7 @@ export async function runSetup(_repoRoot: string, options: SetupCliOptions): Pro
     mode,
     force: options.force,
     mcp: options.mcp,
+    mcpEntry: options.mcp ? mcpEntryForCurrentProcess() : undefined,
   });
 
   const title =
@@ -46,8 +48,21 @@ export async function runSetup(_repoRoot: string, options: SetupCliOptions): Pro
     console.log(`- ${entry.label}: ${entry.status} ${entry.path}${suffix}`);
   }
 
+  if (options.mcp && options.global && mode === "write") {
+    const check = await checkCodexMcp({ repoRoot: _repoRoot });
+    console.log(`MCP verification: ${check.status}`);
+    if (check.entry) {
+      console.log(`MCP server: ${check.entry.command} ${check.entry.args.join(" ")}`.trim());
+    }
+    for (const message of check.messages) {
+      console.log(`- ${message}`);
+    }
+    if (check.status === "error") {
+      process.exitCode = 1;
+    }
+  }
+
   if (mode === "write") {
     console.log("Reload or restart open agent sessions so new global skills/config are discovered.");
   }
 }
-

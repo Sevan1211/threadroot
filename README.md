@@ -38,7 +38,9 @@ node dist/index.js --help
 
 ```bash
 tr bootstrap --yes      # one-time machine setup + local-only .threadroot/
+tr bootstrap --yes --mcp # also configure and verify global Codex MCP
 tr start "write tests"  # doctor, status, relevant context, and command map
+tr mcp check            # verify Codex MCP config and server handshake
 tr expose codex         # optional: write a thin project skill shim for Codex
 ```
 
@@ -71,6 +73,7 @@ tr connections list | check
 tr connections add <name> --provider <p> --command <cmd>
 tr packs list | inspect <pack> | validate <pack> | install <pack>
 tr mcp                            # run the local MCP server (stdio)
+tr mcp check                      # verify Codex MCP config and required tools
 tr mcp setup [--write]            # wire MCP into agents
 ```
 
@@ -100,14 +103,16 @@ vendor file is preserved; Threadroot only owns the block it marks as generated.
 The simple path is:
 
 ```bash
-tr bootstrap --yes
+tr bootstrap --yes --mcp
 tr start "current task"
 ```
 
 Without `--yes`, `tr bootstrap` prints a dry-run plan. With `--yes`, it installs global
 agent bootstrap skills, initializes `.threadroot/` if needed, runs doctor, and prints
-task context. It does not write provider-specific project files unless you pass
-`--expose`.
+task context. With `--mcp`, it also writes Codex MCP config using the current CLI entry
+(`node /path/dist/index.js mcp` when Threadroot can resolve the package path, or
+`threadroot mcp` as a fallback) and verifies the stdio server handshake. It does not write
+provider-specific project files unless you pass `--expose`.
 
 Global setup installs a tiny `threadroot` skill into supported agent user-skill
 directories so agents know to call `threadroot bootstrap --yes` when setup is missing
@@ -237,6 +242,7 @@ Threadroot runs a local MCP server over stdio that exposes the harness to agents
 
 ```bash
 tr mcp
+tr mcp check            # verify Codex global MCP config and required tools
 tr mcp setup            # print config snippets and a pasteable agent bootstrap prompt
 tr mcp setup --write    # opt-in: write project-local MCP config for supported agents
 ```
@@ -248,6 +254,10 @@ Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `too
 `tr mcp setup` also prints a copy/paste agent prompt that follows the real CLI flow:
 check availability, run `threadroot bootstrap --yes`, run `threadroot start "<task>"`,
 and ask before writing project-local MCP config.
+
+After changing Codex MCP config, reload VS Code/Codex or start a new Codex session. `tr mcp
+check` proves the server works from the terminal; the agent surface still has to load its
+MCP configuration.
 
 ## Profiles
 
@@ -287,7 +297,8 @@ THREADROOT_ROOT="$(pwd)"
 TMP_REPO="$(mktemp -d /tmp/threadroot-smoke.XXXXXX)"
 rsync -a --exclude .git --exclude node_modules --exclude dist ./ "$TMP_REPO/"
 cd "$TMP_REPO"
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --no-import
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --mcp --no-import
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" mcp check
 HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" start "write tests"
 node "$THREADROOT_ROOT/dist/index.js" expose codex
 node "$THREADROOT_ROOT/dist/index.js" status

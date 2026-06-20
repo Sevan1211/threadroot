@@ -332,8 +332,10 @@ export async function handleMessage(
     if (request.method === "initialize") {
       return resultResponse(request, {
         protocolVersion: "2024-11-05",
-        serverInfo: { name: "threadroot", version: "0.1.2" },
+        serverInfo: { name: "threadroot", version: "0.1.3" },
         capabilities: { tools: {} },
+        instructions:
+          "Threadroot exposes the repository's AI agent harness. Call `context` before broad coding work, `doctor` for health and trust checks, inspect skills/tools before risky actions, and use `memory_append` for durable handoffs.",
       });
     }
 

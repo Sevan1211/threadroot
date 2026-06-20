@@ -9,6 +9,7 @@ import { validateResolvedSkillsDeep } from "./skills.js";
 import { checkConnection } from "./connections/index.js";
 import { hasGlobalThreadrootSkill } from "./setup.js";
 import { checkToolHealth } from "./tools/index.js";
+import { checkCodexMcp } from "./mcp-check.js";
 
 export type DoctorSeverity = "error" | "warning" | "info";
 
@@ -54,7 +55,22 @@ function finding(
   return pathValue ? { severity, code, message, path: pathValue } : { severity, code, message };
 }
 
-async function mcpConfigHints(repoRoot: string): Promise<DoctorFinding[]> {
+async function mcpConfigHints(repoRoot: string, home?: string): Promise<DoctorFinding[]> {
+  const codexMcp = await checkCodexMcp({ repoRoot, home, timeoutMs: 2500 });
+  if (codexMcp.status === "ok") {
+    return [];
+  }
+  if (codexMcp.status === "error") {
+    return [
+      finding(
+        "warning",
+        "codex_mcp_unhealthy",
+        `Codex Threadroot MCP is configured but failed verification: ${codexMcp.messages.join(" ")}`,
+        codexMcp.configPath,
+      ),
+    ];
+  }
+
   const configs = [".vscode/mcp.json", ".cursor/mcp.json", ".mcp.json"];
   const present = await Promise.all(configs.map((config) => exists(path.join(repoRoot, config))));
   if (present.some(Boolean)) {
@@ -258,7 +274,7 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
   }
 
   findings.push(...(await globalSetupHints(options.home)));
-  findings.push(...(await mcpConfigHints(repoRoot)));
+  findings.push(...(await mcpConfigHints(repoRoot, options.home)));
   return summarize(findings);
 }
 

@@ -68,10 +68,11 @@ try {
 
   const bin = path.join(packageDir, "dist", "index.js");
   await run(bin, ["--version"], { cwd: projectDir });
-  await run(bin, ["bootstrap", "--yes", "--agent", "codex", "--no-import", "--profile", "node-cli"], {
+  await run(bin, ["bootstrap", "--yes", "--agent", "codex", "--mcp", "--no-import", "--profile", "node-cli"], {
     cwd: projectDir,
     env: { HOME: homeDir },
   });
+  await run(bin, ["mcp", "check"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["expose", "codex"], { cwd: projectDir });
   await run(bin, ["packs", "list"], { cwd: projectDir });

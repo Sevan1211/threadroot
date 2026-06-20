@@ -18,14 +18,15 @@ afterEach(async () => {
 
 describe("global setup", () => {
   it("installs, checks, and removes managed global agent setup", async () => {
-    const dryRun = await setupGlobal({ home, agents: "codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode", mode: "dry-run", mcp: true });
+    const mcpEntry = { command: "node", args: ["/tmp/threadroot/dist/index.js", "mcp"] };
+    const dryRun = await setupGlobal({ home, agents: "codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode", mode: "dry-run", mcp: true, mcpEntry });
     expect(dryRun.entries.filter((entry) => entry.status === "create").length).toBe(10);
 
     await expect(readFile(path.join(home, ".agents/skills/threadroot/SKILL.md"), "utf8")).rejects.toMatchObject({
       code: "ENOENT",
     });
 
-    const write = await setupGlobal({ home, agents: "all", mcp: true });
+    const write = await setupGlobal({ home, agents: "all", mcp: true, mcpEntry });
     expect(write.entries.map((entry) => entry.path)).toEqual(
       expect.arrayContaining([
         path.join("~", ".agents", "skills", "threadroot", "SKILL.md"),
@@ -50,12 +51,13 @@ describe("global setup", () => {
 
     const codexConfig = await readFile(path.join(home, ".codex/config.toml"), "utf8");
     expect(codexConfig).toContain("[mcp_servers.threadroot]");
+    expect(codexConfig).toContain('command = "node"');
+    expect(codexConfig).toContain('args = ["/tmp/threadroot/dist/index.js", "mcp"]');
 
-    const check = await setupGlobal({ home, agents: "codex", mode: "check", mcp: true });
+    const check = await setupGlobal({ home, agents: "codex", mode: "check", mcp: true, mcpEntry });
     expect(check.entries.every((entry) => entry.status === "present" || entry.status === "unchanged")).toBe(true);
 
-    const undo = await setupGlobal({ home, agents: "codex", mode: "undo", mcp: true });
+    const undo = await setupGlobal({ home, agents: "codex", mode: "undo", mcp: true, mcpEntry });
     expect(undo.entries.map((entry) => entry.status)).toEqual(["removed", "removed", "removed"]);
   });
 });
-

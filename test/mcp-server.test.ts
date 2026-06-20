@@ -26,6 +26,7 @@ describe("mcp server handleMessage", () => {
       protocolVersion: "2024-11-05",
       serverInfo: { name: "threadroot" },
     });
+    expect(JSON.stringify(response?.result)).toContain("Call `context` before broad coding work");
   });
 
   it("returns no response for notifications/initialized", async () => {

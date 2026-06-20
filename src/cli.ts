@@ -7,7 +7,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runExpose, type ExposeCliOptions } from "./commands/expose.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runInstall, type InstallCliOptions } from "./commands/install.js";
-import { runMcp, runMcpSetup, type McpSetupOptions } from "./commands/mcp.js";
+import { runMcp, runMcpCheck, runMcpSetup, type McpCheckOptions, type McpSetupOptions } from "./commands/mcp.js";
 import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
 import { runSkillsInspect, runSkillsList, runSkillsValidate, type SkillsValidateOptions } from "./commands/skills.js";
 import { runSetup, type SetupCliOptions } from "./commands/setup.js";
@@ -37,7 +37,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .name("threadroot")
     .description("Git for your AI agent harness: one command to bootstrap, one .threadroot source.")
-    .version("0.1.2");
+    .version("0.1.3");
 
   program
     .command("bootstrap")
@@ -243,6 +243,11 @@ export function createProgram(repoRoot = process.cwd()): Command {
 
   const mcp = program.command("mcp").description("Run or configure the local Threadroot MCP server.");
   mcp.action(() => runMcp(repoRoot));
+  mcp
+    .command("check")
+    .option("--timeout <ms>", "Handshake timeout in milliseconds.")
+    .description("Verify Codex MCP config and the Threadroot stdio server handshake.")
+    .action((options: McpCheckOptions) => runMcpCheck(repoRoot, options));
   mcp
     .command("setup")
     .option("--agent <agent>", "all, generic, codex, copilot, cursor, or claude.")

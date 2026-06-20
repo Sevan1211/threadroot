@@ -72,6 +72,19 @@ function printCommandMap(): void {
   console.log("- `threadroot remember \"<note>\"` - save durable handoff/project memory");
 }
 
+function printMcpCheck(report: BootstrapReport["mcpCheck"]): void {
+  if (!report) {
+    return;
+  }
+  console.log(`mcp check: ${report.status}`);
+  if (report.entry) {
+    console.log(`mcp server: ${report.entry.command} ${report.entry.args.join(" ")}`.trim());
+  }
+  for (const message of report.messages) {
+    console.log(`- ${message}`);
+  }
+}
+
 export function printBootstrapReport(report: BootstrapReport): void {
   console.log(`Threadroot bootstrap: ${report.mode === "write" ? "complete" : "plan"}`);
 
@@ -98,6 +111,7 @@ export function printBootstrapReport(report: BootstrapReport): void {
   }
 
   printStatus(report.status);
+  printMcpCheck(report.mcpCheck);
   printDoctor(report.doctor);
   printContext(report.context);
   printCommandMap();

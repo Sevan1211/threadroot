@@ -4,6 +4,19 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.3 - Verified Codex MCP setup
+
+### Added
+
+- `threadroot mcp check` to verify Codex MCP config, launch the stdio server, complete a JSON-RPC initialize handshake, and assert required Threadroot tools are available.
+- MCP server initialization instructions that tell agents how to use `context`, `doctor`, skills, tools, and durable memory.
+- Doctor checks for configured-but-broken Codex MCP.
+
+### Changed
+
+- `bootstrap --mcp` and `setup --global --mcp` now write a local-aware MCP command. Package-bin symlinks and local dev runs resolve to `node /path/to/dist/index.js mcp`, with `threadroot mcp` as the fallback.
+- Package smoke now verifies MCP from the packed tarball.
+
 ## 0.1.2 - One-command bootstrap and session start
 
 ### Added

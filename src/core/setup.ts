@@ -10,6 +10,7 @@ import {
 } from "./agent-providers.js";
 import { hasManagedBlock, removeManagedBlock, upsertManagedBlock } from "./managed-block.js";
 import { THREADROOT_MANAGED_MARKER, THREADROOT_SKILL_NAME, threadrootSkillContent } from "./threadroot-skill.js";
+import { type McpServerEntry } from "./mcp-config.js";
 
 export type SetupMode = "write" | "dry-run" | "check" | "undo";
 
@@ -19,6 +20,7 @@ export type GlobalSetupOptions = {
   home?: string;
   force?: boolean;
   mcp?: boolean;
+  mcpEntry?: McpServerEntry;
 };
 
 export type SetupStatus = "create" | "update" | "unchanged" | "present" | "missing" | "removed" | "skipped";
@@ -96,12 +98,16 @@ function codexAgentsBlock(): string {
   ].join("\n");
 }
 
-function codexMcpBlock(): string {
+function tomlString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function codexMcpBlock(entry: McpServerEntry): string {
   return [
     CODEX_MCP_BEGIN,
     "[mcp_servers.threadroot]",
-    'command = "threadroot"',
-    'args = ["mcp"]',
+    `command = ${tomlString(entry.command)}`,
+    `args = [${entry.args.map(tomlString).join(", ")}]`,
     CODEX_MCP_END,
     "",
   ].join("\n");
@@ -208,7 +214,7 @@ async function setupCodexAgents(home: string, mode: SetupMode): Promise<SetupEnt
   return { kind: "codex-agents", agent: "codex", label: "Codex global AGENTS.md", path: shown, status };
 }
 
-async function setupCodexMcp(home: string, mode: SetupMode): Promise<SetupEntry> {
+async function setupCodexMcp(home: string, mode: SetupMode, entry: McpServerEntry): Promise<SetupEntry> {
   const filePath = codexConfigPath(home);
   const shown = displayPath(home, filePath);
   const existing = (await readMaybe(filePath)) ?? "";
@@ -224,7 +230,7 @@ async function setupCodexMcp(home: string, mode: SetupMode): Promise<SetupEntry>
     };
   }
 
-  const desired = upsertManagedBlock(existing, codexMcpBlock(), CODEX_MCP_BEGIN, CODEX_MCP_END);
+  const desired = upsertManagedBlock(existing, codexMcpBlock(entry), CODEX_MCP_BEGIN, CODEX_MCP_END);
 
   if (mode === "check") {
     return {
@@ -271,7 +277,7 @@ export async function setupGlobal(options: GlobalSetupOptions = {}): Promise<Glo
   if (providerIds.includes("codex")) {
     entries.push(await setupCodexAgents(home, mode));
     if (options.mcp) {
-      entries.push(await setupCodexMcp(home, mode));
+      entries.push(await setupCodexMcp(home, mode, options.mcpEntry ?? { command: "threadroot", args: ["mcp"] }));
     }
   }
 

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/core/doctor.js";
 import { initHarness } from "../src/core/init/index.js";
+import { REQUIRED_MCP_TOOLS } from "../src/core/mcp-check.js";
+import { setupGlobal } from "../src/core/setup.js";
 
 let repo: string;
 
@@ -25,6 +27,28 @@ async function write(rel: string, content: string): Promise<void> {
 
 function codes(report: Awaited<ReturnType<typeof doctor>>): string[] {
   return report.findings.map((finding) => finding.code);
+}
+
+async function writeFakeMcpServer(): Promise<string> {
+  const filePath = path.join(repo, "fake-mcp.sh");
+  const tools = REQUIRED_MCP_TOOLS.map((name) => ({ name, description: name, inputSchema: { type: "object" } }));
+  await write(
+    "fake-mcp.sh",
+    [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `tools='${JSON.stringify(tools)}'`,
+      "while IFS= read -r line; do",
+      "  if [[ \"$line\" == *'\"method\":\"initialize\"'* ]]; then",
+      "    printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"serverInfo\":{\"name\":\"fake-threadroot\"},\"capabilities\":{\"tools\":{}}}}'",
+      "  elif [[ \"$line\" == *'\"method\":\"tools/list\"'* ]]; then",
+      "    printf '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":%s}}\\n' \"$tools\"",
+      "  fi",
+      "done",
+      "",
+    ].join("\n"),
+  );
+  return filePath;
 }
 
 describe("doctor", () => {
@@ -178,5 +202,37 @@ describe("doctor", () => {
     expect(codes(report)).toContain("high_risk_connection_without_confirm");
     expect(codes(report)).toContain("connection_check_failed");
     expect(codes(report)).toContain("tool_healthcheck_failed");
+  });
+
+  it("does not show MCP missing hints when global Codex MCP verifies", async () => {
+    await initHarness(repo, { import: false, home: repo });
+    const server = await writeFakeMcpServer();
+    await setupGlobal({
+      home: repo,
+      agents: "codex",
+      mcp: true,
+      mcpEntry: { command: "bash", args: [server] },
+    });
+
+    const report = await doctor(repo, { home: repo });
+
+    expect(report.ok).toBe(true);
+    expect(codes(report)).not.toContain("mcp_config_missing");
+    expect(codes(report)).not.toContain("codex_mcp_unhealthy");
+  });
+
+  it("warns when global Codex MCP is configured but broken", async () => {
+    await initHarness(repo, { import: false, home: repo });
+    await setupGlobal({
+      home: repo,
+      agents: "codex",
+      mcp: true,
+      mcpEntry: { command: path.join(repo, "missing-threadroot"), args: ["mcp"] },
+    });
+
+    const report = await doctor(repo, { home: repo });
+
+    expect(report.ok).toBe(true);
+    expect(codes(report)).toContain("codex_mcp_unhealthy");
   });
 });

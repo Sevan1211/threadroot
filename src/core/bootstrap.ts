@@ -6,6 +6,8 @@ import { doctor, type DoctorReport } from "./doctor.js";
 import { exposeProject, type ExposeResult } from "./expose.js";
 import { assembleContext, type HarnessContext } from "./harness/index.js";
 import { initHarness, type InitReport } from "./init/index.js";
+import { type McpServerEntry } from "./mcp-config.js";
+import { checkCodexMcp, type McpCheckReport } from "./mcp-check.js";
 import { setupGlobal, type GlobalSetupResult, type SetupMode } from "./setup.js";
 import { harnessStatus, type HarnessStatus } from "./status.js";
 
@@ -21,6 +23,7 @@ export type BootstrapOptions = {
   import?: boolean;
   profile?: ProfileId;
   home?: string;
+  mcpEntry?: McpServerEntry;
 };
 
 export type BootstrapReport = {
@@ -33,6 +36,7 @@ export type BootstrapReport = {
   status?: HarnessStatus;
   doctor?: DoctorReport;
   context?: HarnessContext;
+  mcpCheck?: McpCheckReport;
   notes: string[];
 };
 
@@ -87,6 +91,7 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
       mode,
       home: options.home,
       mcp: options.mcp,
+      mcpEntry: options.mcpEntry,
     });
   } else {
     notes.push("Skipped global setup because --no-global was set.");
@@ -120,6 +125,10 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
   let status: HarnessStatus | undefined;
   let doctorReport: DoctorReport | undefined;
   let context: HarnessContext | undefined;
+  let mcpCheck: McpCheckReport | undefined;
+  if (options.mcp && write) {
+    mcpCheck = await checkCodexMcp({ repoRoot, home: options.home });
+  }
   if (hasHarnessAfterInit) {
     status = await harnessStatus(repoRoot, { home: options.home });
     doctorReport = await doctor(repoRoot, { home: options.home });
@@ -144,6 +153,7 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
     status,
     doctor: doctorReport,
     context,
+    mcpCheck,
     notes,
   };
 }
