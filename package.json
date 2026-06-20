@@ -13,8 +13,8 @@
     }
   },
   "bin": {
-    "threadroot": "./dist/index.js",
-    "tr": "./dist/index.js"
+    "threadroot": "dist/index.js",
+    "tr": "dist/index.js"
   },
   "repository": {
     "type": "git",
