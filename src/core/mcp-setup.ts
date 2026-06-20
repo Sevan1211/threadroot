@@ -75,29 +75,28 @@ Repository:
 ${repoRoot}
 
 Goal:
-Initialize Threadroot so this repo has a portable AI-agent harness in one canonical \`.threadroot/\` directory.
+Make this repository ready for agent-assisted development with minimal project clutter.
 
 Rules:
 - Prefer deterministic CLI commands.
-- Do not overwrite user-owned files without checking Threadroot status/diff.
+- Do not invent Threadroot commands.
 - Keep context small. Use Threadroot context output before reading broad project files.
+- Do not create provider-specific project files unless the user asks.
 
 Steps:
 1. Check whether Threadroot is available with \`threadroot --version\`.
 2. If it is not available, try \`npm exec threadroot -- --help\` or \`pnpm dlx threadroot --help\`. If this is a local checkout, use \`${localCommand} --help\`.
-3. Run \`threadroot status\` to check whether a harness already exists.
-4. If no harness exists, run \`threadroot init\`. Use \`--no-import\` only when the user explicitly wants a blank-slate harness.
-5. Run \`threadroot status\` again.
-6. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` or \`threadroot expose all\`.
-7. Run \`threadroot context "current task"\` with the user's actual task to find relevant skills, rules, tools, and memory.
-8. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
+3. Run \`threadroot bootstrap --yes --agent all --task "current task"\`. If this is a local checkout, run \`${localCommand} bootstrap --yes --agent all --task "current task"\`.
+4. Run \`threadroot start "current task"\` with the user's actual task.
+5. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` or \`threadroot expose all\`.
+6. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
 
 Final response:
 Say exactly:
-"Success: Threadroot is initialized. Run \`threadroot status\` or \`threadroot context "<task>"\` to use it."
+"Success: Threadroot is ready. Run \`threadroot start "<task>"\` for future sessions."
 
 If using a local checkout instead of an installed package, say:
-"Success: Threadroot is initialized. Run \`${localCommand} status\` or \`${localCommand} context "<task>"\` to use it."`;
+"Success: Threadroot is ready. Run \`${localCommand} start "<task>"\` for future sessions."`;
 }
 
 function parseAgent(value: string | undefined): McpSetupAgent {

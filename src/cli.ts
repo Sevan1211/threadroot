@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { runBootstrap, type BootstrapCliOptions } from "./commands/bootstrap.js";
 import { runCompileCommand, type CompileCliOptions } from "./commands/compile.js";
 import { runContext } from "./commands/context.js";
 import { runDiff } from "./commands/diff.js";
@@ -10,6 +11,7 @@ import { runMcp, runMcpSetup, type McpSetupOptions } from "./commands/mcp.js";
 import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
 import { runSkillsInspect, runSkillsList, runSkillsValidate, type SkillsValidateOptions } from "./commands/skills.js";
 import { runSetup, type SetupCliOptions } from "./commands/setup.js";
+import { runStart, type StartCliOptions } from "./commands/start.js";
 import { runStatus } from "./commands/status.js";
 import { runPacksInspect, runPacksInstall, runPacksList, runPacksValidate } from "./commands/packs.js";
 import {
@@ -34,8 +36,30 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Git for your AI agent harness: one canonical .threadroot source, optional provider exposure.")
-    .version("0.1.1");
+    .description("Git for your AI agent harness: one command to bootstrap, one .threadroot source.")
+    .version("0.1.2");
+
+  program
+    .command("bootstrap")
+    .description("Plan or apply first-run Threadroot setup for this machine and repository.")
+    .option("-y, --yes", "Apply the setup plan. Without --yes, bootstrap prints a dry-run plan.")
+    .option("--dry-run", "Print the setup plan without writing files.")
+    .option("--agent <list>", "Provider(s): codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--task <task>", "Task used for the initial context slice.")
+    .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
+    .option("--expose <list>", "Also write project provider skill shims: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--no-global", "Skip one-time machine-level agent setup.")
+    .option("--no-init", "Skip project harness initialization.")
+    .option("--no-import", "Skip importing existing vendor files during init.")
+    .option("--profile <profile>", "Override the detected project profile during init.")
+    .action((options: BootstrapCliOptions) => runBootstrap(repoRoot, options));
+
+  program
+    .command("start")
+    .argument("[task]", "Task to prepare context for.")
+    .option("--task <task>", "Task to prepare context for.")
+    .description("Start a focused Threadroot agent session: doctor, status, context, and command map.")
+    .action((task: string | undefined, options: StartCliOptions) => runStart(repoRoot, task, options));
 
   program
     .command("init")

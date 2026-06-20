@@ -77,7 +77,7 @@ async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
     finding(
       "info",
       "global_setup_missing",
-      "Codex global Threadroot setup was not detected. Run `threadroot setup --global --agent codex` for one-time machine setup.",
+      "Codex global Threadroot setup was not detected. Run `threadroot bootstrap --yes --agent codex` for one-time machine setup.",
     ),
   ];
 }

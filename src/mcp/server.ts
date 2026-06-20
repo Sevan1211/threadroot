@@ -332,7 +332,7 @@ export async function handleMessage(
     if (request.method === "initialize") {
       return resultResponse(request, {
         protocolVersion: "2024-11-05",
-        serverInfo: { name: "threadroot", version: "0.1.1" },
+        serverInfo: { name: "threadroot", version: "0.1.2" },
         capabilities: { tools: {} },
       });
     }

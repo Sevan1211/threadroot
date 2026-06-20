@@ -13,20 +13,17 @@ service.
 Run Threadroot without adding it to your project:
 
 ```bash
-npx threadroot setup --global --dry-run
-npx threadroot setup --global
-npx threadroot init
+npx threadroot bootstrap --yes
 # or
-pnpm dlx threadroot init
+pnpm dlx threadroot bootstrap --yes
 # or
-npm exec --package=threadroot -- threadroot init
+npm exec --package=threadroot -- threadroot bootstrap --yes
 ```
 
 After initialization:
 
 ```bash
-threadroot doctor
-threadroot context "write tests"
+threadroot start "write tests"
 ```
 
 For local development on Threadroot itself:
@@ -40,11 +37,8 @@ node dist/index.js --help
 ## Quick start
 
 ```bash
-tr setup --global       # one-time machine setup for supported coding agents
-tr init                 # detect the repo and scaffold local-only .threadroot/
-tr status               # authored objects and optional compiled outputs
-tr context "write tests" # task-relevant skills, rules, tools, and memory
-tr doctor               # health check for harness validity, setup hints, tool trust
+tr bootstrap --yes      # one-time machine setup + local-only .threadroot/
+tr start "write tests"  # doctor, status, relevant context, and command map
 tr expose codex         # optional: write a thin project skill shim for Codex
 ```
 
@@ -53,6 +47,8 @@ tr expose codex         # optional: write a thin project skill shim for Codex
 ## CLI surface
 
 ```bash
+tr bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose <list>]
+tr start ["<task>"]
 tr setup --global [--agent <list>] [--dry-run] [--check] [--undo] [--mcp]
 tr init [--force] [--no-import] [--profile <p>] [--adapters <list>] [--expose <list>]
 tr expose [agent|all] [--dry-run] [--check] [--undo] [--force]
@@ -99,19 +95,23 @@ turns the harness into legacy vendor instruction formats only when adapters are 
 in `harness.yaml` or when you run `tr compile --adapter <name>`. Hand-authored prose in a
 vendor file is preserved; Threadroot only owns the block it marks as generated.
 
-## Global setup and exposure
+## Bootstrap, global setup, and exposure
 
-The best experience is one-time global setup plus local-only project harnesses:
+The simple path is:
 
 ```bash
-tr setup --global --dry-run
-tr setup --global
-tr init
+tr bootstrap --yes
+tr start "current task"
 ```
 
+Without `--yes`, `tr bootstrap` prints a dry-run plan. With `--yes`, it installs global
+agent bootstrap skills, initializes `.threadroot/` if needed, runs doctor, and prints
+task context. It does not write provider-specific project files unless you pass
+`--expose`.
+
 Global setup installs a tiny `threadroot` skill into supported agent user-skill
-directories so agents know to call `threadroot doctor` and `threadroot context "<task>"`
-when they see `.threadroot/`.
+directories so agents know to call `threadroot bootstrap --yes` when setup is missing
+and `threadroot start "<task>"` when they see `.threadroot/`.
 
 Supported global skill targets:
 
@@ -246,8 +246,8 @@ Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `too
 `memory_append`, `status`, `doctor`.
 
 `tr mcp setup` also prints a copy/paste agent prompt that follows the real CLI flow:
-check availability, run `threadroot init` when needed, inspect `status`, use
-`threadroot context`, and ask before writing MCP config.
+check availability, run `threadroot bootstrap --yes`, run `threadroot start "<task>"`,
+and ask before writing project-local MCP config.
 
 ## Profiles
 
@@ -287,8 +287,8 @@ THREADROOT_ROOT="$(pwd)"
 TMP_REPO="$(mktemp -d /tmp/threadroot-smoke.XXXXXX)"
 rsync -a --exclude .git --exclude node_modules --exclude dist ./ "$TMP_REPO/"
 cd "$TMP_REPO"
-node "$THREADROOT_ROOT/dist/index.js" init --no-import
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" setup --global --agent codex --dry-run
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --no-import
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" start "write tests"
 node "$THREADROOT_ROOT/dist/index.js" expose codex
 node "$THREADROOT_ROOT/dist/index.js" status
 node "$THREADROOT_ROOT/dist/index.js" context "write tests"

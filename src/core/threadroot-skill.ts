@@ -26,16 +26,17 @@ export function threadrootSkillContent(provider: AgentProvider, scope: "project"
     "## Workflow",
     "",
     "1. If `threadroot --version` works, use `threadroot`. Otherwise use `npx --yes threadroot@latest` for one-off commands.",
-    "2. If `.threadroot/harness.yaml` is missing and the user wants setup, run `threadroot init` or `npx --yes threadroot@latest init`.",
-    "3. Before coding in a Threadroot repo, run `threadroot doctor` and resolve errors. Treat warnings as review items, not automatic blockers.",
-    "4. For the current task, run `threadroot context \"<task>\"` and use the returned skills, rules, tools, memory, and references before doing broad file reads.",
-    "5. Use `threadroot status` to inspect harness state and `threadroot diff` only when compiled adapter outputs are enabled.",
-    "6. Use `threadroot tools list`, `threadroot tools check`, and `threadroot run <tool>` for explicit local capabilities. Confirm risky tools when required.",
-    "7. Do not create provider-specific files unless the user asks. Use `threadroot expose <agent>` when native project skill shims are desired.",
+    "2. If `.threadroot/harness.yaml` is missing and the user wants setup, run `threadroot bootstrap --yes` or `npx --yes threadroot@latest bootstrap --yes`.",
+    "3. At the start of a coding session, run `threadroot start \"<task>\"` to get doctor status, project state, relevant skills, tools, memory, and the command map.",
+    "4. For a narrower slice, run `threadroot context \"<task>\"` and use the returned skills, rules, tools, memory, and references before doing broad file reads.",
+    "5. Use `threadroot tools list`, `threadroot tools check`, and `threadroot run <tool>` for explicit local capabilities. Confirm risky tools when required.",
+    "6. Do not create provider-specific files unless the user asks. Use `threadroot expose <agent>` when native project skill shims are desired.",
     "",
     "## Useful Commands",
     "",
     "```bash",
+    "threadroot bootstrap --yes",
+    "threadroot start \"<task>\"",
     "threadroot doctor",
     "threadroot status",
     "threadroot context \"<task>\"",
@@ -55,4 +56,3 @@ export function threadrootSkillContent(provider: AgentProvider, scope: "project"
     "",
   ].join("\n");
 }
-

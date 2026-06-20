@@ -51,6 +51,7 @@ try {
 
   const extractDir = path.join(workDir, "extract");
   const projectDir = path.join(workDir, "project");
+  const homeDir = path.join(workDir, "home");
   await mkdir(extractDir, { recursive: true });
   await run("tar", ["-xzf", tarballPath, "-C", extractDir]);
 
@@ -62,14 +63,19 @@ try {
   await symlink(repoNodeModules, path.join(packageDir, "node_modules"), "dir");
 
   await mkdir(projectDir, { recursive: true });
+  await mkdir(homeDir, { recursive: true });
   await writeFile(path.join(projectDir, "package.json"), '{"name":"threadroot-package-smoke"}\n', "utf8");
 
   const bin = path.join(packageDir, "dist", "index.js");
   await run(bin, ["--version"], { cwd: projectDir });
-  await run(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir });
+  await run(bin, ["bootstrap", "--yes", "--agent", "codex", "--no-import", "--profile", "node-cli"], {
+    cwd: projectDir,
+    env: { HOME: homeDir },
+  });
+  await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["expose", "codex"], { cwd: projectDir });
   await run(bin, ["packs", "list"], { cwd: projectDir });
-  await run(bin, ["doctor"], { cwd: projectDir });
+  await run(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
 } finally {
   if (tarballPath) {
     await rm(tarballPath, { force: true });

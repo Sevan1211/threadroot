@@ -42,6 +42,8 @@ export type AssembleContextOptions = {
   home?: string;
   /** Max skills returned (after ranking). */
   limit?: number;
+  /** Return baseline skills when no task-specific skill matches. */
+  fallbackSkills?: boolean;
 };
 
 /** Deterministic task tokenizer (no LLM). */
@@ -74,7 +76,7 @@ export async function assembleContext(
   const harness = options.harness ?? (await resolveHarness(repoRoot, { home: options.home }));
   const terms = taskTerms(task);
 
-  const ranked = harness.skills
+  let ranked = harness.skills
     .map((skill) => ({
       skill,
       score: scoreSkill(`${skill.name} ${skill.frontmatter.when} ${skill.frontmatter.tags.join(" ")}`, terms),
@@ -90,6 +92,17 @@ export async function assembleContext(
       sourcePath: skill.sourcePath,
       score,
     }));
+
+  if (ranked.length === 0 && options.fallbackSkills) {
+    ranked = harness.skills.slice(0, options.limit ?? 8).map((skill) => ({
+      name: skill.name,
+      when: skill.frontmatter.when,
+      tags: skill.frontmatter.tags,
+      scope: skill.frontmatter.scope,
+      sourcePath: skill.sourcePath,
+      score: 0,
+    }));
+  }
 
   return {
     task,

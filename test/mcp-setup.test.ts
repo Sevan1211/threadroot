@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { agentLaunchPrompt, mcpSetupGuide } from "../src/core/mcp-setup.js";
 
 const removedContracts = [
-  "threadroot start",
   "threadroot revamp",
   "threadroot map refresh",
   "threadroot refresh --memory",
@@ -23,10 +22,9 @@ describe("mcp setup guide", () => {
 
     expect(output).toContain("Threadroot MCP setup");
     expect(output).toContain('"threadroot"');
-    expect(output).toContain("threadroot init");
-    expect(output).toContain("threadroot status");
-    expect(output).toContain('threadroot context "<task>"');
-    expect(output).toContain("Success: Threadroot is initialized");
+    expect(output).toContain("threadroot bootstrap --yes");
+    expect(output).toContain("threadroot start");
+    expect(output).toContain("Success: Threadroot is ready");
     for (const contract of removedContracts) {
       expect(output).not.toContain(contract);
     }
@@ -34,7 +32,7 @@ describe("mcp setup guide", () => {
 
   it("uses real commands in the agent prompt", () => {
     const prompt = agentLaunchPrompt("/tmp/demo");
-    expect(prompt).toContain("threadroot init");
+    expect(prompt).toContain("threadroot bootstrap --yes");
     expect(prompt).toContain("threadroot expose <agent>");
     expect(prompt).toContain("threadroot mcp setup --write");
     expect(prompt).toContain("ask before running");

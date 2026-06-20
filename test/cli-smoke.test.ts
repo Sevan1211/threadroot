@@ -41,9 +41,9 @@ async function run(...args: string[]): Promise<string> {
 
 describe("CLI smoke", () => {
   it("walks the core first-run command flow", async () => {
-    const init = await run("init", "--no-import");
-    expect(init).toContain("Initialized harness `demo`");
-    expect(init).toContain("adapters: none (local-only)");
+    const bootstrap = await run("bootstrap", "--yes", "--no-global", "--no-import", "--task", "write tests");
+    expect(bootstrap).toContain("Threadroot bootstrap: complete");
+    expect(bootstrap).toContain("project init: created local-only .threadroot/");
 
     const status = await run("status");
     expect(status).toContain("harness: demo");
@@ -62,6 +62,10 @@ describe("CLI smoke", () => {
     const doctor = await run("doctor");
     expect(doctor).toContain("Threadroot doctor: clean");
     expect(process.exitCode).toBeUndefined();
+
+    const start = await run("start", "write tests");
+    expect(start).toContain("Threadroot start:");
+    expect(start).toContain("agent command map:");
 
     const expose = await run("expose", "codex", "--dry-run");
     expect(expose).toContain(".agents");

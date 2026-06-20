@@ -4,6 +4,19 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.2 - One-command bootstrap and session start
+
+### Added
+
+- `threadroot bootstrap` as the simple first-run command for global agent setup, local-only harness initialization, health checks, and initial context.
+- `threadroot start "<task>"` as the daily agent-session command for doctor, status, task context, and Threadroot command discovery.
+- Package smoke coverage for the new bootstrap/start flow.
+
+### Changed
+
+- The generated agent bootstrap prompt now uses `threadroot bootstrap --yes` and `threadroot start "<task>"` instead of spelling out lower-level setup commands.
+- README quickstart now leads with the simplified bootstrap/start flow.
+
 ## 0.1.1 - Clean setup and global agent bootstrap
 
 ### Changed
