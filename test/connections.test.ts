@@ -43,6 +43,23 @@ describe("connections", () => {
     expect(content).not.toContain("secret");
   });
 
+  it("creates allow and deny policy rules", async () => {
+    const created = await createConnection(dir, {
+      name: "aws-dev",
+      provider: "aws",
+      command: "aws",
+      risk: "high",
+      allow: ["sts get-caller-identity", "s3 ls"],
+      deny: ["delete", "terminate"],
+    });
+
+    expect(created.manifest.allow).toEqual(["sts get-caller-identity", "s3 ls"]);
+    expect(created.manifest.deny).toEqual(["delete", "terminate"]);
+    const content = await readFile(created.path, "utf8");
+    expect(content).toContain("allow:");
+    expect(content).toContain("deny:");
+  });
+
   it("checks a configured connection healthcheck", async () => {
     const result = await checkConnection(
       dir,

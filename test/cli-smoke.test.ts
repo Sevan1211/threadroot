@@ -49,12 +49,22 @@ describe("CLI smoke", () => {
     expect(status).toContain("harness: demo");
     expect(status).toContain("adapters: none (local-only)");
 
+    const statusJson = JSON.parse(await run("status", "--json")) as { exists: boolean; manifest: { name: string } };
+    expect(statusJson.exists).toBe(true);
+    expect(statusJson.manifest.name).toBe("demo");
+
     const context = await run("context", "write tests");
     expect(context).toContain("task: write tests");
     expect(context).toContain("add-test");
 
+    const contextJson = JSON.parse(await run("context", "write tests", "--json")) as { task: string };
+    expect(contextJson.task).toBe("write tests");
+
     const skills = await run("skills", "validate");
     expect(skills).toContain("Skills valid.");
+
+    const skillsJson = JSON.parse(await run("skills", "list", "--json")) as { skills: Array<{ name: string }> };
+    expect(skillsJson.skills.map((skill) => skill.name)).toContain("add-test");
 
     const diff = await run("diff");
     expect(diff).toContain("No drift");
@@ -66,6 +76,15 @@ describe("CLI smoke", () => {
     const start = await run("start", "write tests");
     expect(start).toContain("Threadroot start:");
     expect(start).toContain("agent command map:");
+
+    const toolsJson = JSON.parse(await run("tools", "list", "--json")) as { tools: unknown[] };
+    expect(Array.isArray(toolsJson.tools)).toBe(true);
+
+    const packsJson = JSON.parse(await run("packs", "list", "--json")) as { packs: Array<{ name: string }> };
+    expect(packsJson.packs.map((pack) => pack.name)).toContain("testing");
+
+    const connectionsJson = JSON.parse(await run("connections", "list", "--json")) as { connections: unknown[] };
+    expect(Array.isArray(connectionsJson.connections)).toBe(true);
 
     const expose = await run("expose", "codex", "--dry-run");
     expect(expose).toContain(".agents");

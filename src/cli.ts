@@ -49,6 +49,8 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--task <task>", "Task used for the initial context slice.")
     .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
     .option("--expose <list>", "Also write project provider skill shims: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--packs <list>", "Comma-separated capability packs to install, such as testing,typescript-node.")
+    .option("--json", "Print machine-readable JSON.")
     .option("--no-global", "Skip one-time machine-level agent setup.")
     .option("--no-init", "Skip project harness initialization.")
     .option("--no-import", "Skip importing existing vendor files during init.")
@@ -59,6 +61,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .command("start")
     .argument("[task]", "Task to prepare context for.")
     .option("--task <task>", "Task to prepare context for.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Start a focused Threadroot agent session: doctor, status, context, and command map.")
     .action((task: string | undefined, options: StartCliOptions) => runStart(repoRoot, task, options));
 
@@ -97,7 +100,8 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .command("status")
     .description("Show harness state, object counts, and compiled-output drift.")
-    .action(() => runStatus(repoRoot));
+    .option("--json", "Print machine-readable JSON.")
+    .action((options) => runStatus(repoRoot, options));
 
   program
     .command("diff")
@@ -107,7 +111,8 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .command("doctor")
     .description("Check harness validity, compiled output health, MCP hints, and tool trust.")
-    .action(() => runDoctor(repoRoot));
+    .option("--json", "Print machine-readable JSON.")
+    .action((options) => runDoctor(repoRoot, options));
 
   program
     .command("compile")
@@ -119,7 +124,8 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .command("context")
     .argument("<task>", "Task to assemble a relevant harness slice for.")
     .description("Assemble the task-relevant harness slice: skills, rules, tools, and memory.")
-    .action((task: string) => runContext(repoRoot, task));
+    .option("--json", "Print machine-readable JSON.")
+    .action((task: string, options) => runContext(repoRoot, task, options));
 
   program
     .command("run")
@@ -127,6 +133,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--input <pair...>", "Tool input as key=value (repeatable).")
     .option("-y, --yes", "Confirm running a tool marked confirm:true.")
     .option("--timeout <ms>", "Override the execution timeout in milliseconds.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Execute a harness tool locally.")
     .action((tool: string, options: ToolRunOptions) => runToolRun(repoRoot, tool, options));
 
@@ -160,12 +167,21 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .action((type: string, note: string) => runMemoryAppend(repoRoot, type, note));
 
   const tools = program.command("tools").description("Manage executable harness tools.");
-  tools.command("list").description("List harness tools.").action(() => runToolsList(repoRoot));
-  tools.command("check").description("Run configured tool healthchecks.").action(() => runToolsCheck(repoRoot));
+  tools
+    .command("list")
+    .option("--json", "Print machine-readable JSON.")
+    .description("List harness tools.")
+    .action((options) => runToolsList(repoRoot, options));
+  tools
+    .command("check")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run configured tool healthchecks.")
+    .action((options) => runToolsCheck(repoRoot, options));
   tools
     .command("detect")
+    .option("--json", "Print machine-readable JSON.")
     .description("Propose starter tools from the repo's existing command surface.")
-    .action(() => runToolsDetect(repoRoot));
+    .action((options) => runToolsDetect(repoRoot, options));
   tools
     .command("add")
     .argument("<name>", "Tool name (lowercase, hyphenated).")
@@ -178,6 +194,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--confirm", "Require confirmation before running.")
     .option("--scope <scope>", "user or project.")
     .option("--force", "Overwrite an existing tool.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Author a new harness tool.")
     .action((name: string, options: ToolAddOptions) => runToolsAdd(repoRoot, name, options));
   tools
@@ -190,12 +207,21 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--confirm", "Require confirmation before running.")
     .option("--scope <scope>", "user or project.")
     .option("--force", "Overwrite an existing tool.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Guided safe tool builder.")
     .action((options: ToolCreateOptions) => runToolsCreate(repoRoot, options));
 
   const connections = program.command("connections").description("Manage local CLI connections.");
-  connections.command("list").description("List harness connections.").action(() => runConnectionsList(repoRoot));
-  connections.command("check").description("Run configured connection healthchecks.").action(() => runConnectionsCheck(repoRoot));
+  connections
+    .command("list")
+    .option("--json", "Print machine-readable JSON.")
+    .description("List harness connections.")
+    .action((options) => runConnectionsList(repoRoot, options));
+  connections
+    .command("check")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run configured connection healthchecks.")
+    .action((options) => runConnectionsCheck(repoRoot, options));
   connections
     .command("add")
     .argument("<name>", "Connection name (lowercase, hyphenated).")
@@ -206,39 +232,55 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--risk <risk>", "Risk level: low, medium, or high.")
     .option("--confirm", "Require confirmation before connection-backed tools run.")
     .option("--healthcheck <command>", "Command that verifies the connection works.")
+    .option("--allow <patterns>", "Comma-separated allowed command fragments for this connection.")
+    .option("--deny <patterns>", "Comma-separated denied command fragments for this connection.")
     .option("--scope <scope>", "user or project.")
     .option("--force", "Overwrite an existing connection.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Author a local CLI connection manifest.")
     .action((name: string, options: ConnectionAddOptions) => runConnectionsAdd(repoRoot, name, options));
 
   const packs = program.command("packs").description("Inspect, validate, and install capability packs.");
-  packs.command("list").description("List built-in and repo-local packs.").action(() => runPacksList(repoRoot));
+  packs
+    .command("list")
+    .option("--json", "Print machine-readable JSON.")
+    .description("List built-in and repo-local packs.")
+    .action((options) => runPacksList(repoRoot, options));
   packs
     .command("inspect")
     .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Inspect a capability pack.")
-    .action((nameOrPath: string) => runPacksInspect(repoRoot, nameOrPath));
+    .action((nameOrPath: string, options) => runPacksInspect(repoRoot, nameOrPath, options));
   packs
     .command("validate")
     .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Validate a capability pack.")
-    .action((nameOrPath: string) => runPacksValidate(repoRoot, nameOrPath));
+    .action((nameOrPath: string, options) => runPacksValidate(repoRoot, nameOrPath, options));
   packs
     .command("install")
     .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Install a capability pack into the project harness.")
-    .action((nameOrPath: string) => runPacksInstall(repoRoot, nameOrPath));
+    .action((nameOrPath: string, options) => runPacksInstall(repoRoot, nameOrPath, options));
 
   const skills = program.command("skills").description("Inspect and validate harness skills.");
-  skills.command("list").description("List harness skills.").action(() => runSkillsList(repoRoot));
+  skills
+    .command("list")
+    .option("--json", "Print machine-readable JSON.")
+    .description("List harness skills.")
+    .action((options) => runSkillsList(repoRoot, options));
   skills
     .command("inspect")
     .argument("<path>", "Repo-relative skill file or skill directory.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Inspect a skill's metadata, references, scripts, assets, and eval files.")
-    .action((targetPath: string) => runSkillsInspect(repoRoot, targetPath));
+    .action((targetPath: string, options) => runSkillsInspect(repoRoot, targetPath, options));
   skills
     .command("validate")
     .option("--path <path>", "Validate a repo-relative skill file, skill directory, or skill collection.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Validate skill frontmatter, naming, trigger descriptions, and progressive-disclosure hygiene.")
     .action((options: SkillsValidateOptions) => runSkillsValidate(repoRoot, options));
 
@@ -247,12 +289,14 @@ export function createProgram(repoRoot = process.cwd()): Command {
   mcp
     .command("check")
     .option("--timeout <ms>", "Handshake timeout in milliseconds.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Verify Codex MCP config and the Threadroot stdio server handshake.")
     .action((options: McpCheckOptions) => runMcpCheck(repoRoot, options));
   mcp
     .command("setup")
     .option("--agent <agent>", "all, generic, codex, copilot, cursor, or claude.")
     .option("--write", "Write project-local MCP config files for the agents.")
+    .option("--json", "Print machine-readable JSON.")
     .description("Print MCP config snippets and a pasteable agent bootstrap prompt.")
     .action((options: McpSetupOptions) => runMcpSetup(repoRoot, options));
 

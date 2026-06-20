@@ -2,14 +2,15 @@ import { HarnessError, resolveHarness } from "../core/harness/index.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
 import type { RiskLevel } from "../core/harness/schema.js";
 import type { ProfileId } from "../types.js";
+import { printJson, type JsonCliOptions } from "./json.js";
 
-export type ToolRunOptions = {
+export type ToolRunOptions = JsonCliOptions & {
   input?: string[];
   yes?: boolean;
   timeout?: string;
 };
 
-export type ToolAddOptions = {
+export type ToolAddOptions = JsonCliOptions & {
   description?: string;
   run?: string;
   script?: string;
@@ -25,6 +26,10 @@ export type ToolCreateOptions = ToolAddOptions & {
   fromCommand?: string;
 };
 
+export type ToolsListOptions = JsonCliOptions;
+export type ToolsCheckOptions = JsonCliOptions;
+export type ToolsDetectOptions = JsonCliOptions;
+
 function parseInputs(pairs: string[] = []): Record<string, string> {
   const input: Record<string, string> = {};
   for (const pair of pairs) {
@@ -37,16 +42,37 @@ function parseInputs(pairs: string[] = []): Record<string, string> {
   return input;
 }
 
-export async function runToolsList(repoRoot: string): Promise<void> {
+export async function runToolsList(repoRoot: string, options: ToolsListOptions = {}): Promise<void> {
   let harness;
   try {
     harness = await resolveHarness(repoRoot);
   } catch (error) {
     if (error instanceof HarnessError) {
-      console.log("No harness found. Run `tr init` first.");
+      if (options.json) {
+        printJson({ tools: [], ok: false, error: "harness_missing", message: "No harness found. Run `tr init` first." });
+      } else {
+        console.log("No harness found. Run `tr init` first.");
+      }
       return;
     }
     throw error;
+  }
+
+  const tools = harness.tools.map((tool) => ({
+    name: tool.name,
+    description: tool.manifest.description,
+    origin: tool.origin,
+    scope: tool.manifest.scope,
+    risk: tool.manifest.risk,
+    confirm: tool.manifest.confirm,
+    connection: tool.manifest.connection,
+    healthcheck: Boolean(tool.manifest.healthcheck),
+    kind: tool.manifest.run ? "shell" : "script",
+    input: tool.manifest.input,
+  }));
+  if (options.json) {
+    printJson({ tools });
+    return;
   }
 
   if (harness.tools.length === 0) {
@@ -77,6 +103,11 @@ export async function runToolRun(repoRoot: string, name: string, options: ToolRu
   });
 
   if (outcome.status === "blocked") {
+    if (options.json) {
+      printJson(outcome);
+      process.exitCode = 1;
+      return;
+    }
     if (outcome.reason === "needs-confirmation") {
       console.log(`${outcome.message} Re-run with --yes to confirm.`);
     } else {
@@ -87,6 +118,14 @@ export async function runToolRun(repoRoot: string, name: string, options: ToolRu
   }
 
   const { result } = outcome;
+  if (options.json) {
+    printJson(outcome);
+    if (!result.ok) {
+      process.exitCode = result.exitCode ?? 1;
+    }
+    return;
+  }
+
   if (result.stdout) {
     process.stdout.write(result.stdout.endsWith("\n") ? result.stdout : `${result.stdout}\n`);
   }
@@ -124,7 +163,11 @@ export async function runToolsAdd(repoRoot: string, name: string, options: ToolA
     },
     { actor: "human", force: options.force },
   );
-  console.log(`Created ${created.scope} tool \`${name}\` at ${created.path}.`);
+  if (options.json) {
+    printJson(created);
+  } else {
+    console.log(`Created ${created.scope} tool \`${name}\` at ${created.path}.`);
+  }
 }
 
 function deriveNameFromCommand(command: string): string {
@@ -147,31 +190,44 @@ export async function runToolsCreate(repoRoot: string, options: ToolCreateOption
   });
 }
 
-export async function runToolsCheck(repoRoot: string): Promise<void> {
+export async function runToolsCheck(repoRoot: string, options: ToolsCheckOptions = {}): Promise<void> {
   const harness = await resolveHarness(repoRoot);
   if (harness.tools.length === 0) {
-    console.log("No tools defined.");
+    if (options.json) {
+      printJson({ checks: [] });
+    } else {
+      console.log("No tools defined.");
+    }
     return;
   }
 
   let failures = 0;
+  const checks = [];
   for (const tool of harness.tools) {
     const check = await checkToolHealth(repoRoot, tool);
-    if (check.status === "ok") {
-      console.log(`${tool.name}: ok`);
-    } else if (check.status === "skipped") {
-      console.log(`${tool.name}: skipped - ${check.message}`);
-    } else {
-      failures += 1;
-      console.log(`${tool.name}: error - ${check.message}`);
+    checks.push(check);
+    if (!options.json) {
+      if (check.status === "ok") {
+        console.log(`${tool.name}: ok`);
+      } else if (check.status === "skipped") {
+        console.log(`${tool.name}: skipped - ${check.message}`);
+      } else {
+        console.log(`${tool.name}: error - ${check.message}`);
+      }
     }
+    if (check.status === "error") {
+      failures += 1;
+    }
+  }
+  if (options.json) {
+    printJson({ checks });
   }
   if (failures > 0) {
     process.exitCode = 1;
   }
 }
 
-export async function runToolsDetect(repoRoot: string): Promise<void> {
+export async function runToolsDetect(repoRoot: string, options: ToolsDetectOptions = {}): Promise<void> {
   let profile: ProfileId | undefined;
   try {
     profile = (await resolveHarness(repoRoot)).manifest.profile;
@@ -182,6 +238,11 @@ export async function runToolsDetect(repoRoot: string): Promise<void> {
   }
 
   const candidates = await detectToolCandidates(repoRoot, profile ?? "empty");
+  if (options.json) {
+    printJson({ candidates });
+    return;
+  }
+
   if (candidates.length === 0) {
     console.log("No starter tools detected.");
     return;

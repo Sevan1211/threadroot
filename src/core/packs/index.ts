@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, lstat, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,12 +8,15 @@ import { z } from "zod";
 
 import {
   connectionManifestSchema,
+  projectLockPath,
   projectObjectDir,
   ruleFrontmatterSchema,
   skillFrontmatterSchema,
   toolManifestSchema,
 } from "../harness/index.js";
 import { parseFrontmatter } from "../harness/frontmatter.js";
+import { readLockFile, upsertLockEntry, writeLockFile } from "../install/lock.js";
+import type { LockEntry, ObjectKind } from "../install/source.js";
 import { toRepoPath } from "../paths.js";
 
 const packManifestSchema = z.object({
@@ -112,6 +116,20 @@ async function readPackManifest(packDir: string): Promise<PackManifest> {
 
 async function packDirFor(repoRoot: string, nameOrPath: string): Promise<string> {
   if (path.isAbsolute(nameOrPath)) {
+    const root = path.resolve(repoRoot);
+    const target = path.resolve(nameOrPath);
+    const repoRelative = path.relative(root, target);
+    const bundled = await bundledPacksDir();
+    const bundledRelative = bundled ? path.relative(path.resolve(bundled), target) : undefined;
+    const insideRepo = repoRelative !== "" && !repoRelative.startsWith("..") && !path.isAbsolute(repoRelative);
+    const insideBundled =
+      bundledRelative !== undefined &&
+      bundledRelative !== "" &&
+      !bundledRelative.startsWith("..") &&
+      !path.isAbsolute(bundledRelative);
+    if (!insideRepo && !insideBundled) {
+      throw new Error(`Pack path must be repo-relative or a built-in pack name: ${nameOrPath}`);
+    }
     return nameOrPath;
   }
   if (nameOrPath.startsWith(".") || nameOrPath.includes("/") || nameOrPath.includes("\\")) {
@@ -273,12 +291,113 @@ export async function validatePack(repoRoot: string, nameOrPath: string): Promis
 }
 
 async function copyObject(source: string, destDir: string): Promise<string> {
+  if ((await lstat(source)).isSymbolicLink()) {
+    throw new Error(`Refusing to install pack object symlink: ${source}`);
+  }
   const info = await stat(source);
   const name = baseName(source);
   const dest = info.isDirectory() ? path.join(destDir, name) : path.join(destDir, path.basename(source));
   await mkdir(destDir, { recursive: true });
   await cp(source, dest, { recursive: true, force: true });
   return dest;
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  return createHash("sha256").update(await readFile(filePath)).digest("hex");
+}
+
+async function hashDirectory(root: string): Promise<string> {
+  const hash = createHash("sha256");
+  hash.update("threadroot-pack-directory-v1\n");
+
+  async function walk(dir: string): Promise<void> {
+    const entries = (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(root, full).split(path.sep).join("/");
+      if (entry.isSymbolicLink()) {
+        throw new Error(`Refusing to install pack object with symlink: ${rel}`);
+      }
+      if (entry.isDirectory()) {
+        await walk(full);
+        continue;
+      }
+      if (entry.isFile()) {
+        hash.update(`file:${rel}\n`);
+        hash.update(await readFile(full));
+        hash.update("\n");
+      }
+    }
+  }
+
+  await walk(root);
+  return hash.digest("hex");
+}
+
+async function integrityFor(source: string): Promise<string> {
+  if ((await lstat(source)).isSymbolicLink()) {
+    throw new Error(`Refusing to hash pack object symlink: ${source}`);
+  }
+  const info = await stat(source);
+  const digest = info.isDirectory() ? await hashDirectory(source) : await hashFile(source);
+  return `sha256:${digest}`;
+}
+
+function normalizeLockPath(value: string): string {
+  return value.split(path.sep).join("/");
+}
+
+function inside(root: string, target: string): string | undefined {
+  const relative = path.relative(path.resolve(root), path.resolve(target));
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return undefined;
+  }
+  return normalizeLockPath(relative);
+}
+
+function lockObjectPath(packDir: string, source: string): string {
+  return inside(packDir, source) ?? inside(path.resolve(packDir, "..", ".."), source) ?? path.basename(source);
+}
+
+async function lockEntryForPackObject(
+  packDir: string,
+  manifest: PackManifest,
+  kind: ObjectKind,
+  source: string,
+  installedAt: string,
+): Promise<LockEntry> {
+  return {
+    name: baseName(source),
+    kind,
+    sourceKind: "local",
+    source: `pack:${manifest.name}`,
+    objectPath: lockObjectPath(packDir, source),
+    integrity: await integrityFor(source),
+    installedAt,
+  };
+}
+
+async function writePackLockEntries(
+  repoRoot: string,
+  packDir: string,
+  manifest: PackManifest,
+  objects: Record<string, string[]>,
+): Promise<void> {
+  const installedAt = new Date().toISOString();
+  const entries = await Promise.all([
+    ...objects.skills.map((source) => lockEntryForPackObject(packDir, manifest, "skill", source, installedAt)),
+    ...objects.tools.map((source) => lockEntryForPackObject(packDir, manifest, "tool", source, installedAt)),
+    ...objects.rules.map((source) => lockEntryForPackObject(packDir, manifest, "rule", source, installedAt)),
+    ...objects.connections.map((source) =>
+      lockEntryForPackObject(packDir, manifest, "connection", source, installedAt),
+    ),
+  ]);
+
+  let lock = await readLockFile(projectLockPath(repoRoot));
+  for (const entry of entries) {
+    lock = upsertLockEntry(lock, entry);
+  }
+  await writeLockFile(projectLockPath(repoRoot), lock);
 }
 
 export async function installPack(repoRoot: string, nameOrPath: string): Promise<PackInspection> {
@@ -295,5 +414,6 @@ export async function installPack(repoRoot: string, nameOrPath: string): Promise
     ...objects.rules.map((source) => copyObject(source, projectObjectDir(repoRoot, "rules"))),
     ...objects.connections.map((source) => copyObject(source, projectObjectDir(repoRoot, "connections"))),
   ]);
+  await writePackLockEntries(repoRoot, packDir, manifest, objects);
   return inspectPack(repoRoot, packDir);
 }

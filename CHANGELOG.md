@@ -4,6 +4,23 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## Unreleased
+
+### Added
+
+- `bootstrap --packs <list>` to install capability packs during first-run setup.
+- Machine-readable `--json` output for `bootstrap`, `start`, `status`, `context`, `doctor`, `mcp check`, and `mcp setup`.
+- Connection authoring flags for `--allow` and `--deny` command fragments.
+- `INTEGRATION.md` as the website/cloud contract for prompt generation, JSON CLI usage, and future auth/sync shape.
+
+### Changed
+
+- MCP tool calls now return structured content alongside text content.
+- MCP `tools_run` no longer accepts model-supplied confirmation for risky tools; agents must ask the user to approve via the CLI.
+- Connection `allow` and `deny` rules are enforced when connection-backed shell tools run.
+- Pack installs now write object-level provenance and sha256 integrity entries to `.threadroot/lock.json`.
+- Release guidance now points toward npm provenance and signature verification.
+
 ## 0.1.4 - Stable npx MCP config
 
 ### Fixed

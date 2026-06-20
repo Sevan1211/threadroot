@@ -86,10 +86,11 @@ Rules:
 Steps:
 1. Check whether Threadroot is available with \`threadroot --version\`.
 2. If it is not available, try \`npm exec threadroot -- --help\` or \`pnpm dlx threadroot --help\`. If this is a local checkout, use \`${localCommand} --help\`.
-3. Run \`threadroot bootstrap --yes --agent all --task "current task"\`. If this is a local checkout, run \`${localCommand} bootstrap --yes --agent all --task "current task"\`.
-4. Run \`threadroot start "current task"\` with the user's actual task.
-5. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` or \`threadroot expose all\`.
-6. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
+3. Run \`threadroot bootstrap --yes --agent all --mcp --task "current task"\`. If this is a local checkout, run \`${localCommand} bootstrap --yes --agent all --mcp --task "current task"\`.
+4. If the user named a stack or workflow, add curated packs with \`--packs <comma-separated-pack-list>\` when a matching built-in pack exists.
+5. Run \`threadroot start "current task"\` with the user's actual task.
+6. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` or \`threadroot expose all\`.
+7. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
 
 Final response:
 Say exactly:

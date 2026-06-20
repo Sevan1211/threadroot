@@ -1,7 +1,18 @@
 import { doctor } from "../core/doctor.js";
+import { printJson, type JsonCliOptions } from "./json.js";
 
-export async function runDoctor(repoRoot: string): Promise<void> {
+export type DoctorCliOptions = JsonCliOptions;
+
+export async function runDoctor(repoRoot: string, options: DoctorCliOptions = {}): Promise<void> {
   const report = await doctor(repoRoot);
+  if (options.json) {
+    printJson(report);
+    if (!report.ok) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   const actionable = report.findings.filter((finding) => finding.severity !== "info");
   const hints = report.findings.filter((finding) => finding.severity === "info");
 

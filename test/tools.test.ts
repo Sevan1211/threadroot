@@ -277,6 +277,54 @@ describe("runTool", () => {
     expect(outcome).toMatchObject({ status: "blocked", reason: "not-allowed" });
   });
 
+  it("enforces connection allow and deny command fragments", async () => {
+    const allowed = tool({
+      name: "identity",
+      description: "d",
+      run: "echo sts get-caller-identity",
+      risk: "low",
+      connection: "cloud-dev",
+    });
+    const disallowed = tool({
+      name: "instances",
+      description: "d",
+      run: "echo ec2 describe-instances",
+      risk: "low",
+      connection: "cloud-dev",
+    });
+    const denied = tool({
+      name: "delete",
+      description: "d",
+      run: "echo iam delete-role",
+      risk: "low",
+      connection: "cloud-dev",
+    });
+    const base = harness([allowed, disallowed, denied]);
+    const policyHarness = {
+      ...base,
+      connections: [
+        {
+          ...base.connections[0]!,
+          manifest: connectionManifestSchema.parse({
+            ...base.connections[0]!.manifest,
+            allow: ["sts get-caller-identity"],
+            deny: ["delete"],
+          }),
+        },
+      ],
+    };
+
+    expect(await runTool(dir, { harness: policyHarness, name: "identity" })).toMatchObject({ status: "ran" });
+    await expect(runTool(dir, { harness: policyHarness, name: "instances" })).resolves.toMatchObject({
+      status: "blocked",
+      reason: "not-allowed",
+    });
+    await expect(runTool(dir, { harness: policyHarness, name: "delete" })).resolves.toMatchObject({
+      status: "blocked",
+      reason: "not-allowed",
+    });
+  });
+
   it("blocks confirm tools until confirmed", async () => {
     const t = tool({ name: "danger", description: "d", run: "echo x", confirm: true });
     const blocked = await runTool(dir, { harness: harness([t]), name: "danger" });

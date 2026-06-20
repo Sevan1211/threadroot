@@ -1,7 +1,15 @@
 import { harnessStatus } from "../core/status.js";
+import { printJson, type JsonCliOptions } from "./json.js";
 
-export async function runStatus(repoRoot: string): Promise<void> {
+export type StatusCliOptions = JsonCliOptions;
+
+export async function runStatus(repoRoot: string, options: StatusCliOptions = {}): Promise<void> {
   const status = await harnessStatus(repoRoot);
+  if (options.json) {
+    printJson(status);
+    return;
+  }
+
   if (!status.exists) {
     console.log("No harness found. Run `tr init` first.");
     return;

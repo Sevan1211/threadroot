@@ -31,10 +31,15 @@ If your npm account supports provenance for this publish path, prefer:
 npm publish --access public --provenance
 ```
 
+For a later automated release, prefer npm trusted publishing from a GitHub-hosted
+Actions runner with `id-token: write` so npm can generate provenance without a
+long-lived npm token.
+
 ## Verify after publish
 
 ```bash
 npm view threadroot version
+npm audit signatures
 TMP_REPO="$(mktemp -d /tmp/threadroot-publish-smoke.XXXXXX)"
 cd "$TMP_REPO"
 npm exec threadroot -- --version

@@ -110,6 +110,10 @@ export function printBootstrapReport(report: BootstrapReport): void {
     }
   }
 
+  if (report.packs && report.packs.length > 0) {
+    console.log(`packs: ${report.packs.map((pack) => pack.name).join(", ")}`);
+  }
+
   printStatus(report.status);
   printMcpCheck(report.mcpCheck);
   printDoctor(report.doctor);

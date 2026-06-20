@@ -35,6 +35,8 @@ export type CreateConnectionInput = {
   risk?: RiskLevel;
   confirm?: boolean;
   healthcheck?: string;
+  allow?: string[];
+  deny?: string[];
   scope?: ObjectScope;
 };
 
@@ -89,6 +91,8 @@ export async function createConnection(
     risk: input.risk ?? "medium",
     confirm: input.confirm ?? (input.risk === "high"),
     healthcheck: input.healthcheck ? { run: input.healthcheck, expectExitCode: 0 } : undefined,
+    allow: input.allow ?? [],
+    deny: input.deny ?? [],
     scope,
   };
 

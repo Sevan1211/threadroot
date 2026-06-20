@@ -39,6 +39,7 @@ node dist/index.js --help
 ```bash
 tr bootstrap --yes      # one-time machine setup + local-only .threadroot/
 tr bootstrap --yes --mcp # also configure and verify global Codex MCP
+tr bootstrap --yes --packs testing,typescript-node
 tr start "write tests"  # doctor, status, relevant context, and command map
 tr mcp check            # verify Codex MCP config and server handshake
 tr expose codex         # optional: write a thin project skill shim for Codex
@@ -49,32 +50,32 @@ tr expose codex         # optional: write a thin project skill shim for Codex
 ## CLI surface
 
 ```bash
-tr bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose <list>]
-tr start ["<task>"]
+tr bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose <list>] [--packs <list>] [--json]
+tr start ["<task>"] [--json]
 tr setup --global [--agent <list>] [--dry-run] [--check] [--undo] [--mcp]
 tr init [--force] [--no-import] [--profile <p>] [--adapters <list>] [--expose <list>]
 tr expose [agent|all] [--dry-run] [--check] [--undo] [--force]
-tr status
+tr status [--json]
 tr diff
-tr doctor
+tr doctor [--json]
 tr compile [--adapter <agents|claude|copilot|cursor>]
-tr context "<task>"               # assemble the task-relevant harness slice
-tr run <tool> [--input k=v ...] [-y]
+tr context "<task>" [--json]       # assemble the task-relevant harness slice
+tr run <tool> [--input k=v ...] [-y] [--json]
 tr install <source> [--kind skill|tool|rule|connection] [--path <p>] [--user]
 tr remember "<note>" [--type project|current-focus|handoff|pitfalls]
 tr memory read <type>
 tr memory append <type> "<note>"
-tr skills list | validate [--path <path>]
-tr skills inspect <path>
-tr tools list | detect | check
-tr tools add <name> --description "<text>" [--run "<cmd>"]
-tr tools create --from-command "<cmd>"
-tr connections list | check
-tr connections add <name> --provider <p> --command <cmd>
-tr packs list | inspect <pack> | validate <pack> | install <pack>
+tr skills list [--json] | validate [--path <path>] [--json]
+tr skills inspect <path> [--json]
+tr tools list | detect | check [--json]
+tr tools add <name> --description "<text>" [--run "<cmd>"] [--json]
+tr tools create --from-command "<cmd>" [--json]
+tr connections list | check [--json]
+tr connections add <name> --provider <p> --command <cmd> [--allow <patterns>] [--deny <patterns>] [--json]
+tr packs list | inspect <pack> | validate <pack> | install <pack> [--json]
 tr mcp                            # run the local MCP server (stdio)
-tr mcp check                      # verify Codex MCP config and required tools
-tr mcp setup [--write]            # wire MCP into agents
+tr mcp check [--json]             # verify Codex MCP config and required tools
+tr mcp setup [--write] [--json]   # wire MCP into agents
 ```
 
 ## The harness (`.threadroot/`)
@@ -152,7 +153,8 @@ every Threadroot skill into provider directories.
   add-test, debug-failure, write-docs, conventional-commits.
 - **Starter tools:** wrapped from the repo's detected command surface (scripts, Make/just),
   auto-added to `tools.allow`.
-- **Profile presets:** node-cli, web, python, etc. (detected by the scanner).
+- **Profile presets:** `nextjs`, `vite-react`, `fastapi`, `python-cli`, `node-cli`,
+  `dbt`, and `empty` (detected by the scanner or set with `--profile`).
 - **Adapters:** disabled by default to keep new repos local-only; use `tr expose` for
   skill-compatible providers or `tr compile --adapter <name>` for legacy instruction
   files.
@@ -202,6 +204,8 @@ tr connections add aws-dev \
   --profile dev \
   --risk high \
   --confirm \
+  --allow "sts get-caller-identity,s3 ls,logs tail" \
+  --deny "delete,terminate,iam" \
   --healthcheck "aws sts get-caller-identity --profile dev"
 tr connections check
 ```
@@ -253,6 +257,10 @@ Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `too
 `tools_create`, `tools_detect`, `connections_list`, `connections_check`, `memory_read`,
 `memory_append`, `status`, `doctor`.
 
+MCP can run tools that are already safe under the harness policy. It cannot self-confirm
+`confirm:true`, high-risk, untrusted, or connection-policy-blocked tools; agents should ask
+the user to run `threadroot run <tool> --yes` after review.
+
 `tr mcp setup` also prints a copy/paste agent prompt that follows the real CLI flow:
 check availability, run `threadroot bootstrap --yes`, run `threadroot start "<task>"`,
 and ask before writing project-local MCP config.
@@ -273,6 +281,12 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+## Website and cloud integration
+
+The public CLI is the stable foundation for the private website/cloud repo. See
+[INTEGRATION.md](./INTEGRATION.md) for the prompt-generator contract, JSON command
+surface, future auth/sync shape, and cloud data model sketch.
 
 ## Publishing
 
@@ -299,12 +313,13 @@ THREADROOT_ROOT="$(pwd)"
 TMP_REPO="$(mktemp -d /tmp/threadroot-smoke.XXXXXX)"
 rsync -a --exclude .git --exclude node_modules --exclude dist ./ "$TMP_REPO/"
 cd "$TMP_REPO"
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --mcp --no-import
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" mcp check
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" start "write tests"
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --mcp --no-import --packs testing --json
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" mcp check --json
+HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" start "write tests" --json
 node "$THREADROOT_ROOT/dist/index.js" expose codex
 node "$THREADROOT_ROOT/dist/index.js" status
 node "$THREADROOT_ROOT/dist/index.js" context "write tests"
+node "$THREADROOT_ROOT/dist/index.js" context "write tests" --json
 node "$THREADROOT_ROOT/dist/index.js" skills validate
 node "$THREADROOT_ROOT/dist/index.js" skills validate --path skills
 node "$THREADROOT_ROOT/dist/index.js" skills inspect skills/system-design
@@ -312,7 +327,7 @@ node "$THREADROOT_ROOT/dist/index.js" packs list
 node "$THREADROOT_ROOT/dist/index.js" packs inspect testing
 node "$THREADROOT_ROOT/dist/index.js" tools create --from-command "node --version" --description "Check Node.js"
 node "$THREADROOT_ROOT/dist/index.js" tools check
-node "$THREADROOT_ROOT/dist/index.js" connections add node-local --provider node --command node --risk low --healthcheck "node --version"
+node "$THREADROOT_ROOT/dist/index.js" connections add node-local --provider node --command node --risk low --allow "--version" --deny "rm,delete" --healthcheck "node --version"
 node "$THREADROOT_ROOT/dist/index.js" connections check
 node "$THREADROOT_ROOT/dist/index.js" compile
 node "$THREADROOT_ROOT/dist/index.js" diff

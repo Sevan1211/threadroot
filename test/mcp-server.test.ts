@@ -79,6 +79,37 @@ describe("mcp server handleMessage", () => {
     expect(status.manifest.name).toBe("demo");
   });
 
+  it("does not let MCP self-confirm risky tool execution", async () => {
+    const repo = await harnessRepo();
+    await fs.mkdir(path.join(repo, ".threadroot", "tools"), { recursive: true });
+    await fs.writeFile(
+      path.join(repo, ".threadroot", "tools", "danger.yaml"),
+      [
+        "name: danger",
+        "description: Risky tool",
+        "risk: high",
+        "confirm: true",
+        "run: echo dangerous",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const response = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: { name: "tools_run", arguments: { name: "danger", confirm: true } },
+    });
+
+    const result = response?.result as {
+      content: Array<{ type: string; text: string }>;
+      structuredContent: { ok: boolean; blocked?: string; message?: string };
+    };
+    expect(result.structuredContent).toMatchObject({ ok: false, blocked: "needs-confirmation" });
+    expect(result.structuredContent.message).toContain("threadroot run danger --yes");
+    expect(result.content[0]?.text).not.toContain("dangerous");
+  });
+
   it("errors on an unknown tool", async () => {
     const response = await handleMessage(await tempRepo(), {
       jsonrpc: "2.0",

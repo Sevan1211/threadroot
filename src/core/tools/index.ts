@@ -3,6 +3,7 @@ import type { LoadedTool } from "../harness/load.js";
 import { projectLockPath, userLockPath } from "../harness/paths.js";
 import { externalToolNames, readLockFile } from "../install/lock.js";
 import { authorizeTool } from "./authorize.js";
+import { authorizeConnectionCommand } from "./connection-policy.js";
 import { type ToolRunResult, executeScript, executeShell } from "./execute.js";
 import { inputEnv, interpolateRun, resolveInputs } from "./interpolate.js";
 
@@ -82,9 +83,22 @@ export async function runTool(repoRoot: string, options: RunToolOptions): Promis
   const values = resolveInputs(tool.manifest, options.input);
   const env = inputEnv(values);
   const execOptions = { cwd: repoRoot, env, timeoutMs: options.timeoutMs, signal: options.signal };
+  const command = tool.manifest.run ? interpolateRun(tool.manifest.run, values) : undefined;
 
-  const result = tool.manifest.run
-    ? await executeShell(interpolateRun(tool.manifest.run, values), execOptions)
+  if (connection) {
+    const connectionDecision = authorizeConnectionCommand(connection, command);
+    if (!connectionDecision.allowed) {
+      return {
+        status: "blocked",
+        tool: tool.name,
+        reason: "not-allowed",
+        message: connectionDecision.message,
+      };
+    }
+  }
+
+  const result = command
+    ? await executeShell(command, execOptions)
     : await executeScript(repoRoot, tool.manifest.script!, execOptions);
 
   return { status: "ran", tool: tool.name, result };

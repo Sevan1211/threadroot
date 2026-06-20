@@ -1,15 +1,27 @@
 import { HarnessError, assembleContext } from "../core/harness/index.js";
+import { printJson, type JsonCliOptions } from "./json.js";
 
-export async function runContext(repoRoot: string, task: string): Promise<void> {
+export type ContextCliOptions = JsonCliOptions;
+
+export async function runContext(repoRoot: string, task: string, options: ContextCliOptions = {}): Promise<void> {
   let context;
   try {
     context = await assembleContext(repoRoot, task);
   } catch (error) {
     if (error instanceof HarnessError) {
-      console.log("No harness found. Run `tr init` first.");
+      if (options.json) {
+        printJson({ ok: false, error: "harness_missing", message: "No harness found. Run `tr init` first." });
+      } else {
+        console.log("No harness found. Run `tr init` first.");
+      }
       return;
     }
     throw error;
+  }
+
+  if (options.json) {
+    printJson(context);
+    return;
   }
 
   console.log(`task: ${context.task}`);

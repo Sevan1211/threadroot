@@ -100,7 +100,7 @@ const toolRegistry: ToolSpec[] = [
   }),
   defineTool({
     name: "tools_list",
-    description: "List the executable tools defined in this repo's harness (name, inputs, confirm).",
+    description: "List the executable tools defined in this repo's harness (name, inputs, risk, connection, confirm).",
     inputSchema: objectSchema({}),
     args: z.object({}),
     run: async (repoRoot) => {
@@ -113,7 +113,10 @@ const toolRegistry: ToolSpec[] = [
           name: tool.name,
           description: tool.manifest.description,
           scope: tool.manifest.scope,
+          risk: tool.manifest.risk,
           confirm: tool.manifest.confirm,
+          connection: tool.manifest.connection,
+          healthcheck: Boolean(tool.manifest.healthcheck),
           kind: tool.manifest.run ? "shell" : "script",
           input: tool.manifest.input,
         })),
@@ -136,28 +139,33 @@ const toolRegistry: ToolSpec[] = [
   defineTool({
     name: "tools_run",
     description:
-      "Execute a harness tool locally. Tools marked confirm:true require `confirm: true` after user approval.",
+      "Execute a safe harness tool locally. MCP cannot self-confirm risky tools; use `threadroot run <tool> --yes` after human review.",
     inputSchema: objectSchema(
       {
         name: { type: "string", description: "Tool name." },
         input: { type: "object", description: "Tool inputs as key/value pairs.", additionalProperties: true },
-        confirm: { type: "boolean", description: "Confirm running a tool that requires confirmation." },
       },
       ["name"],
     ),
     args: z.object({
       name: z.string().min(1),
       input: z.record(z.unknown()).optional(),
-      confirm: z.boolean().optional(),
     }),
     run: async (repoRoot, args) => {
       const outcome = await runTool(repoRoot, {
         name: args.name,
         input: args.input,
-        confirmed: args.confirm,
+        confirmed: false,
       });
       if (outcome.status === "blocked") {
-        return { ok: false, blocked: outcome.reason, message: outcome.message };
+        return {
+          ok: false,
+          blocked: outcome.reason,
+          message:
+            outcome.reason === "needs-confirmation"
+              ? `${outcome.message} Ask the user to run \`threadroot run ${args.name} --yes\` after review.`
+              : outcome.message,
+        };
       }
       const { result } = outcome;
       return {
@@ -181,6 +189,9 @@ const toolRegistry: ToolSpec[] = [
         description: { type: "string", description: "What the tool does." },
         run: { type: "string", description: "Shell command (use {{param}} for inputs)." },
         script: { type: "string", description: "Harness-relative script path (alternative to run)." },
+        risk: { type: "string", enum: ["low", "medium", "high"], description: "Risk level." },
+        connection: { type: "string", description: "Optional connection dependency." },
+        healthcheck: { type: "string", description: "Command that verifies this tool is available." },
         confirm: { type: "boolean", description: "Ask before running. Defaults to true for agents." },
         scope: { type: "string", enum: ["user", "project"], description: "Tool scope." },
         input: {
@@ -196,6 +207,9 @@ const toolRegistry: ToolSpec[] = [
       description: z.string().min(1),
       run: z.string().optional(),
       script: z.string().optional(),
+      risk: z.enum(["low", "medium", "high"]).optional(),
+      connection: z.string().optional(),
+      healthcheck: z.string().optional(),
       confirm: z.boolean().optional(),
       scope: z.enum(["user", "project"]).optional(),
       input: z.record(z.unknown()).optional(),
@@ -208,6 +222,9 @@ const toolRegistry: ToolSpec[] = [
           description: args.description,
           run: args.run,
           script: args.script,
+          risk: args.risk,
+          connection: args.connection,
+          healthcheck: args.healthcheck ? { run: args.healthcheck, expectExitCode: 0 } : undefined,
           confirm: args.confirm,
           scope: args.scope,
           input: args.input as never,
@@ -353,6 +370,7 @@ export async function handleMessage(
       const result = await callTool(repoRoot, params?.name, params?.arguments ?? {});
       return resultResponse(request, {
         content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }],
+        structuredContent: result,
       });
     }
 

@@ -71,6 +71,20 @@ describe("bootstrapProject", () => {
     expect(skill).toContain("Provider target: Codex.");
   });
 
+  it("installs requested capability packs during bootstrap", async () => {
+    const report = await bootstrapProject(repo, {
+      home,
+      yes: true,
+      agents: "codex",
+      packs: "testing",
+      task: "write tests",
+    });
+
+    expect(report.packs?.map((pack) => pack.name)).toEqual(["testing"]);
+    expect(report.context?.skills.map((skill) => skill.name)).toContain("add-test");
+    expect(await readFile(path.join(repo, ".threadroot/skills/add-test/SKILL.md"), "utf8")).toContain("Add Test");
+  });
+
   it("preserves an existing harness", async () => {
     const first = await bootstrapProject(repo, { home, yes: true, agents: "codex" });
     const second = await bootstrapProject(repo, { home, yes: true, agents: "codex" });

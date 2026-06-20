@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { readLockFile } from "../src/core/install/index.js";
 import { inspectPack, installPack, listPacks, validatePack } from "../src/core/packs/index.js";
 
 let repo: string;
@@ -44,6 +45,15 @@ describe("packs", () => {
     expect(await readFile(path.join(repo, ".threadroot/skills/debug-failure/SKILL.md"), "utf8")).toContain(
       "Debug Failure",
     );
+
+    const lock = await readLockFile(path.join(repo, ".threadroot/lock.json"));
+    const addTest = lock.objects.find((entry) => entry.name === "add-test" && entry.kind === "skill");
+    expect(addTest).toMatchObject({
+      sourceKind: "local",
+      source: "pack:testing",
+      objectPath: "skills/add-test",
+    });
+    expect(addTest?.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
   it("rejects unsafe pack references", async () => {
@@ -55,5 +65,20 @@ describe("packs", () => {
     const report = await validatePack(repo, "packs/bad");
     expect(report.ok).toBe(false);
     expect(report.findings[0]?.message).toContain("Unsafe pack reference");
+  });
+
+  it("rejects absolute pack paths outside the repository", async () => {
+    const outside = await mkdtemp(path.join(tmpdir(), "tr-outside-pack-"));
+    try {
+      await writeFile(
+        path.join(outside, "pack.yaml"),
+        ["name: outside", "version: 1", "description: Outside pack"].join("\n"),
+      );
+      const report = await validatePack(repo, outside);
+      expect(report.ok).toBe(false);
+      expect(report.findings[0]?.message).toContain("repo-relative or a built-in pack name");
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 });
