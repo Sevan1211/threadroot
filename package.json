@@ -8,7 +8,9 @@
     "tr": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "skills",
+    "packs"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",

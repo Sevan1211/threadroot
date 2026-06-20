@@ -32,11 +32,16 @@ describe("initHarness", () => {
 
     expect(report.name).toBe("demo-app");
     expect(report.profile).toBe("node-cli");
-    expect(report.skills.length).toBe(5);
+    expect(report.skills.length).toBe(9);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
 
     const harness = await resolveHarness(repo);
     expect(harness.skills.map((s) => s.name)).toContain("code-review");
+    expect(harness.skills.map((s) => s.name)).toContain("system-design");
+    expect(harness.skills.map((s) => s.name)).toContain("build-skill");
+    expect(harness.skills.map((s) => s.name)).toContain("build-tool");
+    expect(await readFile(path.join(repo, ".threadroot/skills/system-design/evals/triggers.json"), "utf8"))
+      .toContain("shouldTrigger");
     expect(harness.manifest.tools.allow).toEqual(expect.arrayContaining(["test", "build"]));
     expect(harness.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["test", "build"]));
 

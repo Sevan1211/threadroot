@@ -11,7 +11,8 @@ import {
 } from "../core/harness/index.js";
 import { doctor } from "../core/doctor.js";
 import { harnessStatus } from "../core/status.js";
-import { createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
+import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
+import { checkConnections } from "../core/connections/index.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -119,6 +120,19 @@ const toolRegistry: ToolSpec[] = [
     },
   }),
   defineTool({
+    name: "tools_check",
+    description: "Run configured harness tool healthchecks without running primary tool actions.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: async (repoRoot) => {
+      const harness = await loadHarnessOrNull(repoRoot);
+      if (!harness) {
+        return { checks: [], note: "No harness found. Run `tr init` first." };
+      }
+      return { checks: await Promise.all(harness.tools.map((tool) => checkToolHealth(repoRoot, tool))) };
+    },
+  }),
+  defineTool({
     name: "tools_run",
     description:
       "Execute a harness tool locally. Tools marked confirm:true require `confirm: true` after user approval.",
@@ -212,6 +226,36 @@ const toolRegistry: ToolSpec[] = [
       const profile = harness?.manifest.profile ?? "empty";
       return { candidates: await detectToolCandidates(repoRoot, profile) };
     },
+  }),
+  defineTool({
+    name: "connections_list",
+    description: "List local CLI connections defined in this repo's harness.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: async (repoRoot) => {
+      const harness = await loadHarnessOrNull(repoRoot);
+      if (!harness) {
+        return { connections: [], note: "No harness found. Run `tr init` first." };
+      }
+      return {
+        connections: harness.connections.map((connection) => ({
+          name: connection.name,
+          provider: connection.manifest.provider,
+          command: connection.manifest.command,
+          profile: connection.manifest.profile,
+          risk: connection.manifest.risk,
+          confirm: connection.manifest.confirm,
+          healthcheck: Boolean(connection.manifest.healthcheck),
+        })),
+      };
+    },
+  }),
+  defineTool({
+    name: "connections_check",
+    description: "Check local CLI connections and their configured healthchecks.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: (repoRoot) => checkConnections(repoRoot),
   }),
   defineTool({
     name: "memory_read",

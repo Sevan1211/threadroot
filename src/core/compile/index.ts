@@ -93,6 +93,7 @@ export async function buildContext(repoRoot: string, harness: EffectiveHarness):
     globalRules: global,
     scopedRules: scoped,
     tools: harness.tools,
+    connections: harness.connections,
     memory: harness.memory,
     references,
   };

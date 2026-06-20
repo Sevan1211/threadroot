@@ -44,6 +44,12 @@ beforeEach(async () => {
   source = await mkdtemp(path.join(tmpdir(), "tr-install-src-"));
   await git(source, ["init", "-b", "main"]);
   await write(source, "skills/code-review.md", "---\nname: code-review\nwhen: reviewing code\n---\nReview it.\n");
+  await write(
+    source,
+    "skills/system-design/SKILL.md",
+    "---\nname: system-design\ndescription: Use when designing software architecture and tradeoffs.\n---\nDesign it.\n",
+  );
+  await write(source, "skills/system-design/references/checklist.md", "# Checklist\n");
   await write(source, "tools/echo.yaml", "name: echo\ndescription: Echo a value\nrun: echo hi\n");
   await git(source, ["add", "-A"]);
   await git(source, ["commit", "-m", "seed"]);
@@ -68,6 +74,35 @@ describe("installObject (local)", () => {
     expect(entry).toMatchObject({ sourceKind: "local", kind: "skill" });
     expect(entry!.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(entry!.resolved).toBeUndefined();
+  });
+
+  it("copies a local skill directory and records tree integrity", async () => {
+    await write(
+      repo,
+      "skills/system-design/SKILL.md",
+      "---\nname: system-design\ndescription: Use when designing software architecture.\n---\nDesign it.\n",
+    );
+    await write(repo, "skills/system-design/references/checklist.md", "# Checklist\n");
+
+    const installed = await installObject(repo, "./skills/system-design", { kind: "skill" });
+
+    expect(installed).toMatchObject({ name: "system-design", kind: "skill", scope: "project" });
+    expect(await readFile(path.join(repo, ".threadroot/skills/system-design/SKILL.md"), "utf8")).toContain(
+      "name: system-design",
+    );
+    expect(await readFile(path.join(repo, ".threadroot/skills/system-design/references/checklist.md"), "utf8"))
+      .toContain("Checklist");
+    expect(installed.entry.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("rejects skill directories whose folder does not match SKILL.md name", async () => {
+    await write(
+      repo,
+      "skills/wrong/SKILL.md",
+      "---\nname: right\ndescription: Use when testing folder mismatch.\n---\nNope.\n",
+    );
+
+    await expect(installObject(repo, "./skills/wrong", { kind: "skill" })).rejects.toThrow(/must match/);
   });
 
   it("rejects local paths that escape the repo", async () => {
@@ -99,6 +134,17 @@ describe("installObject (git)", () => {
     expect(entry.objectPath).toBe("skills/code-review.md");
     expect(entry.resolved).toMatch(/^[0-9a-f]{40}$/);
     expect(entry.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("installs a skill directory from git and pins commit SHA + tree integrity", async () => {
+    const installed = await installObject(repo, `git+file://${source}`, { objectPath: "skills/system-design" });
+
+    expect(installed.name).toBe("system-design");
+    expect(installed.entry.resolved).toMatch(/^[0-9a-f]{40}$/);
+    expect(installed.entry.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(await readFile(path.join(repo, ".threadroot/skills/system-design/SKILL.md"), "utf8")).toContain(
+      "Design it.",
+    );
   });
 
   it("marks installed tools untrusted until allow-listed", async () => {

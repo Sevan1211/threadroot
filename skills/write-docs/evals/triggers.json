@@ -1,0 +1,12 @@
+{
+  "shouldTrigger": [
+    "Update the README with the new install command and smoke test.",
+    "Document how this MCP setup flow works for users.",
+    "Write concise command docs for the skills CLI."
+  ],
+  "shouldNotTrigger": [
+    "Debug this TypeScript type error.",
+    "Review this auth change for vulnerabilities.",
+    "Design the event ingestion architecture."
+  ]
+}

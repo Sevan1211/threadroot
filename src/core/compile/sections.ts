@@ -24,12 +24,41 @@ function toolsSection(ctx: CompileContext): string | undefined {
     return undefined;
   }
   const lines = ctx.tools.map((tool) => {
-    const confirm = tool.manifest.confirm ? " _(asks before running)_" : "";
-    return `- \`${tool.name}\` — ${tool.manifest.description}${confirm}`;
+    const flags = [
+      tool.manifest.risk !== "low" ? tool.manifest.risk : null,
+      tool.manifest.confirm ? "asks before running" : null,
+      tool.manifest.connection ? `connection: ${tool.manifest.connection}` : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const suffix = flags ? ` _(${flags})_` : "";
+    return `- \`${tool.name}\` — ${tool.manifest.description}${suffix}`;
   });
   return [
     "## Tools",
     "Callable via the threadroot MCP server or `tr run <tool>`:",
+    "",
+    ...lines,
+  ].join("\n");
+}
+
+function connectionsSection(ctx: CompileContext): string | undefined {
+  if (ctx.connections.length === 0) {
+    return undefined;
+  }
+  const lines = ctx.connections.map((connection) => {
+    const flags = [
+      connection.manifest.provider,
+      connection.manifest.risk,
+      connection.manifest.confirm ? "asks before running" : null,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    return `- \`${connection.name}\` — ${connection.manifest.description} _(${flags})_`;
+  });
+  return [
+    "## Connections",
+    "Local CLI bridges available to connection-aware tools. Credentials stay in the user's local CLI configuration.",
     "",
     ...lines,
   ].join("\n");
@@ -97,6 +126,7 @@ export function buildManagedBlock(ctx: CompileContext): string {
   const sections = [
     skillsSection(ctx),
     toolsSection(ctx),
+    connectionsSection(ctx),
     conventionsSection(ctx),
     referencesSection(ctx),
     memorySection(ctx),

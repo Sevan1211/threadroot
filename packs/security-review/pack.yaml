@@ -1,0 +1,7 @@
+name: security-review
+version: 1
+description: Security review skills for identifying risky code, tools, and project changes.
+skills:
+  - skills/security-review
+  - skills/code-review
+  - skills/build-tool

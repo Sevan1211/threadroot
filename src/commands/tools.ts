@@ -1,5 +1,6 @@
 import { HarnessError, resolveHarness } from "../core/harness/index.js";
-import { createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
+import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
+import type { RiskLevel } from "../core/harness/schema.js";
 import type { ProfileId } from "../types.js";
 
 export type ToolRunOptions = {
@@ -13,8 +14,15 @@ export type ToolAddOptions = {
   run?: string;
   script?: string;
   confirm?: boolean;
+  risk?: RiskLevel;
+  connection?: string;
+  healthcheck?: string;
   scope?: "user" | "project";
   force?: boolean;
+};
+
+export type ToolCreateOptions = ToolAddOptions & {
+  fromCommand?: string;
 };
 
 function parseInputs(pairs: string[] = []): Record<string, string> {
@@ -47,7 +55,13 @@ export async function runToolsList(repoRoot: string): Promise<void> {
   }
 
   for (const tool of harness.tools) {
-    const flags = [tool.manifest.confirm ? "confirm" : null, tool.manifest.run ? "shell" : "script"]
+    const flags = [
+      tool.manifest.risk,
+      tool.manifest.confirm ? "confirm" : null,
+      tool.manifest.connection ? `connection:${tool.manifest.connection}` : null,
+      tool.manifest.healthcheck ? "healthcheck" : null,
+      tool.manifest.run ? "shell" : "script",
+    ]
       .filter(Boolean)
       .join(", ");
     console.log(`${tool.name}  [${flags}]  - ${tool.manifest.description}`);
@@ -102,12 +116,59 @@ export async function runToolsAdd(repoRoot: string, name: string, options: ToolA
       description: options.description,
       run: options.run,
       script: options.script,
+      risk: options.risk,
+      connection: options.connection,
+      healthcheck: options.healthcheck ? { run: options.healthcheck, expectExitCode: 0 } : undefined,
       confirm: options.confirm,
       scope: options.scope,
     },
     { actor: "human", force: options.force },
   );
   console.log(`Created ${created.scope} tool \`${name}\` at ${created.path}.`);
+}
+
+function deriveNameFromCommand(command: string): string {
+  const first = command.trim().split(/\s+/)[0] ?? "tool";
+  return first.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "tool";
+}
+
+export async function runToolsCreate(repoRoot: string, options: ToolCreateOptions): Promise<void> {
+  const run = options.run ?? options.fromCommand;
+  const name = options.fromCommand ? deriveNameFromCommand(options.fromCommand) : undefined;
+  if (!name) {
+    throw new Error("`tr tools create` currently requires --from-command <command>.");
+  }
+  await runToolsAdd(repoRoot, name, {
+    ...options,
+    run,
+    description: options.description ?? `Run \`${run}\`.`,
+    healthcheck: options.healthcheck ?? run,
+    confirm: options.confirm ?? options.risk === "high",
+  });
+}
+
+export async function runToolsCheck(repoRoot: string): Promise<void> {
+  const harness = await resolveHarness(repoRoot);
+  if (harness.tools.length === 0) {
+    console.log("No tools defined.");
+    return;
+  }
+
+  let failures = 0;
+  for (const tool of harness.tools) {
+    const check = await checkToolHealth(repoRoot, tool);
+    if (check.status === "ok") {
+      console.log(`${tool.name}: ok`);
+    } else if (check.status === "skipped") {
+      console.log(`${tool.name}: skipped - ${check.message}`);
+    } else {
+      failures += 1;
+      console.log(`${tool.name}: error - ${check.message}`);
+    }
+  }
+  if (failures > 0) {
+    process.exitCode = 1;
+  }
 }
 
 export async function runToolsDetect(repoRoot: string): Promise<void> {
@@ -129,6 +190,7 @@ export async function runToolsDetect(repoRoot: string): Promise<void> {
   console.log("Proposed starter tools (materialize with `tr tools add`):");
   for (const candidate of candidates) {
     const confirm = candidate.confirm ? " (confirm)" : "";
-    console.log(`- ${candidate.name}${confirm}: ${candidate.run}  [${candidate.source}]`);
+    const healthcheck = candidate.healthcheck ? ", healthcheck suggested" : "";
+    console.log(`- ${candidate.name}${confirm}: ${candidate.run}  [${candidate.source}, ${candidate.risk}${healthcheck}]`);
   }
 }

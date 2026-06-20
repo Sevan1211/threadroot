@@ -1,0 +1,12 @@
+{
+  "shouldTrigger": [
+    "Review this diff for correctness and missing tests.",
+    "Can you check this PR for regressions and risky edge cases?",
+    "Look at these generated changes and tell me if anything should block merge."
+  ],
+  "shouldNotTrigger": [
+    "Design a new database schema from scratch.",
+    "Write docs for this CLI command.",
+    "Debug this failing test output."
+  ]
+}

@@ -9,7 +9,7 @@ import { z } from "zod";
  */
 
 /** Installable object kinds (prose/tools that can be shared). */
-export const objectKindSchema = z.enum(["skill", "tool", "rule"]);
+export const objectKindSchema = z.enum(["skill", "tool", "rule", "connection"]);
 export type ObjectKind = z.infer<typeof objectKindSchema>;
 
 export const objectSourceKindSchema = z.enum(["local", "git", "registry"]);

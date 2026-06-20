@@ -144,7 +144,13 @@ async function writeStarterTools(repoRoot: string, profile: ProfileId, force: bo
     try {
       await createTool(
         repoRoot,
-        { name: candidate.name, description: candidate.description, run: candidate.run, confirm: candidate.confirm },
+        {
+          name: candidate.name,
+          description: candidate.description,
+          run: candidate.run,
+          risk: candidate.risk,
+          confirm: candidate.confirm,
+        },
         { actor: "human", force },
       );
       names.push(candidate.name);

@@ -1,0 +1,7 @@
+name: testing
+version: 1
+description: Testing-focused skills for adding, fixing, and reviewing project tests.
+skills:
+  - skills/add-test
+  - skills/debug-failure
+  - skills/code-review

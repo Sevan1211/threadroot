@@ -13,6 +13,9 @@ export type ContextTool = {
   name: string;
   description: string;
   confirm: boolean;
+  risk: string;
+  connection?: string;
+  healthcheck: boolean;
   kind: "shell" | "script";
 };
 
@@ -96,6 +99,9 @@ export async function assembleContext(
       name: tool.name,
       description: tool.manifest.description,
       confirm: tool.manifest.confirm,
+      risk: tool.manifest.risk,
+      connection: tool.manifest.connection,
+      healthcheck: Boolean(tool.manifest.healthcheck),
       kind: tool.manifest.run ? "shell" : "script",
     })),
     memory: harness.memory.map((entry) => ({ type: entry.type, body: entry.body })),

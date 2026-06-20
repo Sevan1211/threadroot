@@ -5,12 +5,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { EffectiveHarness, LoadedTool } from "../src/core/harness/index.js";
-import { harnessManifestSchema, toolManifestSchema } from "../src/core/harness/index.js";
+import { connectionManifestSchema, harnessManifestSchema, toolManifestSchema } from "../src/core/harness/index.js";
 import {
   ToolCreateError,
   ToolExecutionError,
   ToolInputError,
   authorizeTool,
+  checkToolHealth,
   createTool,
   detectToolCandidates,
   executeScript,
@@ -50,6 +51,20 @@ function harness(tools: LoadedTool[], allow: string[] = []): EffectiveHarness {
     skills: [],
     rules: [],
     tools,
+    connections: [
+      {
+        name: "cloud-dev",
+        origin: "project",
+        sourcePath: ".threadroot/connections/cloud-dev.yaml",
+        manifest: connectionManifestSchema.parse({
+          name: "cloud-dev",
+          provider: "test",
+          command: "echo",
+          description: "Test cloud connection",
+          risk: "high",
+        }),
+      },
+    ],
     memory: [],
   };
 }
@@ -112,6 +127,20 @@ describe("authorize", () => {
     const blocked = authorizeTool(t, { allow: [] });
     expect(blocked).toEqual({ allowed: false, reason: "needs-confirmation", message: expect.any(String) });
     expect(authorizeTool(t, { allow: [], confirmed: true }).allowed).toBe(true);
+  });
+
+  it("requires confirmation for high-risk tools and high-risk connections", () => {
+    const high = tool({ name: "deploy", description: "d", run: "echo hi", risk: "high" });
+    expect(authorizeTool(high, { allow: [] })).toMatchObject({ allowed: false, reason: "needs-confirmation" });
+    expect(authorizeTool(high, { allow: [], confirmed: true }).allowed).toBe(true);
+
+    const medium = tool({ name: "inspect", description: "d", run: "echo hi", risk: "medium" });
+    expect(authorizeTool(medium, { allow: [], connectionRisk: "high" })).toMatchObject({
+      allowed: false,
+      reason: "needs-confirmation",
+    });
+    const low = tool({ name: "identity", description: "d", run: "echo hi", risk: "low" });
+    expect(authorizeTool(low, { allow: [], connectionRisk: "high" }).allowed).toBe(true);
   });
 });
 
@@ -229,6 +258,23 @@ describe("runTool", () => {
     if (outcome.status === "ran") {
       expect(outcome.result.stdout.trim()).toBe("world");
     }
+  });
+
+  it("runs tool healthchecks", async () => {
+    const t = tool({
+      name: "test",
+      description: "d",
+      run: "echo main",
+      healthcheck: { run: "echo ok" },
+    });
+    const check = await checkToolHealth(dir, t);
+    expect(check.status).toBe("ok");
+  });
+
+  it("blocks tools that reference unknown connections", async () => {
+    const t = tool({ name: "cloud", description: "d", run: "echo x", connection: "missing" });
+    const outcome = await runTool(dir, { harness: { ...harness([]), tools: [t], connections: [] }, name: "cloud" });
+    expect(outcome).toMatchObject({ status: "blocked", reason: "not-allowed" });
   });
 
   it("blocks confirm tools until confirmed", async () => {

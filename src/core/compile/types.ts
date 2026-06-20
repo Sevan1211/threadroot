@@ -1,6 +1,7 @@
 import type {
   HarnessManifest,
   LoadedMemory,
+  LoadedConnection,
   LoadedRule,
   LoadedSkill,
   LoadedTool,
@@ -34,6 +35,7 @@ export type CompileContext = {
   /** Rules scoped to a path glob via `applyTo`. */
   scopedRules: LoadedRule[];
   tools: LoadedTool[];
+  connections: LoadedConnection[];
   memory: LoadedMemory[];
   references: ResolvedReference[];
 };

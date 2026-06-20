@@ -1,4 +1,5 @@
 import type { LoadedTool } from "../harness/index.js";
+import type { RiskLevel } from "../harness/schema.js";
 
 export type AuthorizeDecision =
   | { allowed: true }
@@ -15,6 +16,8 @@ export type AuthorizeOptions = {
    * untrusted until allow-listed (provenance lands in milestone 6).
    */
   trusted?: boolean;
+  /** Risk of the connection this tool uses, when any. */
+  connectionRisk?: RiskLevel;
 };
 
 /**
@@ -39,6 +42,22 @@ export function authorizeTool(tool: LoadedTool, options: AuthorizeOptions): Auth
       allowed: false,
       reason: "needs-confirmation",
       message: `\`${tool.name}\` requires confirmation before running.`,
+    };
+  }
+
+  if (tool.manifest.risk === "high" && options.confirmed !== true) {
+    return {
+      allowed: false,
+      reason: "needs-confirmation",
+      message: `\`${tool.name}\` is high risk and requires confirmation before running.`,
+    };
+  }
+
+  if (options.connectionRisk === "high" && tool.manifest.risk !== "low" && options.confirmed !== true) {
+    return {
+      allowed: false,
+      reason: "needs-confirmation",
+      message: `\`${tool.name}\` uses a high-risk connection and requires confirmation before running.`,
     };
   }
 

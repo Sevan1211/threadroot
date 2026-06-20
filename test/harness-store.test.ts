@@ -61,6 +61,10 @@ describe("harness store", () => {
 
     // project scope: overrides the tool, adds a rule + memory
     await write(
+      path.join(repo, ".threadroot/skills/system-design/SKILL.md"),
+      "---\nname: system-design\ndescription: Use when designing software architecture.\n---\nDesign it.",
+    );
+    await write(
       path.join(repo, ".threadroot/tools/test.yaml"),
       "name: test\ndescription: project test\nrun: pnpm test\n",
     );
@@ -73,8 +77,9 @@ describe("harness store", () => {
     const harness = await resolveHarness(repo, { home });
 
     expect(harness.manifest.name).toBe("demo");
-    expect(harness.skills.map((s) => s.name)).toEqual(["commit"]);
+    expect(harness.skills.map((s) => s.name)).toEqual(["commit", "system-design"]);
     expect(harness.skills[0].origin).toBe("user");
+    expect(harness.skills[1].sourcePath).toMatch(/system-design\/SKILL\.md$/);
 
     const tool = harness.tools.find((t) => t.name === "test");
     expect(tool?.origin).toBe("project");

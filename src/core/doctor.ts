@@ -4,7 +4,10 @@ import path from "node:path";
 import { compile, detectDrift } from "./compile/index.js";
 import { HarnessError, resolveHarness } from "./harness/index.js";
 import { projectLockPath, userLockPath } from "./harness/paths.js";
-import { externalToolNames, readLockFile } from "./install/lock.js";
+import { externalSkillNames, externalToolNames, readLockFile } from "./install/lock.js";
+import { validateResolvedSkillsDeep } from "./skills.js";
+import { checkConnection } from "./connections/index.js";
+import { checkToolHealth } from "./tools/index.js";
 
 export type DoctorSeverity = "error" | "warning";
 
@@ -121,6 +124,77 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
         ),
       );
     }
+    if (tool.manifest.risk === "high" && !tool.manifest.confirm) {
+      findings.push(
+        finding(
+          "warning",
+          "high_risk_tool_without_confirm",
+          `High-risk tool \`${tool.name}\` does not set confirm:true. Runtime execution will still require confirmation.`,
+          tool.sourcePath,
+        ),
+      );
+    }
+    if (tool.manifest.connection && !harness.connections.some((connection) => connection.name === tool.manifest.connection)) {
+      findings.push(
+        finding(
+          "error",
+          "unknown_tool_connection",
+          `Tool \`${tool.name}\` references unknown connection \`${tool.manifest.connection}\`.`,
+          tool.sourcePath,
+        ),
+      );
+    }
+    const toolHealth = await checkToolHealth(repoRoot, tool);
+    if (toolHealth.status === "error") {
+      findings.push(
+        finding("error", "tool_healthcheck_failed", `Tool \`${tool.name}\`: ${toolHealth.message}`, tool.sourcePath),
+      );
+    }
+  }
+
+  for (const connection of harness.connections) {
+    if (connection.manifest.risk === "high" && !connection.manifest.confirm) {
+      findings.push(
+        finding(
+          "warning",
+          "high_risk_connection_without_confirm",
+          `High-risk connection \`${connection.name}\` should set confirm:true.`,
+          connection.sourcePath,
+        ),
+      );
+    }
+    const check = await checkConnection(repoRoot, connection);
+    if (check.status === "error") {
+      findings.push(
+        finding(
+          "error",
+          "connection_check_failed",
+          `Connection \`${connection.name}\`: ${check.message}`,
+          connection.sourcePath,
+        ),
+      );
+    } else if (check.status === "warning") {
+      findings.push(
+        finding(
+          "warning",
+          "connection_check_warning",
+          `Connection \`${connection.name}\`: ${check.message}`,
+          connection.sourcePath,
+        ),
+      );
+    }
+  }
+
+  const skillReport = await validateResolvedSkillsDeep(harness);
+  for (const skillFinding of skillReport.findings) {
+    findings.push(
+      finding(
+        skillFinding.severity,
+        `skill_${skillFinding.severity}`,
+        `Skill \`${skillFinding.skill}\`: ${skillFinding.message}`,
+        skillFinding.path,
+      ),
+    );
   }
 
   const [projectLock, userLock] = await Promise.all([
@@ -128,6 +202,7 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
     readLockFile(userLockPath(options.home)),
   ]);
   const externalTools = new Set([...externalToolNames(projectLock), ...externalToolNames(userLock)]);
+  const externalSkills = new Set([...externalSkillNames(projectLock), ...externalSkillNames(userLock)]);
   for (const name of externalTools) {
     if (!harness.manifest.tools.allow.includes(name)) {
       findings.push(
@@ -135,6 +210,33 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
           "error",
           "external_tool_not_allowed",
           `External installed tool \`${name}\` is not listed in tools.allow.`,
+        ),
+      );
+    }
+  }
+
+  for (const skill of harness.skills) {
+    if (!externalSkills.has(skill.name)) {
+      continue;
+    }
+    if (skill.frontmatter.allowedTools) {
+      findings.push(
+        finding(
+          "warning",
+          "external_skill_allowed_tools",
+          `External installed skill \`${skill.name}\` declares allowed tools; inspect it before trusting.`,
+          skill.sourcePath,
+        ),
+      );
+    }
+    const scriptsDir = path.join(path.dirname(skill.sourcePath), "scripts");
+    if (await exists(scriptsDir)) {
+      findings.push(
+        finding(
+          "warning",
+          "external_skill_scripts",
+          `External installed skill \`${skill.name}\` includes scripts; inspect them before trusting.`,
+          scriptsDir,
         ),
       );
     }

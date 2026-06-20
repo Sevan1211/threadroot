@@ -51,6 +51,9 @@ describe("CLI smoke", () => {
     expect(context).toContain("task: write tests");
     expect(context).toContain("add-test");
 
+    const skills = await run("skills", "validate");
+    expect(skills).toContain("Skills valid.");
+
     const diff = await run("diff");
     expect(diff).toContain("No drift");
 

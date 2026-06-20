@@ -100,4 +100,82 @@ describe("doctor", () => {
     expect(report.ok).toBe(false);
     expect(codes(report)).toContain("external_tool_not_allowed");
   });
+
+  it("warns on external skills with scripts or allowed tools", async () => {
+    await initHarness(repo, { import: false, home: repo });
+    await write(
+      ".threadroot/skills/release/SKILL.md",
+      [
+        "---",
+        "name: release",
+        "description: Use when releasing software with bundled scripts and pre-approved tools.",
+        "allowed-tools:",
+        "  - Bash",
+        "---",
+        "",
+        "# Release",
+        "",
+        "Run the release checklist.",
+      ].join("\n"),
+    );
+    await write(".threadroot/skills/release/scripts/release.sh", "echo release\n");
+    await write(
+      ".threadroot/lock.json",
+      JSON.stringify(
+        {
+          version: 1,
+          objects: [
+            {
+              name: "release",
+              kind: "skill",
+              sourceKind: "git",
+              source: "github:owner/repo/skills/release",
+              installedAt: "2026-01-01T00:00:00.000Z",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const report = await doctor(repo, { home: repo });
+
+    expect(report.ok).toBe(true);
+    expect(codes(report)).toContain("external_skill_allowed_tools");
+    expect(codes(report)).toContain("external_skill_scripts");
+  });
+
+  it("reports connection and tool health problems", async () => {
+    await initHarness(repo, { import: false, home: repo });
+    await write(
+      ".threadroot/connections/missing-cli.yaml",
+      [
+        "name: missing-cli",
+        "provider: missing",
+        "command: threadroot-definitely-missing-cli",
+        "description: Missing CLI connection",
+        "risk: high",
+      ].join("\n"),
+    );
+    await write(
+      ".threadroot/tools/cloud.yaml",
+      [
+        "name: cloud",
+        "description: Cloud command",
+        "risk: medium",
+        "connection: missing-cli",
+        "run: echo cloud",
+        "healthcheck:",
+        "  run: exit 7",
+      ].join("\n"),
+    );
+
+    const report = await doctor(repo, { home: repo });
+
+    expect(report.ok).toBe(false);
+    expect(codes(report)).toContain("high_risk_connection_without_confirm");
+    expect(codes(report)).toContain("connection_check_failed");
+    expect(codes(report)).toContain("tool_healthcheck_failed");
+  });
 });

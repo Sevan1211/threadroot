@@ -13,6 +13,7 @@ import {
 } from "./paths.js";
 import {
   type HarnessManifest,
+  type ConnectionManifest,
   type MemoryType,
   type RuleFrontmatter,
   type SkillFrontmatter,
@@ -22,6 +23,7 @@ import {
   ruleFrontmatterSchema,
   skillFrontmatterSchema,
   toolManifestSchema,
+  connectionManifestSchema,
 } from "./schema.js";
 
 export type Origin = "user" | "project";
@@ -49,6 +51,13 @@ export type LoadedTool = {
   manifest: ToolManifest;
 };
 
+export type LoadedConnection = {
+  name: string;
+  origin: Origin;
+  sourcePath: string;
+  manifest: ConnectionManifest;
+};
+
 export type LoadedMemory = {
   type: MemoryType;
   origin: Origin;
@@ -61,6 +70,7 @@ export type EffectiveHarness = {
   skills: LoadedSkill[];
   rules: LoadedRule[];
   tools: LoadedTool[];
+  connections: LoadedConnection[];
   memory: LoadedMemory[];
 };
 
@@ -93,6 +103,38 @@ async function readObjectFiles(dir: string, ext: string): Promise<RawFile[]> {
   );
 }
 
+async function readSkillFiles(dir: string): Promise<RawFile[]> {
+  let entries: Array<{ name: string; isFile: () => boolean; isDirectory: () => boolean }>;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const files: RawFile[] = [];
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (entry.isFile() && entry.name.endsWith(HARNESS_OBJECT_EXT.prose)) {
+      const full = path.join(dir, entry.name);
+      files.push({ path: full, content: await readFile(full, "utf8") });
+      continue;
+    }
+    if (entry.isDirectory()) {
+      const full = path.join(dir, entry.name, "SKILL.md");
+      try {
+        files.push({ path: full, content: await readFile(full, "utf8") });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+    }
+  }
+  return files;
+}
+
 function objectDirFor(repoRoot: string, dir: HarnessObjectDir, origin: Origin, home?: string): string {
   return origin === "project" ? projectObjectDir(repoRoot, dir) : userObjectDir(dir, home);
 }
@@ -106,7 +148,7 @@ function describe(error: unknown): string {
 }
 
 async function loadSkillsFrom(dir: string, origin: Origin): Promise<LoadedSkill[]> {
-  const files = await readObjectFiles(dir, HARNESS_OBJECT_EXT.prose);
+  const files = await readSkillFiles(dir);
   return files.map((file) => {
     const { data, body } = parseFrontmatter(file.content);
     const result = skillFrontmatterSchema.safeParse(data);
@@ -136,6 +178,18 @@ async function loadToolsFrom(dir: string, origin: Origin): Promise<LoadedTool[]>
     const result = toolManifestSchema.safeParse(parsed);
     if (!result.success) {
       throw new HarnessError(`Invalid tool ${file.path}: ${describe(result.error)}`);
+    }
+    return { name: result.data.name, origin, sourcePath: file.path, manifest: result.data };
+  });
+}
+
+async function loadConnectionsFrom(dir: string, origin: Origin): Promise<LoadedConnection[]> {
+  const files = await readObjectFiles(dir, HARNESS_OBJECT_EXT.tool);
+  return files.map((file) => {
+    const parsed = parseYaml(file.content) as unknown;
+    const result = connectionManifestSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new HarnessError(`Invalid connection ${file.path}: ${describe(result.error)}`);
     }
     return { name: result.data.name, origin, sourcePath: file.path, manifest: result.data };
   });
@@ -192,14 +246,26 @@ export async function resolveHarness(repoRoot: string, opts: { home?: string } =
   const { home } = opts;
   const manifest = await loadManifest(repoRoot);
 
-  const [userSkills, projectSkills, userRules, projectRules, userTools, projectTools, userMemory, projectMemory] =
-    await Promise.all([
+  const [
+    userSkills,
+    projectSkills,
+    userRules,
+    projectRules,
+    userTools,
+    projectTools,
+    userConnections,
+    projectConnections,
+    userMemory,
+    projectMemory,
+  ] = await Promise.all([
       loadSkillsFrom(objectDirFor(repoRoot, "skills", "user", home), "user"),
       loadSkillsFrom(objectDirFor(repoRoot, "skills", "project", home), "project"),
       loadRulesFrom(objectDirFor(repoRoot, "rules", "user", home), "user"),
       loadRulesFrom(objectDirFor(repoRoot, "rules", "project", home), "project"),
       loadToolsFrom(objectDirFor(repoRoot, "tools", "user", home), "user"),
       loadToolsFrom(objectDirFor(repoRoot, "tools", "project", home), "project"),
+      loadConnectionsFrom(objectDirFor(repoRoot, "connections", "user", home), "user"),
+      loadConnectionsFrom(objectDirFor(repoRoot, "connections", "project", home), "project"),
       loadMemoryFrom(objectDirFor(repoRoot, "memory", "user", home), "user"),
       loadMemoryFrom(objectDirFor(repoRoot, "memory", "project", home), "project"),
     ]);
@@ -209,6 +275,7 @@ export async function resolveHarness(repoRoot: string, opts: { home?: string } =
     skills: mergeByName(userSkills, projectSkills),
     rules: mergeByName(userRules, projectRules),
     tools: mergeByName(userTools, projectTools),
+    connections: mergeByName(userConnections, projectConnections),
     memory: [...userMemory, ...projectMemory],
   };
 }

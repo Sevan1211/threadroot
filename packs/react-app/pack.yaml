@@ -1,0 +1,10 @@
+name: react-app
+version: 1
+description: React application skills for testing, review, docs, and safe tool authoring.
+skills:
+  - skills/add-test
+  - skills/debug-failure
+  - skills/code-review
+  - skills/security-review
+  - skills/write-docs
+  - skills/build-tool

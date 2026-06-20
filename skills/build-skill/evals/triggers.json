@@ -1,0 +1,16 @@
+{
+  "shouldTrigger": [
+    "Create a skill for reviewing Prisma schema migrations.",
+    "Improve this SKILL.md so it triggers more accurately and uses references correctly.",
+    "Help me design eval prompts for a frontend performance skill."
+  ],
+  "shouldNotTrigger": [
+    "Use the existing testing skill to add coverage for this function.",
+    "Install a package from npm.",
+    "Summarize this product requirement document."
+  ],
+  "expectedReferences": [
+    "references/skill-quality.md",
+    "references/eval-prompts.md"
+  ]
+}

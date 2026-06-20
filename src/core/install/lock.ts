@@ -44,3 +44,14 @@ export function externalToolNames(lock: LockFile): Set<string> {
   }
   return names;
 }
+
+/** Names of skills whose provenance is an external source (git/registry). */
+export function externalSkillNames(lock: LockFile): Set<string> {
+  const names = new Set<string>();
+  for (const entry of lock.objects) {
+    if (entry.kind === "skill" && entry.sourceKind !== "local") {
+      names.add(entry.name);
+    }
+  }
+  return names;
+}

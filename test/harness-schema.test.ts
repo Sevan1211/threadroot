@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   harnessManifestSchema,
+  connectionManifestSchema,
   ruleFrontmatterSchema,
   skillFrontmatterSchema,
   toolManifestSchema,
@@ -33,6 +34,21 @@ describe("object frontmatter schemas", () => {
     const fm = skillFrontmatterSchema.parse({ name: "add-test", when: "writing a test" });
     expect(fm.scope).toBe("project");
     expect(fm.tags).toEqual([]);
+    expect(fm.description).toBe("writing a test");
+  });
+
+  it("accepts modern skill descriptions and derives the trigger text", () => {
+    const fm = skillFrontmatterSchema.parse({
+      name: "system-design",
+      description: "Use when designing software architecture and tradeoffs.",
+      license: "MIT",
+      compatibility: "Threadroot and Agent Skills-compatible clients.",
+      metadata: { category: "architecture" },
+      "allowed-tools": ["Read", "Grep"],
+    });
+    expect(fm.when).toBe("Use when designing software architecture and tradeoffs.");
+    expect(fm.license).toBe("MIT");
+    expect(fm.allowedTools).toEqual(["Read", "Grep"]);
   });
 
   it("accepts an optional applyTo glob on rules", () => {
@@ -46,11 +62,17 @@ describe("tool manifest schema", () => {
     const tool = toolManifestSchema.parse({
       name: "run-migration",
       description: "Apply migrations",
+      risk: "high",
+      connection: "db-dev",
       confirm: true,
+      healthcheck: { run: "echo ok" },
       input: { target: { type: "string", default: "latest" } },
       run: "pnpm db:migrate --to {{target}}",
     });
     expect(tool.confirm).toBe(true);
+    expect(tool.risk).toBe("high");
+    expect(tool.connection).toBe("db-dev");
+    expect(tool.healthcheck?.expectExitCode).toBe(0);
     expect(tool.input.target.default).toBe("latest");
   });
 
@@ -59,6 +81,24 @@ describe("tool manifest schema", () => {
       toolManifestSchema.parse({ name: "x", description: "y", run: "a", script: "b" }),
     ).toThrow();
     expect(() => toolManifestSchema.parse({ name: "x", description: "y" })).toThrow();
+  });
+});
+
+describe("connection manifest schema", () => {
+  it("accepts local CLI connections with risk and healthchecks", () => {
+    const connection = connectionManifestSchema.parse({
+      name: "aws-dev",
+      provider: "aws",
+      command: "aws",
+      description: "AWS development account through the local AWS CLI.",
+      risk: "high",
+      confirm: true,
+      healthcheck: { run: "aws sts get-caller-identity --profile dev" },
+    });
+
+    expect(connection.kind).toBe("cli");
+    expect(connection.scope).toBe("project");
+    expect(connection.healthcheck?.expectExitCode).toBe(0);
   });
 });
 

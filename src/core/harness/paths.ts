@@ -11,6 +11,7 @@ export const LOCK_FILE = "lock.json";
 export const HARNESS_SUBDIRS = {
   skills: "skills",
   tools: "tools",
+  connections: "connections",
   rules: "rules",
   memory: "memory",
 } as const;

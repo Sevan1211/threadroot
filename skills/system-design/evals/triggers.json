@@ -1,0 +1,17 @@
+{
+  "shouldTrigger": [
+    "Design the architecture for a multi-tenant analytics dashboard with background imports and usage limits.",
+    "Before we build billing, help me decide the API boundaries, data model, failure modes, and rollout plan.",
+    "Review this proposed queue-based architecture for reliability, observability, and operational risks."
+  ],
+  "shouldNotTrigger": [
+    "Write a unit test for this pure date formatting helper.",
+    "Fix this typo in the README.",
+    "Create a conventional commit message for my current diff."
+  ],
+  "expectedReferences": [
+    "references/architecture-checklist.md",
+    "references/reliability-observability.md",
+    "references/api-data-design.md"
+  ]
+}

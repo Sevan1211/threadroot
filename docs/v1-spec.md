@@ -43,8 +43,10 @@ Five object types. Everything in the product is one of these.
 |---|---|---|---|
 | **Instructions** | Rules / conventions / persona | user · project · path | `AGENTS.md` + `rules/*.md` |
 | **Memory** | Durable facts, decisions, handoff | user · project | `memory/*.md` |
-| **Skills** | Procedural how-tos (progressive disclosure) | user · project | `skills/*.md` |
+| **Skills** | Procedural how-tos (progressive disclosure) | user · project | `skills/<name>/SKILL.md` or legacy `skills/*.md` |
 | **Tools** | Executable commands w/ schema | user · project | `tools/*.yaml` |
+| **Connections** | Local CLI bridges for authenticated services | user · project | `connections/*.yaml` |
+| **Packs** | Curated install sets of harness objects | package · project | `packs/<name>/pack.yaml` |
 | **Adapters** | Compile targets + MCP wiring | project | `harness.yaml` |
 
 ## 4. File layout
@@ -54,8 +56,13 @@ repo/
 ├── AGENTS.md                       # canonical prose instructions (the open standard)
 └── .threadroot/
     ├── harness.yaml                # manifest: name, version, scopes, enabled adapters, budgets
-    ├── skills/        *.md          # MD + frontmatter
+    ├── skills/                      # Agent Skills-style folders preferred
+    │   ├── system-design/
+    │   │   ├── SKILL.md
+    │   │   └── references/
+    │   └── add-test.md              # legacy/simple single-file skills still load
     ├── tools/         *.yaml        # tool manifests
+    ├── connections/   *.yaml        # local CLI bridges; no secrets
     ├── rules/         *.md          # MD + frontmatter, path/glob-scoped
     ├── memory/                      # structured, task-scoped, budgeted
     │   ├── project.md               # semantic / stable
@@ -89,19 +96,23 @@ tools:
   allow: []                                     # human-approved tool names (allow-list)
 ```
 
-### 5.2 Skill — `skills/add-test.md`
+### 5.2 Skill — `skills/system-design/SKILL.md`
 ```markdown
 ---
-name: add-test
-when: "writing or fixing a unit test"
+name: system-design
+description: "Use when designing or reviewing software architecture, APIs, data models, scaling strategy, reliability, observability, security, deployment, or technical tradeoffs."
 scope: project
-tags: [testing]
+tags: [architecture, system-design]
 ---
-1. Locate the nearest existing test file...
-2. ...
+1. Clarify product goal, users, constraints, traffic, data sensitivity, and deployment target.
+2. Separate requirements, non-goals, constraints, and unknowns.
+3. Propose the simplest architecture that satisfies known constraints.
+4. Identify APIs, data model, background jobs, failure modes, security, observability, and tradeoffs.
 ```
-- `when` feeds the deterministic task matcher (no LLM).
-- Progressive disclosure: only the matched skill bodies are compiled into context.
+- `description` is the primary trigger surface for agents and deterministic context matching.
+- Legacy `when` is still accepted and normalized to `description`.
+- Folder skills may include `references/`, `scripts/`, and `assets/` for progressive disclosure.
+- `tr skills validate` checks naming, trigger descriptions, empty bodies, and over-large bodies.
 
 ### 5.3 Rule — `rules/api-style.md`
 ```markdown
@@ -120,7 +131,11 @@ scope: project
 name: run-migration
 description: Apply pending DB migrations in this repo
 scope: project
+risk: high
 confirm: true                # destructive → ask before running
+connection: db-dev           # optional local CLI bridge
+healthcheck:
+  run: "pnpm db:status"
 input:
   target:
     type: string
@@ -133,7 +148,29 @@ run: "pnpm db:migrate --to {{target}}"   # shell line ...
 - Validated with zod. `{{param}}` interpolation from `input` schema.
 - `confirm` + `harness.yaml > tools.allow` gate execution.
 
-### 5.5 Memory
+### 5.5 Connection — `connections/aws-dev.yaml`
+```yaml
+name: aws-dev
+provider: aws
+kind: cli
+command: aws
+profile: dev
+description: Read-only AWS dev account access.
+risk: high
+confirm: true
+healthcheck:
+  run: aws sts get-caller-identity --profile dev
+allow:
+  - sts get-caller-identity
+  - s3 ls
+deny:
+  - delete
+  - terminate
+```
+- Connections wrap locally authenticated CLIs only. Threadroot does not store secrets.
+- `tr connections check` verifies CLI presence and optional healthchecks.
+
+### 5.6 Memory
 Plain markdown bodies; each file is a memory *type* (see §10). Compile pulls only task-relevant slices and respects budgets.
 
 ## 6. Compile (the wedge)
@@ -240,6 +277,7 @@ tr run <tool> [--input k=v ...] [-y]
 tr install <source> [--kind <k>] [--path <p>] [--user]
 tr remember "<note>" [--type project|current-focus|handoff|pitfalls]
 tr memory read <type> | append <type> "<note>"
+tr skills list | validate [--path p]  # inspect and validate modern folder skills or skill packs
 tr tools list | detect | add <name> --description "<text>"
 tr mcp                             # run the local MCP server (stdio)
 tr mcp setup [--write]             # wire MCP into agents
@@ -288,12 +326,18 @@ flowchart TD
 
 ## 12. Built-in content (valuable on an empty repo)
 
-- **Starter skills:** conventional-commits, code-review, add-test, write-docs, debug-failure.
+- **Starter skills:** system-design, build-skill, code-review, security-review, add-test,
+  debug-failure, write-docs, conventional-commits.
 - **Tool templates:** run-tests, build, lint, typecheck (wired to detected scripts), db-migrate.
 - **Profile presets:** node-cli, web-app, python, etc. (existing profiles).
 - **Adapter presets:** big four enabled by default.
 
-`tr init` detects the repo (scanner + profiles), generates a sensible harness, and compiles immediately.
+`tr init` detects the repo (scanner + profiles), generates a sensible harness, writes curated
+folder-based skills, and compiles immediately.
+
+The repository-level curated pack lives under `skills/` and can be validated with
+`tr skills validate --path skills` or installed from git, for example:
+`tr install github:Sevan1211/threadroot/skills/system-design@main --kind skill`.
 
 ## 13. Monetization seams (pure OSS v1)
 

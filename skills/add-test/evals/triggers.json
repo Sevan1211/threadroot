@@ -1,0 +1,12 @@
+{
+  "shouldTrigger": [
+    "Add regression tests for this bug fix.",
+    "Write tests that cover this CLI command's failure modes.",
+    "Update the test suite for this schema validation change."
+  ],
+  "shouldNotTrigger": [
+    "Review this PR for security issues.",
+    "Plan the architecture for a new service.",
+    "Write a README quickstart."
+  ]
+}

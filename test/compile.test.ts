@@ -73,6 +73,7 @@ function harness(overrides: Partial<EffectiveHarness> = {}): EffectiveHarness {
         manifest: toolManifestSchema.parse({ name: "build", description: "Build it", run: "pnpm build" }),
       },
     ],
+    connections: [],
     memory: [
       {
         type: "project",

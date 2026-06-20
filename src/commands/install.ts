@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { type InstallScope, installObject } from "../core/install/index.js";
 
 export type InstallCliOptions = {
@@ -33,6 +35,12 @@ export async function runInstall(repoRoot: string, source: string, options: Inst
     }
     if (installed.kind === "tool" && installed.entry.sourceKind !== "local") {
       console.log("  note: installed tools are untrusted; add to `tools.allow` in harness.yaml to run.");
+    }
+    if (installed.kind === "skill" && installed.entry.sourceKind !== "local") {
+      console.log("  note: inspect external skills before trusting bundled scripts, assets, or allowed tools.");
+      if (scope === "project") {
+        console.log(`  inspect: threadroot skills inspect ${path.relative(repoRoot, installed.path)}`);
+      }
     }
   } catch (error) {
     console.error(`Install failed: ${(error as Error).message}`);

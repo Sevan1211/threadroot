@@ -9,7 +9,9 @@ export type ToolCandidate = {
   name: string;
   description: string;
   run: string;
+  risk: "low" | "medium" | "high";
   confirm: boolean;
+  healthcheck?: string;
   source: CandidateSource;
 };
 
@@ -49,6 +51,11 @@ async function detectPackageManager(repoRoot: string): Promise<"pnpm" | "yarn" |
 }
 
 const SCRIPT_PRIORITY = ["dev", "start", "build", "test", "lint", "typecheck", "format"];
+const HEALTHCHECK_NAMES = new Set(["build", "test", "lint", "typecheck", "format"]);
+
+function healthcheckFor(name: string, command: string): string | undefined {
+  return HEALTHCHECK_NAMES.has(name) && !looksDestructive(name, command) ? command : undefined;
+}
 
 function orderScripts(names: string[]): string[] {
   return [...names].sort((a, b) => {
@@ -90,7 +97,9 @@ async function fromPackageJson(repoRoot: string): Promise<ToolCandidate[]> {
       name,
       description: `Run the \`${scriptName}\` package script`,
       run: `${pm} run ${scriptName}`,
+      risk: looksDestructive(scriptName, command) ? "high" : "low",
       confirm: looksDestructive(scriptName, command),
+      healthcheck: healthcheckFor(scriptName, `${pm} run ${scriptName}`),
       source: "package.json",
     });
   }
@@ -130,7 +139,9 @@ async function fromTargets(
       name,
       description: `Run the \`${target}\` ${source === "makefile" ? "Make target" : "recipe"}`,
       run: `${runner} ${target}`,
+      risk: looksDestructive(target, "") ? "high" : "low",
       confirm: looksDestructive(target, ""),
+      healthcheck: healthcheckFor(target, `${runner} ${target}`),
       source,
     });
   }
@@ -172,7 +183,16 @@ const PROFILE_STARTERS: Record<ProfileId, ToolCandidate[]> = {
 };
 
 function starter(name: string, description: string, run: string): ToolCandidate {
-  return { name, description, run, confirm: looksDestructive(name, run), source: "profile" };
+  const destructive = looksDestructive(name, run);
+  return {
+    name,
+    description,
+    run,
+    risk: destructive ? "high" : "low",
+    confirm: destructive,
+    healthcheck: healthcheckFor(name, run),
+    source: "profile",
+  };
 }
 
 function dedupeByName(candidates: ToolCandidate[]): ToolCandidate[] {

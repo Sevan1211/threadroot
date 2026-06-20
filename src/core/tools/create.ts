@@ -5,8 +5,10 @@ import { stringify as stringifyYaml } from "yaml";
 
 import {
   type ObjectScope,
+  type RiskLevel,
   type ToolInputParam,
   type ToolManifest,
+  type Healthcheck,
   projectObjectDir,
   toolManifestSchema,
   userObjectDir,
@@ -25,6 +27,9 @@ export type CreateToolInput = {
   run?: string;
   script?: string;
   confirm?: boolean;
+  risk?: RiskLevel;
+  connection?: string;
+  healthcheck?: Healthcheck;
   input?: Record<string, ToolInputParam>;
   scope?: ObjectScope;
 };
@@ -80,7 +85,10 @@ export async function createTool(
     name: input.name,
     description: input.description,
     scope,
+    risk: input.risk ?? "low",
     confirm,
+    ...(input.connection ? { connection: input.connection } : {}),
+    ...(input.healthcheck ? { healthcheck: input.healthcheck } : {}),
     input: input.input ?? {},
     ...(input.run ? { run: input.run } : {}),
     ...(input.script ? { script: input.script } : {}),
