@@ -27,6 +27,8 @@ threadroot refresh
 threadroot refresh --memory
 threadroot maintain
 threadroot automation status
+threadroot automation enable
+threadroot automation disable
 threadroot refresh codex
 threadroot refresh copilot
 threadroot refresh vscode
@@ -47,6 +49,8 @@ threadroot doctor
 Threadroot keeps durable project memory in `threadroot/` and hidden tool metadata in `.threadroot/`. Generated adapters such as `AGENTS.md`, Copilot instructions, and VS Code settings can be refreshed from that repo-owned context.
 
 `threadroot/automation.md` and `.threadroot/automation.json` describe natural upkeep triggers for agents: session start, task routing, structure changes, meaningful work, and session end. V1 keeps this guidance opt-in and explicit instead of installing background hooks.
+
+Use `threadroot automation enable` when you want agents to treat those triggers as expected project workflow. Use `threadroot automation disable` to return to suggested-only guidance.
 
 ## Agent Direction
 

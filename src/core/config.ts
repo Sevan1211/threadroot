@@ -18,6 +18,7 @@ export type InitInput = {
   projectName: string;
   targets: Target[];
   strictness: Strictness;
+  automationEnabled?: boolean;
 };
 
 export function createConfig(input: InitInput, now = new Date()): ThreadrootConfig {

@@ -15,18 +15,20 @@ export type StartOptions = {
   targets?: string;
   strictness?: string;
   projectName?: string;
+  automation?: boolean;
 };
 
 export async function runStart(repoRoot: string, options: StartOptions): Promise<void> {
   const projectName = await currentProjectName(repoRoot, options.projectName);
   const inputFromFlags: InitInput | undefined =
-    options.profile || options.intent || options.targets || options.strictness || options.projectName
+    options.profile || options.intent || options.targets || options.strictness || options.projectName || options.automation
       ? {
           profile: profileIdSchema.parse(options.profile ?? "nextjs"),
           intent: projectIntentSchema.parse(options.intent ?? "portfolio"),
           projectName,
           targets: parseTargets(options.targets),
           strictness: strictnessSchema.parse(options.strictness ?? "standard"),
+          automationEnabled: options.automation ?? false,
         }
       : undefined;
 
@@ -47,6 +49,7 @@ export async function runStart(repoRoot: string, options: StartOptions): Promise
     generateFiles(config, {
       includeReadme: !(await fileExists(repoRoot, "README.md")),
       agentsPath: (await fileExists(repoRoot, "AGENTS.md")) ? "AGENTS.threadroot.md" : "AGENTS.md",
+      automationEnabled: initInput.automationEnabled ?? false,
     }),
   );
   printPlan(planned);

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { render } from "ink";
 import React from "react";
-import { runAutomationStatus } from "./commands/automation.js";
+import { runAutomationSet, runAutomationStatus, type AutomationSetOptions } from "./commands/automation.js";
 import { runContextSuggest } from "./commands/context.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runMaintain, type MaintainOptions } from "./commands/maintain.js";
@@ -46,6 +46,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--targets <targets>", "Comma-separated targets: codex,copilot,vscode.")
     .option("--strictness <strictness>", "light, standard, or strict.")
     .option("--project-name <name>", "Project name.")
+    .option("--automation", "Enable agent-suggested Threadroot upkeep guidance.")
     .action((options: StartOptions) => runStart(repoRoot, options));
 
   program
@@ -55,6 +56,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("-y, --yes", "Use detected defaults and overwrite generated/manual conflicts without prompting.")
     .option("--profile <profile>", "Override detected project profile.")
     .option("--intent <intent>", "Project intent.")
+    .option("--automation", "Enable agent-suggested Threadroot upkeep guidance.")
     .action((options: RevampOptions) => runRevamp(repoRoot, options));
 
   const refresh = program.command("refresh").description("Regenerate enabled Threadroot adapter outputs.");
@@ -80,6 +82,18 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .command("status")
     .description("Print recommended upkeep triggers for agents and humans.")
     .action(() => runAutomationStatus(repoRoot));
+  automation
+    .command("enable")
+    .description("Mark Threadroot upkeep triggers as expected project workflow.")
+    .option("--dry-run", "Preview planned files without writing.")
+    .option("-y, --yes", "Overwrite generated/manual conflicts without prompting.")
+    .action((options: AutomationSetOptions) => runAutomationSet(repoRoot, true, options));
+  automation
+    .command("disable")
+    .description("Keep Threadroot upkeep triggers as suggested-only guidance.")
+    .option("--dry-run", "Preview planned files without writing.")
+    .option("-y, --yes", "Overwrite generated/manual conflicts without prompting.")
+    .action((options: AutomationSetOptions) => runAutomationSet(repoRoot, false, options));
 
   const map = program.command("map").description("Build and refresh Threadroot repo maps.");
   map

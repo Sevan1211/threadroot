@@ -11,6 +11,10 @@ type InitAppProps = {
 
 const targets: Target[] = ["codex", "copilot", "vscode"];
 const strictnessValues: Strictness[] = ["light", "standard", "strict"];
+const automationValues = [
+  { value: false, label: "Suggested only", detail: "Agents can check upkeep guidance when useful." },
+  { value: true, label: "Enabled", detail: "Agents should treat upkeep as expected project workflow." },
+];
 const intents: Array<{ value: ProjectIntent; label: string; detail: string }> = [
   { value: "portfolio", label: "Portfolio project", detail: "Reviewer-friendly docs, polish, and tradeoffs." },
   { value: "startup-prototype", label: "Startup prototype", detail: "Fast learning, assumptions, and product decisions." },
@@ -30,6 +34,7 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
   const [profile, setProfile] = useState<ProfileId>("nextjs");
   const [selectedTargets, setSelectedTargets] = useState<Target[]>(["codex", "copilot", "vscode"]);
   const [strictness, setStrictness] = useState<Strictness>("standard");
+  const [automationEnabled, setAutomationEnabled] = useState(false);
 
   const rows =
     step === 0
@@ -38,7 +43,9 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
       ? profiles.map((item) => ({ label: item.name, value: item.id, detail: item.description }))
       : step === 2
         ? targets.map((item) => ({ label: item, value: item, detail: "Toggle with space." }))
-        : strictnessValues.map((item) => ({ label: item, value: item, detail: "" }));
+        : step === 3
+          ? strictnessValues.map((item) => ({ label: item, value: item, detail: "" }))
+          : automationValues;
 
   function finish(): void {
     onComplete({
@@ -47,6 +54,7 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
       projectName,
       targets: selectedTargets,
       strictness,
+      automationEnabled,
     });
     exit();
   }
@@ -103,6 +111,13 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
       if (step === 3) {
         setStrictness(rows[cursor]?.value as Strictness);
         setStep(4);
+        setCursor(0);
+        return;
+      }
+
+      if (step === 4) {
+        setAutomationEnabled(Boolean(rows[cursor]?.value));
+        setStep(5);
         return;
       }
 
@@ -124,9 +139,10 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
         <Text>Profile: {selectedProfile?.name ?? profile}</Text>
         <Text>Targets: {selectedTargets.join(", ")}</Text>
         <Text>Strictness: {strictness}</Text>
+        <Text>Automation: {automationEnabled ? "enabled" : "suggested only"}</Text>
       </Box>
 
-      {step < 4 ? (
+      {step < 5 ? (
         <Box flexDirection="column">
           <Text bold>
             {step === 0
@@ -135,13 +151,15 @@ export function InitApp({ projectName, onComplete }: InitAppProps): JSX.Element 
                 ? "Choose a tech profile"
                 : step === 2
                   ? "Choose AI/editor targets"
-                  : "Choose strictness"}
+                  : step === 3
+                    ? "Choose strictness"
+                    : "Choose automation mode"}
           </Text>
           {rows.map((row, index) => {
             const active = index === cursor;
             const checked = step === 2 && selectedTargets.includes(row.value as Target);
             return (
-              <Text key={row.value} color={active ? "green" : undefined}>
+              <Text key={String(row.value)} color={active ? "green" : undefined}>
                 {active ? ">" : " "} {step === 2 ? (checked ? "[x]" : "[ ]") : "   "} {row.label}
                 {row.detail ? <Text color="gray"> - {row.detail}</Text> : null}
               </Text>

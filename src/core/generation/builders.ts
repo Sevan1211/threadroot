@@ -1,4 +1,4 @@
-import { automationFiles } from "../automation.js";
+import { automationFiles, defaultAutomationConfig, setAutomationEnabled } from "../automation.js";
 import { CONFIG_PATH, REPO_MAP_PATH, SKILLS_INDEX_PATH } from "../paths.js";
 import { selectSkillPacks, skillPath } from "../skill-packs.js";
 import {
@@ -33,6 +33,7 @@ import type { GeneratedFile, ProjectProfile, RevampContext, Target, ThreadrootCo
 export type BuildFileOptions = {
   includeReadme: boolean;
   agentsPath: string;
+  automationEnabled?: boolean;
   revampContext?: RevampContext;
 };
 
@@ -58,7 +59,7 @@ export function canonicalFiles(
     { path: "threadroot/decisions.md", content: decisionsContext(), generated: false },
     { path: "threadroot/pitfalls.md", content: pitfallsContext(), generated: false },
     { path: "threadroot/sources.md", content: sourcesContext(options.revampContext), generated: false },
-    ...automationFiles(),
+    ...automationFiles(setAutomationEnabled(defaultAutomationConfig(), options.automationEnabled ?? false)),
     { path: "threadroot/skills/catalog.md", content: skillCatalogContext(selectedPacks), generated: false },
     { path: "threadroot/skills/index.md", content: skillsIndex(selectedPacks), generated: false },
     { path: SKILLS_INDEX_PATH, content: skillsIndexJson(selectedPacks), generated: false },

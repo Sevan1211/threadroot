@@ -8,6 +8,7 @@ type GenerateOptions = {
   includeCanonical?: boolean;
   includeReadme?: boolean;
   agentsPath?: string;
+  automationEnabled?: boolean;
   revampContext?: RevampContext;
 };
 
@@ -17,6 +18,7 @@ export function generateFiles(config: ThreadrootConfig, options: GenerateOptions
   const buildOptions = {
     includeReadme: options.includeReadme ?? true,
     agentsPath: options.agentsPath ?? "AGENTS.md",
+    automationEnabled: options.automationEnabled,
     revampContext: options.revampContext,
   };
 

@@ -4,8 +4,8 @@ import { createConfig } from "../core/config.js";
 import { generateFiles } from "../core/generate.js";
 import { buildRevampContext, scanRepository } from "../core/scanner.js";
 import { applyWrites, planWrites } from "../core/writer.js";
-import { RevampApp } from "../tui/RevampApp.js";
-import { profileIdSchema, projectIntentSchema, type SourceCandidate } from "../types.js";
+import { RevampApp, type RevampSelection } from "../tui/RevampApp.js";
+import { profileIdSchema, projectIntentSchema } from "../types.js";
 import { currentProjectName, printPlan, promptForPolicy } from "./shared.js";
 
 export type RevampOptions = {
@@ -13,23 +13,25 @@ export type RevampOptions = {
   yes?: boolean;
   profile?: string;
   intent?: string;
+  automation?: boolean;
 };
 
 export async function runRevamp(repoRoot: string, options: RevampOptions): Promise<void> {
   const scan = await scanRepository(repoRoot);
-  const selected =
+  const selection: RevampSelection | undefined =
     options.yes || options.profile
-      ? scan.candidates
-      : await new Promise<SourceCandidate[] | undefined>((resolve) => {
+      ? { candidates: scan.candidates, automationEnabled: options.automation ?? false }
+      : await new Promise<RevampSelection | undefined>((resolve) => {
           render(<RevampApp candidates={scan.candidates} onComplete={resolve} />);
         });
 
-  if (!selected) {
+  if (!selection) {
     console.log("Threadroot revamp cancelled.");
     return;
   }
+  const automationEnabled = options.automation ?? selection.automationEnabled;
 
-  const revampContext = await buildRevampContext(repoRoot, { ...scan, candidates: selected });
+  const revampContext = await buildRevampContext(repoRoot, { ...scan, candidates: selection.candidates });
   const config = createConfig({
     profile: profileIdSchema.parse(options.profile ?? (scan.likelyProfile === "unknown" ? "empty" : scan.likelyProfile)),
     intent: projectIntentSchema.parse(options.intent ?? "custom"),
@@ -43,6 +45,7 @@ export async function runRevamp(repoRoot: string, options: RevampOptions): Promi
     generateFiles(config, {
       includeReadme: false,
       agentsPath,
+      automationEnabled,
       revampContext,
     }),
   );
@@ -50,6 +53,7 @@ export async function runRevamp(repoRoot: string, options: RevampOptions): Promi
   printPlan(planned);
   console.log(`Revamp sources selected: ${revampContext.selectedSources.length}`);
   console.log(`Codex guidance target: ${agentsPath}`);
+  console.log(`Automation: ${automationEnabled ? "enabled" : "suggested only"}`);
 
   if (!options.write) {
     console.log("Dry run only. Re-run with --write to create the proposed Threadroot structure.");

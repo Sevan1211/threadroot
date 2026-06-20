@@ -78,4 +78,17 @@ describe("generateFiles", () => {
       "AGENTS.md",
     ]);
   });
+
+  it("can generate enabled automation metadata", () => {
+    const config = createConfig({
+      profile: "nextjs",
+      projectName: "demo",
+      targets: ["codex", "copilot", "vscode"],
+      strictness: "standard",
+    });
+
+    const files = generateFiles(config, { automationEnabled: true });
+    expect(files.find((file) => file.path === ".threadroot/automation.json")?.content).toContain('"enabled": true');
+    expect(files.find((file) => file.path === "threadroot/automation.md")?.content).toContain("- Enabled: yes");
+  });
 });

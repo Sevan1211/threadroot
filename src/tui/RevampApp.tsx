@@ -4,7 +4,12 @@ import type { SourceCandidate } from "../types.js";
 
 type RevampAppProps = {
   candidates: SourceCandidate[];
-  onComplete: (candidates: SourceCandidate[] | undefined) => void;
+  onComplete: (selection: RevampSelection | undefined) => void;
+};
+
+export type RevampSelection = {
+  candidates: SourceCandidate[];
+  automationEnabled: boolean;
 };
 
 type Row = {
@@ -48,6 +53,7 @@ export function RevampApp({ candidates, onComplete }: RevampAppProps): JSX.Eleme
   const { exit } = useApp();
   const rows = useMemo(() => rowsFor(candidates), [candidates]);
   const [cursor, setCursor] = useState(0);
+  const [automationEnabled, setAutomationEnabled] = useState(false);
   const [selected, setSelected] = useState(() => new Set(candidates.filter((item) => item.selected).map((item) => item.path)));
 
   function toggle(row: Row): void {
@@ -85,7 +91,10 @@ export function RevampApp({ candidates, onComplete }: RevampAppProps): JSX.Eleme
   }
 
   function finish(): void {
-    onComplete(candidates.map((candidate) => ({ ...candidate, selected: selected.has(candidate.path) })));
+    onComplete({
+      candidates: candidates.map((candidate) => ({ ...candidate, selected: selected.has(candidate.path) })),
+      automationEnabled,
+    });
     exit();
   }
 
@@ -108,6 +117,10 @@ export function RevampApp({ candidates, onComplete }: RevampAppProps): JSX.Eleme
       if (row) {
         toggle(row);
       }
+      return;
+    }
+    if (input === "a") {
+      setAutomationEnabled((current) => !current);
       return;
     }
     if (key.return) {
@@ -144,6 +157,7 @@ export function RevampApp({ candidates, onComplete }: RevampAppProps): JSX.Eleme
         <Box width="35%" flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1}>
           <Text bold>Selection</Text>
           <Text>{selectedCount} source(s) selected</Text>
+          <Text>Automation: {automationEnabled ? "enabled" : "suggested only"}</Text>
           {current?.candidate ? (
             <>
               <Text>Type: {current.candidate.kind}</Text>
@@ -155,7 +169,7 @@ export function RevampApp({ candidates, onComplete }: RevampAppProps): JSX.Eleme
           )}
         </Box>
       </Box>
-      <Text color="gray">Space selects. Enter previews revamp. q exits.</Text>
+      <Text color="gray">Space selects. a toggles automation. Enter previews revamp. q exits.</Text>
     </Box>
   );
 }

@@ -79,6 +79,13 @@ export function defaultAutomationConfig(): AutomationConfig {
   };
 }
 
+export function setAutomationEnabled(config: AutomationConfig, enabled: boolean): AutomationConfig {
+  return {
+    ...config,
+    enabled,
+  };
+}
+
 export function automationMarkdown(config: AutomationConfig = defaultAutomationConfig()): string {
   const notes = config.notes.map((note) => `- ${note}`).join("\n");
   const triggers = config.triggers

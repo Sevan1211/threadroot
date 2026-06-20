@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { automationFiles, automationMarkdown, defaultAutomationConfig, formatAutomationStatus } from "../src/core/automation.js";
+import {
+  automationFiles,
+  automationMarkdown,
+  defaultAutomationConfig,
+  formatAutomationStatus,
+  setAutomationEnabled,
+} from "../src/core/automation.js";
 
 describe("automation", () => {
   it("defines opt-in agent-suggested upkeep triggers", () => {
@@ -22,6 +28,14 @@ describe("automation", () => {
     expect(markdown).toContain("# Automation");
     expect(markdown).toContain("threadroot maintain --dry-run");
     expect(markdown).toContain("[threadroot/repo-map.md](threadroot/repo-map.md)");
+  });
+
+  it("can mark automation as enabled", () => {
+    const config = setAutomationEnabled(defaultAutomationConfig(), true);
+
+    expect(config.enabled).toBe(true);
+    expect(automationMarkdown(config)).toContain("- Enabled: yes");
+    expect(formatAutomationStatus(config)).toContain("Threadroot automation: enabled");
   });
 
   it("generates visible guidance and hidden metadata", () => {
