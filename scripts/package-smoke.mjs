@@ -40,22 +40,13 @@ const cacheDir = path.join(workDir, "npm-cache");
 let tarballPath;
 
 try {
-  const packed = await run("npm", ["--cache", cacheDir, "pack", "--json"], { capture: true });
-  const output = `${packed.stdout}\n${packed.stderr}`;
-  const jsonStart = output.indexOf("[\n  {");
-  if (jsonStart !== -1) {
-    const [packInfo] = JSON.parse(output.slice(jsonStart));
-    if (!packInfo?.filename) {
-      throw new Error("npm pack did not return a package filename.");
-    }
-    tarballPath = path.join(repoRoot, packInfo.filename);
-  } else {
-    const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
-    const baseName = String(pkg.name).replace(/^@/, "").replace(/\//g, "-");
-    tarballPath = path.join(repoRoot, `${baseName}-${pkg.version}.tgz`);
-    if (!existsSync(tarballPath)) {
-      throw new Error(`npm pack did not return JSON output and ${tarballPath} was not created.`);
-    }
+  const pkg = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
+  const baseName = String(pkg.name).replace(/^@/, "").replace(/\//g, "-");
+  tarballPath = path.join(repoRoot, `${baseName}-${pkg.version}.tgz`);
+
+  await run("npm", ["--cache", cacheDir, "pack"]);
+  if (!existsSync(tarballPath)) {
+    throw new Error(`npm pack did not create ${tarballPath}.`);
   }
 
   const extractDir = path.join(workDir, "extract");
