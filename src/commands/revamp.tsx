@@ -1,0 +1,62 @@
+import { render } from "ink";
+import React from "react";
+import { createConfig } from "../core/config.js";
+import { generateFiles } from "../core/generate.js";
+import { buildRevampContext, scanRepository } from "../core/scanner.js";
+import { applyWrites, planWrites } from "../core/writer.js";
+import { RevampApp } from "../tui/RevampApp.js";
+import { profileIdSchema, projectIntentSchema, type SourceCandidate } from "../types.js";
+import { currentProjectName, printPlan, promptForPolicy } from "./shared.js";
+
+export type RevampOptions = {
+  write?: boolean;
+  yes?: boolean;
+  profile?: string;
+  intent?: string;
+};
+
+export async function runRevamp(repoRoot: string, options: RevampOptions): Promise<void> {
+  const scan = await scanRepository(repoRoot);
+  const selected =
+    options.yes || options.profile
+      ? scan.candidates
+      : await new Promise<SourceCandidate[] | undefined>((resolve) => {
+          render(<RevampApp candidates={scan.candidates} onComplete={resolve} />);
+        });
+
+  if (!selected) {
+    console.log("Threadroot revamp cancelled.");
+    return;
+  }
+
+  const revampContext = await buildRevampContext(repoRoot, { ...scan, candidates: selected });
+  const config = createConfig({
+    profile: profileIdSchema.parse(options.profile ?? (scan.likelyProfile === "unknown" ? "empty" : scan.likelyProfile)),
+    intent: projectIntentSchema.parse(options.intent ?? "custom"),
+    projectName: await currentProjectName(repoRoot),
+    targets: ["codex", "copilot", "vscode"],
+    strictness: "standard",
+  });
+  const agentsPath = scan.existingAgentFiles.includes("AGENTS.md") ? "AGENTS.threadroot.md" : "AGENTS.md";
+  const planned = await planWrites(
+    repoRoot,
+    generateFiles(config, {
+      includeReadme: false,
+      agentsPath,
+      revampContext,
+    }),
+  );
+
+  printPlan(planned);
+  console.log(`Revamp sources selected: ${revampContext.selectedSources.length}`);
+  console.log(`Codex guidance target: ${agentsPath}`);
+
+  if (!options.write) {
+    console.log("Dry run only. Re-run with --write to create the proposed Threadroot structure.");
+    return;
+  }
+
+  const policy = options.yes ? "overwrite" : await promptForPolicy(repoRoot, planned);
+  const written = await applyWrites(repoRoot, planned, policy);
+  console.log(`Revamped ${written.filter((file) => file.status !== "unchanged").length} file(s).`);
+}
