@@ -2,22 +2,62 @@
   "name": "threadroot",
   "version": "0.1.0",
   "description": "Git for your AI agent harness: author skills, rules, tools, and memory once and compile them to every vendor format.",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "bin": {
     "threadroot": "./dist/index.js",
     "tr": "./dist/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sevan1211/threadroot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Sevan1211/threadroot/issues"
+  },
+  "homepage": "https://github.com/Sevan1211/threadroot#readme",
+  "keywords": [
+    "ai",
+    "agents",
+    "agentic",
+    "codex",
+    "claude",
+    "cursor",
+    "copilot",
+    "mcp",
+    "developer-tools",
+    "cli",
+    "skills"
+  ],
   "files": [
     "dist",
     "skills",
-    "packs"
+    "packs",
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsx src/index.ts",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test",
+    "pack:check": "npm --cache /tmp/threadroot-npm-cache pack --dry-run",
+    "package:smoke": "node scripts/package-smoke.mjs",
+    "release:check": "pnpm typecheck && pnpm lint && pnpm test && pnpm pack:check && pnpm package:smoke",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint ."
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "commander": "^12.1.0",

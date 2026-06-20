@@ -8,6 +8,28 @@ It is local-first: a `tr` CLI for humans and CI, plus a local MCP server that ex
 same harness to coding agents. V1 does not require a cloud account, API key, or hosted
 service.
 
+## Install
+
+Run Threadroot without adding it to your project:
+
+```bash
+pnpm dlx threadroot init
+# or
+npx threadroot init
+# or, explicitly with npm exec
+npm exec --package=threadroot -- threadroot init
+```
+
+After initialization:
+
+```bash
+threadroot doctor
+threadroot context "write tests"
+threadroot mcp setup --write
+```
+
+For local development on Threadroot itself:
+
 ```bash
 pnpm install
 pnpm build
@@ -194,6 +216,20 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+## Publishing
+
+The npm package ships only `dist/`, `skills/`, `packs/`, and package metadata. Before
+publishing:
+
+```bash
+pnpm release:check
+pnpm pack:check
+```
+
+See [RELEASE.md](./RELEASE.md) for the full publish checklist.
+
+Contributions should run the same release gate. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Smoke test this checkout
 
