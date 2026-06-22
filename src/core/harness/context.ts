@@ -1,4 +1,7 @@
 import { type EffectiveHarness, resolveHarness } from "./load.js";
+import { projectLockPath, userLockPath } from "./paths.js";
+import { readLockFile } from "../install/lock.js";
+import type { LockEntry } from "../install/source.js";
 
 export type ContextSkill = {
   name: string;
@@ -6,6 +9,16 @@ export type ContextSkill = {
   tags: string[];
   scope: string;
   sourcePath: string;
+  risk: string;
+  reviewed: boolean;
+  provenance?: string;
+  registryId?: string;
+  auditUrl?: string;
+  externalScan?: {
+    provider: string;
+    status: string;
+    reason?: string;
+  };
   score: number;
 };
 
@@ -24,6 +37,17 @@ export type ContextRule = {
   applyTo?: string;
 };
 
+export type ContextConnection = {
+  name: string;
+  provider: string;
+  command: string;
+  profile?: string;
+  description: string;
+  risk: string;
+  confirm: boolean;
+  healthcheck: boolean;
+};
+
 export type ContextMemory = {
   type: string;
   body: string;
@@ -34,6 +58,7 @@ export type HarnessContext = {
   skills: ContextSkill[];
   rules: ContextRule[];
   tools: ContextTool[];
+  connections: ContextConnection[];
   memory: ContextMemory[];
 };
 
@@ -63,6 +88,49 @@ function scoreSkill(haystack: string, terms: string[]): number {
   return terms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0);
 }
 
+async function skillLockEntries(repoRoot: string, home?: string): Promise<Map<string, LockEntry>> {
+  const [projectLock, userLock] = await Promise.all([
+    readLockFile(projectLockPath(repoRoot)),
+    readLockFile(userLockPath(home)),
+  ]);
+  const entries = new Map<string, LockEntry>();
+  for (const entry of userLock.objects) {
+    if (entry.kind === "skill") entries.set(entry.name, entry);
+  }
+  for (const entry of projectLock.objects) {
+    if (entry.kind === "skill") entries.set(entry.name, entry);
+  }
+  return entries;
+}
+
+function contextSkill(
+  skill: EffectiveHarness["skills"][number],
+  score: number,
+  lockEntries: Map<string, LockEntry>,
+): ContextSkill {
+  const entry = lockEntries.get(skill.name);
+  return {
+    name: skill.name,
+    when: skill.frontmatter.when,
+    tags: skill.frontmatter.tags,
+    scope: skill.frontmatter.scope,
+    sourcePath: skill.sourcePath,
+    risk: entry?.risk ?? "low",
+    reviewed: entry ? (entry.reviewed ?? entry.sourceKind === "local") : true,
+    provenance: entry?.source,
+    registryId: entry?.registryId,
+    auditUrl: entry?.auditUrl,
+    externalScan: entry?.externalScan
+      ? {
+          provider: entry.externalScan.provider,
+          status: entry.externalScan.status,
+          reason: entry.externalScan.reason,
+        }
+      : undefined,
+    score,
+  };
+}
+
 /**
  * Assemble the task-relevant harness slice: ranked skills (deterministic
  * keyword match on name/when/tags), all available tools and rules, and durable
@@ -75,6 +143,7 @@ export async function assembleContext(
 ): Promise<HarnessContext> {
   const harness = options.harness ?? (await resolveHarness(repoRoot, { home: options.home }));
   const terms = taskTerms(task);
+  const lockEntries = await skillLockEntries(repoRoot, options.home);
 
   let ranked = harness.skills
     .map((skill) => ({
@@ -84,24 +153,10 @@ export async function assembleContext(
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.skill.name.localeCompare(b.skill.name))
     .slice(0, options.limit ?? 8)
-    .map(({ skill, score }) => ({
-      name: skill.name,
-      when: skill.frontmatter.when,
-      tags: skill.frontmatter.tags,
-      scope: skill.frontmatter.scope,
-      sourcePath: skill.sourcePath,
-      score,
-    }));
+    .map(({ skill, score }) => contextSkill(skill, score, lockEntries));
 
   if (ranked.length === 0 && options.fallbackSkills) {
-    ranked = harness.skills.slice(0, options.limit ?? 8).map((skill) => ({
-      name: skill.name,
-      when: skill.frontmatter.when,
-      tags: skill.frontmatter.tags,
-      scope: skill.frontmatter.scope,
-      sourcePath: skill.sourcePath,
-      score: 0,
-    }));
+    ranked = harness.skills.slice(0, options.limit ?? 8).map((skill) => contextSkill(skill, 0, lockEntries));
   }
 
   return {
@@ -116,6 +171,16 @@ export async function assembleContext(
       connection: tool.manifest.connection,
       healthcheck: Boolean(tool.manifest.healthcheck),
       kind: tool.manifest.run ? "shell" : "script",
+    })),
+    connections: harness.connections.map((connection) => ({
+      name: connection.name,
+      provider: connection.manifest.provider,
+      command: connection.manifest.command,
+      profile: connection.manifest.profile,
+      description: connection.manifest.description,
+      risk: connection.manifest.risk,
+      confirm: connection.manifest.confirm,
+      healthcheck: Boolean(connection.manifest.healthcheck),
     })),
     memory: harness.memory.map((entry) => ({ type: entry.type, body: entry.body })),
   };

@@ -19,4 +19,4 @@ Please report security issues privately before opening a public issue. Until a d
 - External installed tools are blocked until allow-listed.
 - `threadroot doctor` reports drift, unsafe tool trust, connection health, and MCP setup hints.
 
-Always inspect third-party skills, tools, connections, and packs before installing them into a trusted repo.
+Always inspect third-party skills, tools, and connections before installing them into a trusted repo.

@@ -15,6 +15,23 @@ export type ObjectKind = z.infer<typeof objectKindSchema>;
 export const objectSourceKindSchema = z.enum(["local", "git", "registry"]);
 export type ObjectSourceKind = z.infer<typeof objectSourceKindSchema>;
 
+export const lockRiskSchema = z.enum(["low", "medium", "high", "blocked"]);
+export type LockRisk = z.infer<typeof lockRiskSchema>;
+
+export const externalScannerStatusSchema = z.enum(["skipped", "passed", "warn", "failed"]);
+export type ExternalScannerStatus = z.infer<typeof externalScannerStatusSchema>;
+
+export const externalScannerReportSchema = z.object({
+  provider: z.string().min(1),
+  status: externalScannerStatusSchema,
+  command: z.array(z.string()).optional(),
+  exitCode: z.number().int().optional(),
+  reason: z.string().optional(),
+  summary: z.string().optional(),
+  scannedAt: z.string().optional(),
+});
+export type ExternalScannerReport = z.infer<typeof externalScannerReportSchema>;
+
 export type ObjectSourceRef =
   | { kind: "local"; raw: string; path: string }
   | {
@@ -115,6 +132,24 @@ export const lockEntrySchema = z.object({
   resolved: z.string().optional(),
   /** `sha256:<hex>` content digest for tamper detection + reproducibility. */
   integrity: z.string().optional(),
+  /** Static scan risk at install time. Mostly used for skills. */
+  risk: lockRiskSchema.optional(),
+  /** External catalog/registry source, when a skill came through an ecosystem directory. */
+  registry: z.string().optional(),
+  /** Stable external skill identifier, such as `owner/repo/skill` from skills.sh. */
+  registryId: z.string().optional(),
+  /** Original ecosystem install URL when known. */
+  installUrl: z.string().optional(),
+  /** External audit URL when known. */
+  auditUrl: z.string().optional(),
+  /** Original upstream source for Threadroot-adapted bundled objects. */
+  upstreamSource: z.string().optional(),
+  /** Adapter that transformed the upstream source into Threadroot canonical form. */
+  adaptedBy: z.string().optional(),
+  /** Optional external scanner result captured at install time. */
+  externalScan: externalScannerReportSchema.optional(),
+  /** Human review marker set by `threadroot skills trust`. */
+  reviewed: z.boolean().optional(),
   installedAt: z.string(),
 });
 export type LockEntry = z.infer<typeof lockEntrySchema>;

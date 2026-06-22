@@ -1,122 +1,154 @@
 # Threadroot Integration Contract
 
-This document is the handoff surface for a future website, prompt generator, and
-cloud/auth repo. The OSS CLI remains the source of truth. The website should
-generate prompts and commands that drive this CLI instead of reimplementing
-harness logic.
+This document is the handoff surface for the future website/cloud repo. The OSS CLI remains the source of truth. The website should generate prompts and commands that drive this CLI instead of reimplementing harness logic.
 
 ## Product Boundary
 
-Threadroot OSS is the local agent harness compiler:
+Threadroot OSS is the local adaptive agent capability harness:
 
 - `.threadroot/` is canonical project state.
-- The CLI initializes, validates, compiles, and exposes harness context.
+- The CLI initializes, validates, routes context, scans skills, and exposes MCP.
 - MCP exposes the same local harness to agent clients.
-- Tools and connections execute locally only.
+- Skills, tools, connections, memory, and policy execute locally.
 - No secrets are stored in the repo.
 
 The website/cloud repo can add:
 
-- Prompt generation for new/existing projects.
-- Account login, repo/project bindings, and saved project preferences.
-- Cloud-hosted skill, pack, and tool authoring workflows.
-- Optional sync of approved harness objects into a local repo.
+- a polished prompt/command generator
+- account login and repo/project bindings
+- hosted skill/tool/connection authoring assistance
+- optional cloud-saved project preferences
+- future sync of approved harness objects into a local repo
 
 The website/cloud repo must not bypass the local CLI trust model for execution.
 
-## Website Prompt Generator Inputs
+## Website Inputs
 
-The website should ask for a small set of high-signal choices:
+Ask only for high-signal details:
 
 - Project state: `new`, `existing`, or `existing-with-agent-files`.
-- Primary agent/provider: `codex`, `claude`, `cursor`, `copilot`, `gemini`,
-  `windsurf`, `antigravity`, `opencode`, or `all`.
+- Primary agent/provider: `codex`, `claude`, `cursor`, `copilot`, `gemini`, `windsurf`, `antigravity`, `opencode`, or `all`.
 - IDE/editor: VS Code, Cursor, terminal-only, other.
-- Project profile: `nextjs`, `vite-react`, `fastapi`, `python-cli`,
-  `node-cli`, `dbt`, or `empty`.
-- Stack tags: TypeScript, React, Python, testing, security, system design,
-  CLI, data, cloud.
-- Cloud/tooling needs: GitHub, AWS, Azure, Snowflake, dbt, none.
-- Initial task: a short natural language task.
+- Project profile: `nextjs`, `vite-react`, `fastapi`, `python-cli`, `node-cli`, `dbt`, or `empty`.
+- Initial task: short natural language.
+- Cloud/tooling needs: GitHub, AWS, Azure, GCP, Snowflake, dbt, Docker, Kubernetes, Vercel, none.
 - Project clutter preference: local-only default, optional provider exposure.
-- MCP preference: configure Codex MCP now, project-local MCP later, or skip.
+- MCP preference: configure MCP now or skip.
+- Automation consent: ask whether safe low-risk capability creation is approved for this project.
 
 ## Prompt-to-CLI Mapping
 
-The website should prefer one bootstrap command plus verification:
+Prefer one bootstrap command plus verification:
 
 ```bash
 threadroot bootstrap --yes \
   --agent <agent-or-all> \
   --profile <profile> \
   --task "<initial task>" \
-  --packs <comma-separated-packs> \
   --mcp \
   --json
 ```
 
-Use `--no-import` for a blank/new repo when the user wants a clean start:
+For a blank repo:
 
 ```bash
 threadroot bootstrap --yes --no-import --profile empty --task "start this project" --json
 ```
 
-Use import for an existing repo so Threadroot can preserve useful existing
-agent/vendor context:
+For an existing repo, let Threadroot import useful existing agent/vendor context:
 
 ```bash
 threadroot bootstrap --yes --profile <profile> --task "<task>" --json
+```
+
+If the user grants safe automation once for the project:
+
+```bash
+threadroot automation approve --json
+```
+
+Verification:
+
+```bash
+threadroot doctor --json
+threadroot status --json
+threadroot start "<task>" --json
+threadroot mcp check --json
+```
+
+Success message:
+
+```text
+Success: Threadroot is ready. Run threadroot start "<task>" for future sessions.
 ```
 
 Provider-native project files stay opt-in:
 
 ```bash
 threadroot expose <agent>
+threadroot skills expose <name-or-all> --agent <agent-or-universal>
 ```
 
-Verification commands:
+## Default Harness Model
+
+Every initialized project starts with four seed skills:
+
+- `find-skills`
+- `create-skill`
+- `create-tool`
+- `create-connection`
+
+The website should describe these as adaptive capabilities, not a bundled library. Agents should:
+
+1. Start with `threadroot start "<task>"`.
+2. Use installed skills when relevant.
+3. Search with `threadroot skills find "<query>"` when no installed skill fits.
+4. Install through `threadroot skills add <source> --skill <name>`.
+5. Create a project-specific skill under `.threadroot/skills/` when no good external skill exists.
+6. Create tools/connections only through Threadroot commands.
+
+## External Skill Mapping
+
+Search:
 
 ```bash
-threadroot doctor --json
-threadroot status --json
-threadroot context "<task>" --json
-threadroot mcp check --json
+threadroot skills find "optimize website performance" --json
 ```
 
-The success message generated by the website prompt should be:
-
-```text
-Success: Threadroot is ready. Run threadroot start "<task>" for future sessions.
-```
-
-## Pack Mapping
-
-Initial pack choices should map conservatively:
-
-| User choice | Packs |
-| --- | --- |
-| TypeScript or Node CLI | `typescript-node` |
-| React app | `react-app`, `testing` |
-| Python | `python`, `testing` |
-| Testing-heavy project | `testing` |
-| Code review / PR workflow | `code-review` |
-| Security work | `security-review` |
-| Architecture / product planning | `system-design` |
-
-If uncertain, install fewer packs. Agents can list and install more later:
+Install:
 
 ```bash
-threadroot packs list --json
-threadroot packs inspect <pack> --json
-threadroot packs install <pack> --json
+threadroot skills add <source> --skill <name> --json
 ```
 
-Pack installs record object-level provenance in `.threadroot/lock.json` with
-`source: pack:<name>` and sha256 integrity.
+Examples:
+
+```bash
+threadroot skills add https://www.skills.sh/vercel-labs/skills/find-skills --json
+threadroot skills add skills:anthropics/skills/skill-creator --json
+threadroot skills add addyosmani/agent-skills --skill <name> --json
+```
+
+If a source contains multiple skills, the CLI returns `needsSelection: true` and candidate commands. Prefer named reruns:
+
+```bash
+threadroot skills add <source> --skill <candidate-name> --json
+```
+
+Use `--path` only when duplicate skill names make names ambiguous.
+
+Security UX:
+
+- Show scan risk and findings from `skills add`, `skills inspect`, or `skills scan`.
+- Show Snyk Agent Scan status when available.
+- Offer strict mode with `--require-snyk`; offer `--no-snyk` for local/offline testing.
+- Tell users Threadroot detects risk signals but does not certify third-party skills.
+- Ask users to inspect medium/high-risk skills before `threadroot skills trust <name>`.
+- Never store skill secrets or provider credentials in prompts or `.threadroot/`.
 
 ## JSON Surfaces
 
-The website/cloud repo should call these commands instead of scraping text:
+The website/cloud repo should call these instead of scraping text:
 
 ```bash
 threadroot bootstrap --json
@@ -126,37 +158,41 @@ threadroot doctor --json
 threadroot context "<task>" --json
 threadroot mcp check --json
 threadroot mcp setup --json
+threadroot automation status --json
+threadroot automation approve --json
+threadroot skills find "<query>" --json
 threadroot skills list --json
 threadroot skills inspect <path> --json
+threadroot skills scan <path> --json
+threadroot skills add <source> --json
+threadroot skills trust <name> --json
+threadroot skills expose <name-or-all> --agent <agent-or-universal> --json
 threadroot skills validate --json
 threadroot tools list --json
 threadroot tools detect --json
+threadroot tools create --json
 threadroot tools check --json
 threadroot connections list --json
+threadroot connections add <name> --provider <provider> --command <command> --json
 threadroot connections check --json
-threadroot packs list --json
-threadroot packs inspect <pack> --json
-threadroot packs validate <pack> --json
-threadroot packs install <pack> --json
 ```
 
-Until `1.0`, these JSON shapes are alpha contracts. The website should parse
-only fields it uses and tolerate extra fields.
+Until `1.0`, JSON shapes are alpha contracts. Parse only fields you use and tolerate extra fields.
 
 ## Tools And Connections
 
-Tool creation should stay local and explicit:
+Tool creation stays local and explicit:
 
 ```bash
 threadroot tools create \
   --from-command "pnpm test" \
   --description "Run the test suite" \
   --risk low \
-  --healthcheck "pnpm test" \
+  --healthcheck "pnpm --version" \
   --json
 ```
 
-Connection creation should wrap official local CLIs only:
+Connection creation wraps official local CLIs only:
 
 ```bash
 threadroot connections add aws-dev \
@@ -174,10 +210,10 @@ threadroot connections add aws-dev \
 Rules:
 
 - Connections must not store credentials.
-- Users authenticate through official CLIs such as `gh`, `aws`, `az`, or
-  Snowflake CLI.
+- Users authenticate through official CLIs such as `gh`, `aws`, `az`, `gcloud`, or Snowflake CLI.
 - MCP cannot self-confirm risky tool execution.
-- High-risk, untrusted, or blocked tools must be approved through the local CLI.
+- MCP can create low-risk tool/connection manifests only after `threadroot automation approve`.
+- High-risk, destructive, secret-bearing, or cloud-mutating actions require local human review.
 
 ## Future Cloud/Auth CLI Contract
 
@@ -193,64 +229,23 @@ threadroot sync push --json
 threadroot sync apply --from cloud --json
 ```
 
-Expected cloud files, if added later:
+Potential future files:
 
 ```text
 .threadroot/cloud.json       # repo binding, no secrets
 ~/.threadroot/auth.json      # local auth cache or pointer, never committed
 ```
 
-`.threadroot/cloud.json` should contain only non-secret metadata:
-
-```json
-{
-  "version": 1,
-  "projectId": "trp_...",
-  "repo": "owner/name",
-  "remote": "https://api.threadroot.dev"
-}
-```
-
-The auth flow should use device/browser login for CLI users and store tokens
-outside the repository. Repo sync should operate on harness objects, not source
-code, and should always show a diff or status before applying remote changes.
-
-## Cloud Data Model Sketch
-
-Minimum useful entities:
-
-- User
-- Organization
-- RepoBinding
-- CloudProject
-- HarnessSnapshot
-- Skill
-- ToolTemplate
-- ConnectionTemplate
-- Pack
-- InstallEvent
-- AuditEvent
-
-Store generated skills/tools/packs as versioned artifacts. Do not store local CLI
-secrets, cloud provider keys, or repo source code in v1 cloud.
-
-## Security And Release Anchors
-
-- Prefer npm trusted publishing/provenance for package releases.
-- Keep `.threadroot/lock.json` as the local provenance ledger.
-- Treat MCP tools as agent-controlled and require human approval for sensitive
-  actions.
-- Prefer explicit allow/deny policies for connection-backed tools.
-- Keep website-generated prompts short and command-driven.
-- Use `threadroot doctor --json` as the machine-readable trust gate.
+The auth flow should use device/browser login and store tokens outside the repository. Repo sync should operate on harness objects, not source code, and should always show status/diff before applying remote changes.
 
 ## Website Readiness Checklist
 
 The OSS core is ready for website work when:
 
 - `pnpm release:check` passes.
-- `threadroot bootstrap --yes --packs <list> --json` initializes a temp repo.
+- `threadroot bootstrap --yes --json` initializes a temp repo.
+- Initialized repos contain exactly the four seed skills by default.
 - `threadroot doctor --json` reports `ok: true` or actionable findings.
-- Pack installs write `.threadroot/lock.json` provenance.
+- Skill installs write `.threadroot/lock.json` provenance.
 - MCP check verifies the local stdio server.
-- README and generated agent prompts reference only real commands.
+- README and generated prompts reference only real commands.

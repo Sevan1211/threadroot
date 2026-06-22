@@ -6,6 +6,7 @@ import { HarnessError, resolveHarness } from "./harness/index.js";
 import { projectLockPath, userLockPath } from "./harness/paths.js";
 import { externalSkillNames, externalToolNames, readLockFile } from "./install/lock.js";
 import { validateResolvedSkillsDeep } from "./skills.js";
+import { scanSkillPath } from "./skills-scan.js";
 import { checkConnection } from "./connections/index.js";
 import { hasGlobalThreadrootSkill } from "./setup.js";
 import { checkToolHealth } from "./tools/index.js";
@@ -234,6 +235,11 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
   ]);
   const externalTools = new Set([...externalToolNames(projectLock), ...externalToolNames(userLock)]);
   const externalSkills = new Set([...externalSkillNames(projectLock), ...externalSkillNames(userLock)]);
+  const externalSkillEntries = new Map(
+    [...userLock.objects, ...projectLock.objects]
+      .filter((entry) => entry.kind === "skill" && entry.sourceKind !== "local")
+      .map((entry) => [entry.name, entry]),
+  );
   for (const name of externalTools) {
     if (!harness.manifest.tools.allow.includes(name)) {
       findings.push(
@@ -249,6 +255,37 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
   for (const skill of harness.skills) {
     if (!externalSkills.has(skill.name)) {
       continue;
+    }
+    const entry = externalSkillEntries.get(skill.name);
+    if (!entry?.reviewed) {
+      findings.push(
+        finding(
+          "warning",
+          "external_skill_unreviewed",
+          `External installed skill \`${skill.name}\` has not been marked reviewed. Run \`threadroot skills inspect .threadroot/skills/${skill.name}\`, then \`threadroot skills trust ${skill.name}\` if acceptable.`,
+          skill.sourcePath,
+        ),
+      );
+    }
+    if (entry?.risk && entry.risk !== "low") {
+      findings.push(
+        finding(
+          "warning",
+          "external_skill_risk",
+          `External installed skill \`${skill.name}\` was scanned as ${entry.risk} risk at install time.`,
+          skill.sourcePath,
+        ),
+      );
+    }
+    if (entry?.externalScan?.status === "warn" || entry?.externalScan?.status === "failed") {
+      findings.push(
+        finding(
+          entry.externalScan.status === "failed" ? "error" : "warning",
+          "external_skill_snyk_scan",
+          `External installed skill \`${skill.name}\` has ${entry.externalScan.provider} status ${entry.externalScan.status}: ${entry.externalScan.reason ?? "review scan summary"}.`,
+          skill.sourcePath,
+        ),
+      );
     }
     if (skill.frontmatter.allowedTools) {
       findings.push(
@@ -268,6 +305,18 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
           "external_skill_scripts",
           `External installed skill \`${skill.name}\` includes scripts; inspect them before trusting.`,
           scriptsDir,
+        ),
+      );
+    }
+    const scanPath = path.basename(skill.sourcePath) === "SKILL.md" ? path.dirname(skill.sourcePath) : skill.sourcePath;
+    const scan = await scanSkillPath(scanPath);
+    for (const scanFinding of scan.findings.filter((entry) => entry.risk !== "low").slice(0, 8)) {
+      findings.push(
+        finding(
+          "warning",
+          "external_skill_scan",
+          `External installed skill \`${skill.name}\`: ${scanFinding.code} - ${scanFinding.message}`,
+          scanFinding.path,
         ),
       );
     }

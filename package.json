@@ -1,7 +1,7 @@
 {
   "name": "threadroot",
-  "version": "0.1.5",
-  "description": "Git for your AI agent harness: keep skills, tools, memory, rules, and agent setup in one local-first .threadroot directory.",
+  "version": "0.1.6",
+  "description": "Adaptive AI agent capability harness: skills, tools, connections, memory, and MCP in one local-first .threadroot directory.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -40,7 +40,6 @@
   "files": [
     "dist",
     "skills",
-    "packs",
     "CHANGELOG.md",
     "INTEGRATION.md",
     "SECURITY.md"

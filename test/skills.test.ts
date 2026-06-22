@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -41,8 +41,8 @@ describe("skills commands", () => {
 
     const listLines = captureLog();
     await runSkillsList(repo);
-    expect(listLines.join("\n")).toContain("system-design");
-    expect(listLines.join("\n")).toContain("build-skill");
+    expect(listLines.join("\n")).toContain("find-skills");
+    expect(listLines.join("\n")).toContain("create-skill");
 
     vi.restoreAllMocks();
     const validateLines = captureLog();
@@ -88,36 +88,17 @@ describe("skills commands", () => {
 
   it("inspects a skill path", async () => {
     const lines = captureLog();
-    await runSkillsInspect(process.cwd(), "skills/system-design");
+    await runSkillsInspect(process.cwd(), "skills/find-skills");
     const output = lines.join("\n");
 
-    expect(output).toContain("system-design");
-    expect(output).toContain("architecture-checklist.md");
-    expect(output).toContain("triggers.json");
+    expect(output).toContain("find-skills");
+    expect(output).toContain("specialized Agent Skill");
+    expect(output).toContain("scan risk:");
   });
 
-  it("validates the repo-level curated skill pack and catalog paths", async () => {
+  it("validates the repo-level seed skills", async () => {
     const skillsPath = path.join(process.cwd(), "skills");
     const report = await validateSkillPath(skillsPath);
     expect(report).toMatchObject({ ok: true, findings: [] });
-
-    const catalog = JSON.parse(await readFile(path.join(skillsPath, "catalog.json"), "utf8")) as {
-      skills: Array<{ name: string; path: string }>;
-    };
-    expect(catalog.skills.map((skill) => skill.name).sort()).toEqual([
-      "add-test",
-      "build-skill",
-      "build-tool",
-      "code-review",
-      "conventional-commits",
-      "debug-failure",
-      "security-review",
-      "system-design",
-      "write-docs",
-    ]);
-    for (const skill of catalog.skills) {
-      await expect(stat(path.join(process.cwd(), skill.path, "SKILL.md"))).resolves.toBeDefined();
-      await expect(stat(path.join(process.cwd(), skill.path, "evals/triggers.json"))).resolves.toBeDefined();
-    }
   });
 });

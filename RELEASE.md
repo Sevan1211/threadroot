@@ -4,7 +4,6 @@ Threadroot publishes as a local-first CLI package. The npm package intentionally
 
 - `dist/`
 - `skills/`
-- `packs/`
 - package metadata and README/license files
 
 ## Before publishing

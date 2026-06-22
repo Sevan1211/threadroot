@@ -8,11 +8,11 @@ export type InstallCliOptions = {
   user?: boolean;
 };
 
-const KINDS = new Set(["skill", "tool", "rule"]);
+const KINDS = new Set(["skill", "tool", "rule", "connection"]);
 
 export async function runInstall(repoRoot: string, source: string, options: InstallCliOptions): Promise<void> {
   if (options.kind && !KINDS.has(options.kind)) {
-    console.error(`Invalid --kind \`${options.kind}\` (expected skill, tool, or rule).`);
+    console.error(`Invalid --kind \`${options.kind}\` (expected skill, tool, rule, or connection).`);
     process.exitCode = 1;
     return;
   }
@@ -21,7 +21,7 @@ export async function runInstall(repoRoot: string, source: string, options: Inst
 
   try {
     const installed = await installObject(repoRoot, source, {
-      kind: options.kind as "skill" | "tool" | "rule" | undefined,
+      kind: options.kind as "skill" | "tool" | "rule" | "connection" | undefined,
       objectPath: options.path,
       scope,
     });

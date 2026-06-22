@@ -29,7 +29,8 @@ export async function runContext(repoRoot: string, task: string, options: Contex
   if (context.skills.length > 0) {
     console.log("\nskills:");
     for (const skill of context.skills) {
-      console.log(`- ${skill.name} - ${skill.when}`);
+      const trust = skill.reviewed ? "reviewed" : "unreviewed";
+      console.log(`- ${skill.name} (${skill.risk}, ${trust}) - ${skill.when} [${skill.sourcePath}]`);
     }
   }
 
@@ -47,6 +48,13 @@ export async function runContext(repoRoot: string, task: string, options: Contex
     }
   }
 
+  if (context.connections.length > 0) {
+    console.log("\nconnections:");
+    for (const connection of context.connections) {
+      console.log(`- ${connection.name} (${connection.provider}, ${connection.risk}) - ${connection.description}`);
+    }
+  }
+
   if (context.memory.length > 0) {
     console.log("\nmemory:");
     for (const entry of context.memory) {
@@ -58,6 +66,7 @@ export async function runContext(repoRoot: string, task: string, options: Contex
     context.skills.length === 0 &&
     context.rules.length === 0 &&
     context.tools.length === 0 &&
+    context.connections.length === 0 &&
     context.memory.length === 0
   ) {
     console.log("\nNo matching harness context for this task yet.");

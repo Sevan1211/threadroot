@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { exposeProject } from "../src/core/expose.js";
 import { resolveHarness } from "../src/core/harness/index.js";
+import { projectLockPath } from "../src/core/harness/paths.js";
 import { InitError, initHarness } from "../src/core/init/index.js";
 import { importVendorFiles } from "../src/core/init/import.js";
+import { readLockFile } from "../src/core/install/lock.js";
 
 let repo: string;
 
@@ -34,18 +36,33 @@ describe("initHarness", () => {
     expect(report.name).toBe("demo-app");
     expect(report.profile).toBe("node-cli");
     expect(report.adapters).toEqual([]);
-    expect(report.skills.length).toBe(9);
+    expect(report.skills.length).toBe(4);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
 
     const harness = await resolveHarness(repo);
-    expect(harness.skills.map((s) => s.name)).toContain("code-review");
-    expect(harness.skills.map((s) => s.name)).toContain("system-design");
-    expect(harness.skills.map((s) => s.name)).toContain("build-skill");
-    expect(harness.skills.map((s) => s.name)).toContain("build-tool");
-    expect(await readFile(path.join(repo, ".threadroot/skills/system-design/evals/triggers.json"), "utf8"))
-      .toContain("shouldTrigger");
+    expect(harness.skills.map((s) => s.name).sort()).toEqual([
+      "create-connection",
+      "create-skill",
+      "create-tool",
+      "find-skills",
+    ]);
+    expect(harness.manifest.automation.mode).toBe("ask");
     expect(harness.manifest.tools.allow).toEqual(expect.arrayContaining(["test", "build"]));
     expect(harness.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["test", "build"]));
+
+    const lock = await readLockFile(projectLockPath(repo));
+    expect(lock.objects.filter((entry) => entry.kind === "skill").map((entry) => entry.name).sort()).toEqual([
+      "create-connection",
+      "create-skill",
+      "create-tool",
+      "find-skills",
+    ]);
+    expect(lock.objects.find((entry) => entry.name === "find-skills")).toMatchObject({
+      source: "threadroot:seed/find-skills",
+      upstreamSource: "https://www.skills.sh/vercel-labs/skills/find-skills",
+      adaptedBy: "threadroot",
+      reviewed: true,
+    });
 
     await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(report.compiled).toEqual([]);

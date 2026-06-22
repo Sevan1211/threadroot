@@ -17,8 +17,9 @@ export async function runStatus(repoRoot: string, options: StatusCliOptions = {}
 
   console.log(`harness: ${status.manifest.name} (${status.manifest.profile})`);
   console.log(`adapters: ${status.manifest.adapters.length > 0 ? status.manifest.adapters.join(", ") : "none (local-only)"}`);
+  console.log(`automation: ${status.manifest.automation}`);
   console.log(
-    `objects: ${status.counts.skills} skills, ${status.counts.rules} rules, ${status.counts.tools} tools, ${status.counts.memory} memory`,
+    `objects: ${status.counts.skills} skills, ${status.counts.rules} rules, ${status.counts.tools} tools, ${status.counts.connections} connections, ${status.counts.memory} memory`,
   );
 
   const changed = status.drift.filter((entry) => entry.status !== "unchanged");

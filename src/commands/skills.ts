@@ -1,5 +1,8 @@
 import { HarnessError, resolveHarness } from "../core/harness/index.js";
 import { toRepoPath } from "../core/paths.js";
+import { findSkills } from "../core/skills-find.js";
+import { addSkill, exposeSkills, trustSkill, type SkillAddOptions } from "../core/skills-install.js";
+import { scanSkillPath } from "../core/skills-scan.js";
 import { inspectSkillPath, validateSkillPath, validateSkills } from "../core/skills.js";
 import { printJson, type JsonCliOptions } from "./json.js";
 
@@ -9,6 +12,72 @@ export type SkillsValidateOptions = JsonCliOptions & {
 
 export type SkillsListOptions = JsonCliOptions;
 export type SkillsInspectOptions = JsonCliOptions;
+export type SkillsScanOptions = JsonCliOptions;
+export type SkillsFindOptions = JsonCliOptions;
+export type SkillsAddOptions = JsonCliOptions & {
+  user?: boolean;
+  path?: string;
+  skill?: string;
+  all?: boolean;
+  dryRun?: boolean;
+  force?: boolean;
+  strict?: boolean;
+  expose?: string;
+  snyk?: boolean;
+  requireSnyk?: boolean;
+};
+export type SkillsTrustOptions = JsonCliOptions & {
+  user?: boolean;
+};
+export type SkillsExposeOptions = JsonCliOptions & {
+  agent?: string;
+  dryRun?: boolean;
+  force?: boolean;
+  undo?: boolean;
+};
+
+function printScan(report: Awaited<ReturnType<typeof scanSkillPath>>): void {
+  console.log(`scan risk: ${report.risk}`);
+  if (report.findings.length === 0) {
+    console.log("scan findings: none");
+    return;
+  }
+  for (const finding of report.findings) {
+    const suffix = finding.path ? ` (${finding.path})` : "";
+    console.log(`- ${finding.risk} ${finding.code}: ${finding.message}${suffix}`);
+  }
+}
+
+function formatExternalScan(scan: { provider: string; status: string; reason?: string; summary?: string } | undefined): string {
+  if (!scan) {
+    return "not run";
+  }
+  const detail = scan.reason ?? scan.summary?.split("\n")[0];
+  return detail ? `${scan.provider}: ${scan.status} - ${detail}` : `${scan.provider}: ${scan.status}`;
+}
+
+export async function runSkillsFind(_repoRoot: string, query: string, options: SkillsFindOptions = {}): Promise<void> {
+  const report = await findSkills(query);
+  if (options.json) {
+    printJson(report);
+    return;
+  }
+
+  console.log(`skills search: ${report.query}`);
+  console.log(`status: ${report.status}`);
+  console.log(`search: ${report.searchUrl}`);
+  for (const message of report.messages) {
+    console.log(`- ${message}`);
+  }
+  console.log("candidates:");
+  for (const candidate of report.candidates) {
+    console.log(`- ${candidate.name}`);
+    if (candidate.summary) {
+      console.log(`  ${candidate.summary}`);
+    }
+    console.log(`  install: ${candidate.installCommand}`);
+  }
+}
 
 export async function runSkillsList(repoRoot: string, options: SkillsListOptions = {}): Promise<void> {
   try {
@@ -78,8 +147,9 @@ export async function runSkillsInspect(
   options: SkillsInspectOptions = {},
 ): Promise<void> {
   const inspection = await inspectSkillPath(toRepoPath(repoRoot, targetPath));
+  const scan = await scanSkillPath(toRepoPath(repoRoot, targetPath));
   if (options.json) {
-    printJson(inspection);
+    printJson({ ...inspection, scan });
     return;
   }
 
@@ -93,5 +163,159 @@ export async function runSkillsInspect(
   if (inspection.allowedTools) {
     const tools = Array.isArray(inspection.allowedTools) ? inspection.allowedTools.join(", ") : inspection.allowedTools;
     console.log(`allowed-tools: ${tools}`);
+  }
+  printScan(scan);
+}
+
+export async function runSkillsScan(
+  repoRoot: string,
+  targetPath: string,
+  options: SkillsScanOptions = {},
+): Promise<void> {
+  const report = await scanSkillPath(toRepoPath(repoRoot, targetPath));
+  if (options.json) {
+    printJson(report);
+    if (report.blocked) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+  printScan(report);
+  if (report.blocked) {
+    process.exitCode = 1;
+  }
+}
+
+export async function runSkillsAdd(repoRoot: string, source: string, options: SkillsAddOptions = {}): Promise<void> {
+  try {
+    const addOptions: SkillAddOptions = {
+      scope: options.user ? "user" : "project",
+      objectPath: options.path,
+      skillName: options.skill,
+      all: options.all,
+      dryRun: options.dryRun,
+      force: options.force,
+      strict: options.strict,
+      expose: options.expose,
+      snyk: options.snyk,
+      requireSnyk: options.requireSnyk,
+    };
+    const result = await addSkill(repoRoot, source, addOptions);
+    if (options.json) {
+      printJson(result);
+      if (result.needsSelection) {
+        process.exitCode = 1;
+      }
+      return;
+    }
+
+    if (result.needsSelection) {
+      console.log(`Multiple skills found in ${source}. Choose one with --skill/--path, or re-run with --all:`);
+      for (const candidate of result.candidates) {
+        console.log(`- ${candidate.name} (${candidate.scan.risk}) at ${candidate.objectPath}`);
+      }
+      console.log("selection commands:");
+      for (const command of result.selectionCommands) {
+        console.log(`- ${command}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
+    if (options.dryRun) {
+      console.log(`Threadroot skills add: dry run for ${source}`);
+      for (const candidate of result.candidates) {
+        console.log(`- would install ${candidate.name} (${candidate.scan.risk}) from ${candidate.objectPath}`);
+        console.log(`  external scan: ${formatExternalScan(candidate.externalScan)}`);
+      }
+      console.log("Threadroot detects risk signals; it does not certify third-party skills as safe.");
+      return;
+    }
+
+    if (result.harnessCreated) {
+      console.log("created minimal local-only .threadroot/");
+    }
+    for (const installed of result.installed) {
+      console.log(`installed skill \`${installed.name}\` (${result.scope})`);
+      console.log(`  path: ${installed.path}`);
+      console.log(`  risk: ${installed.scan.risk}`);
+      if (installed.entry.resolved) {
+        console.log(`  commit: ${installed.entry.resolved}`);
+      }
+      if (installed.entry.integrity) {
+        console.log(`  integrity: ${installed.entry.integrity}`);
+      }
+      if (installed.entry.registryId) {
+        console.log(`  registry: ${installed.entry.registryId}`);
+      }
+      if (installed.entry.auditUrl) {
+        console.log(`  audits: ${installed.entry.auditUrl}`);
+      }
+      console.log(`  external scan: ${formatExternalScan(installed.externalScan)}`);
+      for (const finding of installed.scan.findings.filter((finding) => finding.risk !== "low").slice(0, 8)) {
+        console.log(`  warning: ${finding.code} - ${finding.message}`);
+      }
+      console.log(`  inspect: threadroot skills inspect .threadroot/skills/${installed.name}`);
+    }
+    if (result.exposure) {
+      console.log("provider exposure:");
+      for (const entry of result.exposure.entries) {
+        const suffix = entry.message ? ` - ${entry.message}` : "";
+        console.log(`- ${entry.label}: ${entry.status} ${entry.path}${suffix}`);
+      }
+    }
+    console.log("Threadroot detects risk signals; it does not certify third-party skills as safe.");
+  } catch (error) {
+    if (options.json) {
+      printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    } else {
+      console.error(`Skill add failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    process.exitCode = 1;
+  }
+}
+
+export async function runSkillsTrust(repoRoot: string, name: string, options: SkillsTrustOptions = {}): Promise<void> {
+  try {
+    const entry = await trustSkill(repoRoot, name, { scope: options.user ? "user" : "project" });
+    if (options.json) {
+      printJson({ ok: true, entry });
+      return;
+    }
+    console.log(`trusted skill \`${entry.name}\``);
+  } catch (error) {
+    if (options.json) {
+      printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    } else {
+      console.error(`Skill trust failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    process.exitCode = 1;
+  }
+}
+
+export async function runSkillsExpose(repoRoot: string, skill: string, options: SkillsExposeOptions = {}): Promise<void> {
+  try {
+    const result = await exposeSkills(repoRoot, {
+      skill,
+      agents: options.agent,
+      dryRun: options.dryRun,
+      force: options.force,
+      undo: options.undo,
+    });
+    if (options.json) {
+      printJson(result);
+      return;
+    }
+    for (const entry of result.entries) {
+      const suffix = entry.message ? ` - ${entry.message}` : "";
+      console.log(`${entry.label}: ${entry.status} ${entry.path}${suffix}`);
+    }
+  } catch (error) {
+    if (options.json) {
+      printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
+    } else {
+      console.error(`Skill expose failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    process.exitCode = 1;
   }
 }

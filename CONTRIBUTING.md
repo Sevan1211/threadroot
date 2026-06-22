@@ -26,16 +26,15 @@ pnpm release:check
 - Keep generated agent context compact and inspectable.
 - Avoid adding cloud, account, or hosted registry requirements to v1 behavior.
 
-## Skills and packs
+## Skills
 
-Validate curated skills and packs after changes:
+Validate seed skills after changes:
 
 ```bash
 threadroot skills validate --path skills
-threadroot packs validate testing
 ```
 
-Good skills use compact `SKILL.md` instructions, linked references, and `evals/triggers.json` examples. Good tools are small wrappers around commands the repo already trusts.
+Good skills use compact `SKILL.md` instructions, linked references only when needed, and clear trigger descriptions. Good tools are small wrappers around commands the repo already trusts.
 
 ## Release changes
 

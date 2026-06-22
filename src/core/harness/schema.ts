@@ -21,6 +21,19 @@ export type RiskLevel = z.infer<typeof riskLevelSchema>;
 export const adapterIdSchema = z.enum(["agents", "claude", "copilot", "cursor"]);
 export type AdapterId = z.infer<typeof adapterIdSchema>;
 
+/** Project-level automation mode for agent-created capabilities. */
+export const automationModeSchema = z.enum(["ask", "auto-safe", "off"]);
+export type AutomationMode = z.infer<typeof automationModeSchema>;
+
+export const automationPolicySchema = z
+  .object({
+    mode: automationModeSchema.default("ask"),
+    approvedAt: z.string().optional(),
+    approvedBy: z.string().optional(),
+  })
+  .default({ mode: "ask" });
+export type AutomationPolicy = z.infer<typeof automationPolicySchema>;
+
 /** Structured memory types (spec §10). */
 export const memoryTypeSchema = z.enum(["project", "repo-map", "current-focus", "handoff", "pitfalls"]);
 export type MemoryType = z.infer<typeof memoryTypeSchema>;
@@ -55,6 +68,7 @@ export const harnessManifestSchema = z.object({
       allow: z.array(z.string()).default([]),
     })
     .default({ allow: [] }),
+  automation: automationPolicySchema,
 });
 export type HarnessManifest = z.infer<typeof harnessManifestSchema>;
 

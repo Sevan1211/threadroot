@@ -47,7 +47,9 @@ describe("bootstrapProject", () => {
     expect(report.init?.name).toBe("demo");
     expect(report.status?.exists).toBe(true);
     expect(report.doctor?.ok).toBe(true);
-    expect(report.context?.skills.map((skill) => skill.name)).toContain("add-test");
+    expect(report.context?.skills.map((skill) => skill.name)).toEqual(
+      expect.arrayContaining(["find-skills", "create-skill", "create-tool", "create-connection"]),
+    );
 
     const manifest = await readFile(path.join(repo, ".threadroot/harness.yaml"), "utf8");
     expect(manifest).toContain("adapters: []");
@@ -58,7 +60,7 @@ describe("bootstrapProject", () => {
   });
 
   it("returns starter skills when the bootstrap task has no direct skill match", async () => {
-    const report = await bootstrapProject(repo, { home, yes: true, agents: "codex" });
+    const report = await bootstrapProject(repo, { home, yes: true, agents: "codex", task: "zzzz-no-match" });
     expect(report.context?.skills.length).toBeGreaterThan(0);
     expect(report.context?.skills.every((skill) => skill.score === 0)).toBe(true);
   });
@@ -69,20 +71,6 @@ describe("bootstrapProject", () => {
     expect(report.expose?.entries[0]?.path).toBe(path.join(".agents", "skills", "threadroot", "SKILL.md"));
     const skill = await readFile(path.join(repo, ".agents/skills/threadroot/SKILL.md"), "utf8");
     expect(skill).toContain("Provider target: Codex.");
-  });
-
-  it("installs requested capability packs during bootstrap", async () => {
-    const report = await bootstrapProject(repo, {
-      home,
-      yes: true,
-      agents: "codex",
-      packs: "testing",
-      task: "write tests",
-    });
-
-    expect(report.packs?.map((pack) => pack.name)).toEqual(["testing"]);
-    expect(report.context?.skills.map((skill) => skill.name)).toContain("add-test");
-    expect(await readFile(path.join(repo, ".threadroot/skills/add-test/SKILL.md"), "utf8")).toContain("Add Test");
   });
 
   it("preserves an existing harness", async () => {
@@ -104,6 +92,6 @@ describe("startSession", () => {
 
     expect(report.status.exists).toBe(true);
     expect(report.doctor?.ok).toBe(true);
-    expect(report.context?.skills.map((skill) => skill.name)).toContain("add-test");
+    expect(report.context?.skills.map((skill) => skill.name)).toContain("find-skills");
   });
 });

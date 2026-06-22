@@ -1,7 +1,0 @@
-name: code-review
-version: 1
-description: Code review and commit hygiene skills for agent-assisted development.
-skills:
-  - skills/code-review
-  - skills/security-review
-  - skills/conventional-commits

@@ -29,8 +29,9 @@ function printStatus(status: HarnessStatus | undefined): void {
   }
   console.log(`harness: ${status.manifest.name} (${status.manifest.profile})`);
   console.log(`adapters: ${status.manifest.adapters.length > 0 ? status.manifest.adapters.join(", ") : "none (local-only)"}`);
+  console.log(`automation: ${status.manifest.automation}`);
   console.log(
-    `objects: ${status.counts.skills} skills, ${status.counts.rules} rules, ${status.counts.tools} tools, ${status.counts.memory} memory`,
+    `objects: ${status.counts.skills} skills, ${status.counts.rules} rules, ${status.counts.tools} tools, ${status.counts.connections} connections, ${status.counts.memory} memory`,
   );
 }
 
@@ -44,7 +45,12 @@ function printContext(context: HarnessContext | undefined): void {
     const skillLabel = context.skills.some((skill) => skill.score > 0) ? "relevant skills:" : "starter skills:";
     console.log(skillLabel);
     for (const skill of context.skills.slice(0, 8)) {
-      console.log(`- ${skill.name} - ${skill.when}`);
+      const trust = skill.reviewed ? "reviewed" : "unreviewed";
+      const external =
+        skill.externalScan && skill.externalScan.status !== "skipped"
+          ? `, ${skill.externalScan.provider}:${skill.externalScan.status}`
+          : "";
+      console.log(`- ${skill.name} (${skill.risk}, ${trust}${external}) - ${skill.when} [${skill.sourcePath}]`);
     }
   } else {
     console.log("relevant skills: none matched; run `threadroot skills list` to inspect all skills.");
@@ -54,6 +60,13 @@ function printContext(context: HarnessContext | undefined): void {
     console.log("available tools:");
     for (const tool of context.tools.slice(0, 8)) {
       console.log(`- ${tool.name} (${tool.risk}) - ${tool.description}`);
+    }
+  }
+
+  if (context.connections.length > 0) {
+    console.log("available connections:");
+    for (const connection of context.connections.slice(0, 8)) {
+      console.log(`- ${connection.name} (${connection.provider}, ${connection.risk}) - ${connection.description}`);
     }
   }
 
@@ -67,8 +80,11 @@ function printCommandMap(): void {
   console.log('- `threadroot start "<task>"` - begin a focused agent session');
   console.log('- `threadroot context "<task>"` - get relevant skills, tools, rules, and memory');
   console.log("- `threadroot doctor` - check harness health and trust issues");
-  console.log("- `threadroot skills list|inspect|validate` - inspect skill capabilities");
-  console.log("- `threadroot tools list|check` and `threadroot run <tool>` - use explicit local tools");
+  console.log('- `threadroot skills find "<query>"` - discover task-specific skills without leaving `.threadroot/`');
+  console.log("- `threadroot skills add|list|inspect|scan|trust|expose` - install and inspect skill capabilities");
+  console.log("- `threadroot tools detect|create|list|check` and `threadroot run <tool>` - use explicit local tools");
+  console.log("- `threadroot connections add|list|check` - wrap locally authenticated CLIs without storing secrets");
+  console.log("- `threadroot automation status|approve|reset` - control safe agent-created capabilities for this project");
   console.log("- `threadroot remember \"<note>\"` - save durable handoff/project memory");
 }
 
@@ -108,10 +124,6 @@ export function printBootstrapReport(report: BootstrapReport): void {
       const suffix = entry.message ? ` - ${entry.message}` : "";
       console.log(`- ${entry.label}: ${entry.status} ${entry.path}${suffix}`);
     }
-  }
-
-  if (report.packs && report.packs.length > 0) {
-    console.log(`packs: ${report.packs.map((pack) => pack.name).join(", ")}`);
   }
 
   printStatus(report.status);

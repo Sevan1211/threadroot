@@ -8,7 +8,6 @@ import { assembleContext, type HarnessContext } from "./harness/index.js";
 import { initHarness, type InitReport } from "./init/index.js";
 import { type McpServerEntry } from "./mcp-config.js";
 import { checkCodexMcp, type McpCheckReport } from "./mcp-check.js";
-import { installPack, type PackInspection } from "./packs/index.js";
 import { setupGlobal, type GlobalSetupResult, type SetupMode } from "./setup.js";
 import { harnessStatus, type HarnessStatus } from "./status.js";
 
@@ -19,7 +18,6 @@ export type BootstrapOptions = {
   task?: string;
   mcp?: boolean;
   expose?: string;
-  packs?: string;
   noGlobal?: boolean;
   noInit?: boolean;
   import?: boolean;
@@ -35,7 +33,6 @@ export type BootstrapReport = {
   setup?: GlobalSetupResult;
   init?: InitReport;
   expose?: ExposeResult;
-  packs?: PackInspection[];
   status?: HarnessStatus;
   doctor?: DoctorReport;
   context?: HarnessContext;
@@ -78,13 +75,6 @@ function modeFor(options: BootstrapOptions): SetupMode {
   return options.yes && !options.dryRun ? "write" : "dry-run";
 }
 
-function parseListOption(value: string | undefined): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 export async function bootstrapProject(repoRoot: string, options: BootstrapOptions = {}): Promise<BootstrapReport> {
   const task = options.task?.trim() || DEFAULT_TASK;
   const mode = modeFor(options);
@@ -94,7 +84,6 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
   let setup: GlobalSetupResult | undefined;
   let init: InitReport | undefined;
   let exposed: ExposeResult | undefined;
-  let packs: PackInspection[] | undefined;
 
   if (!options.noGlobal) {
     setup = await setupGlobal({
@@ -133,20 +122,6 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
     });
   }
 
-  const packNames = parseListOption(options.packs);
-  if (packNames.length > 0) {
-    if (!hasHarnessAfterInit) {
-      notes.push("Skipped pack installation because no harness exists yet.");
-    } else if (write) {
-      packs = [];
-      for (const packName of packNames) {
-        packs.push(await installPack(repoRoot, packName));
-      }
-    } else {
-      notes.push(`Would install pack(s): ${packNames.join(", ")}.`);
-    }
-  }
-
   let status: HarnessStatus | undefined;
   let doctorReport: DoctorReport | undefined;
   let context: HarnessContext | undefined;
@@ -175,7 +150,6 @@ export async function bootstrapProject(repoRoot: string, options: BootstrapOptio
     setup,
     init,
     expose: exposed,
-    packs,
     status,
     doctor: doctorReport,
     context,

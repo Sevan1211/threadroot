@@ -4,11 +4,34 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.6 - Adaptive capability harness
+
+### Added
+
+- Default init now seeds exactly four adaptive Threadroot skills: `find-skills`, `create-skill`, `create-tool`, and `create-connection`.
+- `threadroot skills find "<query>"` to discover task-specific Agent Skills while routing installs back through Threadroot.
+- `threadroot skills add <source>` support for `--skill <name>`, GitHub-backed skills.sh page URLs, and `skills:owner/repo/skill` shorthand.
+- Optional Snyk Agent Scan integration for installed external skills. Threadroot runs its local static scanner every time, then attempts Snyk when `SNYK_TOKEN` is set and `snyk-agent-scan` or `uvx` is available.
+- `--no-snyk` and `--require-snyk` flags for skipping advisory external scans or enforcing them in stricter pipelines.
+- Lockfile, context, MCP, and doctor surfaces now preserve external scan/provenance metadata for installed skills.
+- Project-local automation policy with `threadroot automation status|approve|reset`.
+- MCP `skills_find` and `connections_create` tools.
+
+### Changed
+
+- Threadroot is now an adaptive capability harness, not a bundled skill library.
+- Init records seed skill provenance and integrity in `.threadroot/lock.json`.
+- Multi-skill install guidance now prefers `--skill <name>` and falls back to `--path` only for ambiguous duplicate names.
+- MCP-created tools/connections are gated by project automation policy and limited to low-risk capability manifests.
+
+### Removed
+
+- Public bundled-capability commands and bootstrap options.
+
 ## 0.1.5 - Website integration contracts
 
 ### Added
 
-- `bootstrap --packs <list>` to install capability packs during first-run setup.
 - Machine-readable `--json` output for `bootstrap`, `start`, `status`, `context`, `doctor`, `mcp check`, and `mcp setup`.
 - Connection authoring flags for `--allow` and `--deny` command fragments.
 - `INTEGRATION.md` as the website/cloud contract for prompt generation, JSON CLI usage, and future auth/sync shape.
@@ -18,7 +41,6 @@ Threadroot follows semantic versioning after the first public release. While `0.
 - MCP tool calls now return structured content alongside text content.
 - MCP `tools_run` no longer accepts model-supplied confirmation for risky tools; agents must ask the user to approve via the CLI.
 - Connection `allow` and `deny` rules are enforced when connection-backed shell tools run.
-- Pack installs now write object-level provenance and sha256 integrity entries to `.threadroot/lock.json`.
 - Release guidance now points toward npm provenance and signature verification.
 
 ## 0.1.4 - Stable npx MCP config
@@ -75,9 +97,9 @@ Threadroot follows semantic versioning after the first public release. While `0.
 - Local-first Threadroot CLI with `threadroot` and `tr` binaries.
 - Repo harness initialization through `.threadroot/harness.yaml`.
 - Adapter compilation for AGENTS.md, Claude, Copilot, and Cursor.
-- Durable memory, rules, skills, tools, connections, and capability packs.
+- Durable memory, rules, skills, tools, and connections.
 - MCP server exposing context, skills, tools, connections, memory, status, and doctor tools.
-- Curated starter skills and v1 capability packs.
+- Curated starter skills.
 - Tool risk, confirmation, healthcheck, and connection-aware execution.
 - `threadroot doctor` for harness health, drift, trust, MCP hints, and connection checks.
 - npm package release checks and packed-package smoke test.

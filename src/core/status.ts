@@ -10,8 +10,9 @@ export type HarnessStatus =
         profile: string;
         adapters: string[];
         toolsAllow: string[];
+        automation: string;
       };
-      counts: { skills: number; rules: number; tools: number; memory: number };
+      counts: { skills: number; rules: number; tools: number; connections: number; memory: number };
       drift: DriftEntry[];
     };
 
@@ -45,11 +46,13 @@ export async function harnessStatus(repoRoot: string, options: StatusOptions = {
       profile: harness.manifest.profile,
       adapters: harness.manifest.adapters,
       toolsAllow: harness.manifest.tools.allow,
+      automation: harness.manifest.automation.mode,
     },
     counts: {
       skills: harness.skills.length,
       rules: harness.rules.length,
       tools: harness.tools.length,
+      connections: harness.connections.length,
       memory: harness.memory.length,
     },
     drift,

@@ -1,4 +1,10 @@
 import { Command } from "commander";
+import {
+  runAutomationApprove,
+  runAutomationReset,
+  runAutomationStatus,
+  type AutomationCliOptions,
+} from "./commands/automation.js";
 import { runBootstrap, type BootstrapCliOptions } from "./commands/bootstrap.js";
 import { runCompileCommand, type CompileCliOptions } from "./commands/compile.js";
 import { runContext } from "./commands/context.js";
@@ -9,11 +15,24 @@ import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runInstall, type InstallCliOptions } from "./commands/install.js";
 import { runMcp, runMcpCheck, runMcpSetup, type McpCheckOptions, type McpSetupOptions } from "./commands/mcp.js";
 import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
-import { runSkillsInspect, runSkillsList, runSkillsValidate, type SkillsValidateOptions } from "./commands/skills.js";
+import {
+  runSkillsAdd,
+  runSkillsExpose,
+  runSkillsFind,
+  runSkillsInspect,
+  runSkillsList,
+  runSkillsScan,
+  runSkillsTrust,
+  runSkillsValidate,
+  type SkillsAddOptions,
+  type SkillsExposeOptions,
+  type SkillsFindOptions,
+  type SkillsTrustOptions,
+  type SkillsValidateOptions,
+} from "./commands/skills.js";
 import { runSetup, type SetupCliOptions } from "./commands/setup.js";
 import { runStart, type StartCliOptions } from "./commands/start.js";
 import { runStatus } from "./commands/status.js";
-import { runPacksInspect, runPacksInstall, runPacksList, runPacksValidate } from "./commands/packs.js";
 import {
   runToolRun,
   runToolsAdd,
@@ -37,7 +56,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Git for your AI agent harness: one command to bootstrap, one .threadroot source.")
+    .description("Adaptive AI agent capability harness: skills, tools, connections, memory, and MCP in .threadroot.")
     .version(THREADROOT_VERSION);
 
   program
@@ -49,7 +68,6 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--task <task>", "Task used for the initial context slice.")
     .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
     .option("--expose <list>", "Also write project provider skill shims: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
-    .option("--packs <list>", "Comma-separated capability packs to install, such as testing,typescript-node.")
     .option("--json", "Print machine-readable JSON.")
     .option("--no-global", "Skip one-time machine-level agent setup.")
     .option("--no-init", "Skip project harness initialization.")
@@ -123,7 +141,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .command("context")
     .argument("<task>", "Task to assemble a relevant harness slice for.")
-    .description("Assemble the task-relevant harness slice: skills, rules, tools, and memory.")
+    .description("Assemble the task-relevant harness slice: skills, rules, tools, connections, and memory.")
     .option("--json", "Print machine-readable JSON.")
     .action((task: string, options) => runContext(repoRoot, task, options));
 
@@ -240,32 +258,46 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Author a local CLI connection manifest.")
     .action((name: string, options: ConnectionAddOptions) => runConnectionsAdd(repoRoot, name, options));
 
-  const packs = program.command("packs").description("Inspect, validate, and install capability packs.");
-  packs
-    .command("list")
+  const automation = program.command("automation").description("Control project-local safe agent automation.");
+  automation
+    .command("status")
     .option("--json", "Print machine-readable JSON.")
-    .description("List built-in and repo-local packs.")
-    .action((options) => runPacksList(repoRoot, options));
-  packs
-    .command("inspect")
-    .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
+    .description("Show whether safe agent-created capabilities are approved for this project.")
+    .action((options: AutomationCliOptions) => runAutomationStatus(repoRoot, options));
+  automation
+    .command("approve")
     .option("--json", "Print machine-readable JSON.")
-    .description("Inspect a capability pack.")
-    .action((nameOrPath: string, options) => runPacksInspect(repoRoot, nameOrPath, options));
-  packs
-    .command("validate")
-    .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
+    .description("Approve low-risk agent-created skills, tools, and connections for this project.")
+    .action((options: AutomationCliOptions) => runAutomationApprove(repoRoot, options));
+  automation
+    .command("reset")
     .option("--json", "Print machine-readable JSON.")
-    .description("Validate a capability pack.")
-    .action((nameOrPath: string, options) => runPacksValidate(repoRoot, nameOrPath, options));
-  packs
-    .command("install")
-    .argument("<name-or-path>", "Built-in pack name or repo-relative pack path.")
-    .option("--json", "Print machine-readable JSON.")
-    .description("Install a capability pack into the project harness.")
-    .action((nameOrPath: string, options) => runPacksInstall(repoRoot, nameOrPath, options));
+    .description("Return project automation to ask-before-create mode.")
+    .action((options: AutomationCliOptions) => runAutomationReset(repoRoot, options));
 
   const skills = program.command("skills").description("Inspect and validate harness skills.");
+  skills
+    .command("find")
+    .argument("<query>", "Skill search query.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Find task-specific Agent Skills and return Threadroot install commands.")
+    .action((query: string, options: SkillsFindOptions) => runSkillsFind(repoRoot, query, options));
+  skills
+    .command("add")
+    .argument("<source>", "Skill source: owner/repo, skills:owner/repo/skill, skills.sh URL, GitHub URL, or local path.")
+    .option("--user", "Install into the user harness (~/.threadroot) instead of the project.")
+    .option("--path <path>", "Path to a skill inside the source repository.")
+    .option("--skill <name>", "Skill name/slug inside a multi-skill source.")
+    .option("--all", "Install every detected skill from a multi-skill source.")
+    .option("--dry-run", "Detect and scan skills without writing files.")
+    .option("--force", "Replace an existing installed skill.")
+    .option("--strict", "Fail when the static scan reports anything above low risk.")
+    .option("--no-snyk", "Skip optional Snyk Agent Scan integration.")
+    .option("--require-snyk", "Fail unless Snyk Agent Scan runs and passes.")
+    .option("--expose <agent>", "Also expose installed skill shims: universal, codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Install an external Agent Skill into `.threadroot/skills/` with scan and provenance.")
+    .action((source: string, options: SkillsAddOptions) => runSkillsAdd(repoRoot, source, options));
   skills
     .command("list")
     .option("--json", "Print machine-readable JSON.")
@@ -277,6 +309,29 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--json", "Print machine-readable JSON.")
     .description("Inspect a skill's metadata, references, scripts, assets, and eval files.")
     .action((targetPath: string, options) => runSkillsInspect(repoRoot, targetPath, options));
+  skills
+    .command("scan")
+    .argument("<path>", "Repo-relative skill file or skill directory.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run Threadroot's static risk scan for a skill.")
+    .action((targetPath: string, options) => runSkillsScan(repoRoot, targetPath, options));
+  skills
+    .command("trust")
+    .argument("<name>", "Installed skill name.")
+    .option("--user", "Mark the user-scope installed skill as reviewed.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Mark an installed external skill as reviewed after human inspection.")
+    .action((name: string, options: SkillsTrustOptions) => runSkillsTrust(repoRoot, name, options));
+  skills
+    .command("expose")
+    .argument("<name-or-all>", "Skill name, comma-separated names, or all.")
+    .option("--agent <agent>", "Provider target: universal, codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .option("--dry-run", "Show provider skill shims that would be written.")
+    .option("--force", "Replace existing unmanaged provider skill shims.")
+    .option("--undo", "Remove Threadroot-managed provider skill shims.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Write thin provider-native shims for installed Threadroot skills.")
+    .action((skill: string, options: SkillsExposeOptions) => runSkillsExpose(repoRoot, skill, options));
   skills
     .command("validate")
     .option("--path <path>", "Validate a repo-relative skill file, skill directory, or skill collection.")

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { approveAutomation } from "../src/core/automation.js";
 import { initHarness } from "../src/core/init/index.js";
 import { handleMessage } from "../src/mcp/server.js";
 
@@ -42,6 +43,7 @@ describe("mcp server handleMessage", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "context",
+        "skills_find",
         "skills_list",
         "skills_get",
         "tools_list",
@@ -51,6 +53,7 @@ describe("mcp server handleMessage", () => {
         "tools_detect",
         "connections_list",
         "connections_check",
+        "connections_create",
         "memory_read",
         "memory_append",
         "status",
@@ -108,6 +111,50 @@ describe("mcp server handleMessage", () => {
     expect(result.structuredContent).toMatchObject({ ok: false, blocked: "needs-confirmation" });
     expect(result.structuredContent.message).toContain("threadroot run danger --yes");
     expect(result.content[0]?.text).not.toContain("dangerous");
+  });
+
+  it("blocks MCP-created capabilities until project automation is approved", async () => {
+    const repo = await harnessRepo();
+    const blocked = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: {
+        name: "tools_create",
+        arguments: { name: "format", description: "Run formatter", run: "pnpm format", risk: "low" },
+      },
+    });
+    const blockedResult = blocked?.result as { structuredContent: { ok: boolean; blocked?: string } };
+    expect(blockedResult.structuredContent).toMatchObject({ ok: false, blocked: "automation_policy" });
+
+    await approveAutomation(repo);
+    const created = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {
+        name: "tools_create",
+        arguments: { name: "format", description: "Run formatter", run: "pnpm format", risk: "low" },
+      },
+    });
+    const createdResult = created?.result as { structuredContent: { tool: { name: string; confirm: boolean } } };
+    expect(createdResult.structuredContent.tool).toMatchObject({ name: "format", confirm: true });
+  });
+
+  it("blocks non-low-risk MCP connection creation", async () => {
+    const repo = await harnessRepo();
+    await approveAutomation(repo);
+    const response = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 8,
+      method: "tools/call",
+      params: {
+        name: "connections_create",
+        arguments: { name: "aws-dev", provider: "aws", command: "aws", risk: "medium" },
+      },
+    });
+    const result = response?.result as { structuredContent: { ok: boolean; blocked?: string } };
+    expect(result.structuredContent).toMatchObject({ ok: false, blocked: "risk_policy" });
   });
 
   it("errors on an unknown tool", async () => {

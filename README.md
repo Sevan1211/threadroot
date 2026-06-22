@@ -1,336 +1,213 @@
 # Threadroot
 
-Threadroot is **git for your AI agent harness**: you author skills, rules, tools,
-memory, connections, and agent setup once in a canonical `.threadroot/` directory.
-Provider-specific files are opt-in, thin exposure shims.
+Adaptive AI agent capability harness for local development.
 
-It is local-first: a `tr` CLI for humans and CI, plus a local MCP server that exposes the
-same harness to coding agents. V1 does not require a cloud account, API key, or hosted
-service.
-
-## Install
-
-Run Threadroot without adding it to your project:
-
-```bash
-npx threadroot bootstrap --yes
-# or
-pnpm dlx threadroot bootstrap --yes
-# or
-npm exec --package=threadroot -- threadroot bootstrap --yes
-```
-
-After initialization:
-
-```bash
-threadroot start "write tests"
-```
-
-For local development on Threadroot itself:
-
-```bash
-pnpm install
-pnpm build
-node dist/index.js --help
-```
-
-## Quick start
-
-```bash
-tr bootstrap --yes      # one-time machine setup + local-only .threadroot/
-tr bootstrap --yes --mcp # also configure and verify global Codex MCP
-tr bootstrap --yes --packs testing,typescript-node
-tr start "write tests"  # doctor, status, relevant context, and command map
-tr mcp check            # verify Codex MCP config and server handshake
-tr expose codex         # optional: write a thin project skill shim for Codex
-```
-
-`threadroot` is the full name; `tr` is the short alias.
-
-## CLI surface
-
-```bash
-tr bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose <list>] [--packs <list>] [--json]
-tr start ["<task>"] [--json]
-tr setup --global [--agent <list>] [--dry-run] [--check] [--undo] [--mcp]
-tr init [--force] [--no-import] [--profile <p>] [--adapters <list>] [--expose <list>]
-tr expose [agent|all] [--dry-run] [--check] [--undo] [--force]
-tr status [--json]
-tr diff
-tr doctor [--json]
-tr compile [--adapter <agents|claude|copilot|cursor>]
-tr context "<task>" [--json]       # assemble the task-relevant harness slice
-tr run <tool> [--input k=v ...] [-y] [--json]
-tr install <source> [--kind skill|tool|rule|connection] [--path <p>] [--user]
-tr remember "<note>" [--type project|current-focus|handoff|pitfalls]
-tr memory read <type>
-tr memory append <type> "<note>"
-tr skills list [--json] | validate [--path <path>] [--json]
-tr skills inspect <path> [--json]
-tr tools list | detect | check [--json]
-tr tools add <name> --description "<text>" [--run "<cmd>"] [--json]
-tr tools create --from-command "<cmd>" [--json]
-tr connections list | check [--json]
-tr connections add <name> --provider <p> --command <cmd> [--allow <patterns>] [--deny <patterns>] [--json]
-tr packs list | inspect <pack> | validate <pack> | install <pack> [--json]
-tr mcp                            # run the local MCP server (stdio)
-tr mcp check [--json]             # verify Codex MCP config and required tools
-tr mcp setup [--write] [--json]   # wire MCP into agents
-```
-
-## The harness (`.threadroot/`)
-
-The canonical, vendor-neutral source of truth:
-
-```
-.threadroot/
-  harness.yaml          # manifest: name, profile, adapters, tools.allow
-  skills/<name>/SKILL.md # modern folder skills with optional references/scripts/assets
-  skills/*.md           # legacy/simple single-file skills are still supported
-  rules/*.md            # always-on rules (optional applyTo glob)
-  tools/*.yaml          # executable tool manifests (allow-listed)
-  connections/*.yaml    # local CLI bridges used by connection-aware tools
-  memory/*.md           # durable, typed project memory
-  lock.json             # provenance for installed objects (commit SHA + integrity)
-```
-
-By default, `tr init` keeps the repo clean and writes only `.threadroot/`. `tr compile`
-turns the harness into legacy vendor instruction formats only when adapters are enabled
-in `harness.yaml` or when you run `tr compile --adapter <name>`. Hand-authored prose in a
-vendor file is preserved; Threadroot only owns the block it marks as generated.
-
-## Bootstrap, global setup, and exposure
-
-The simple path is:
-
-```bash
-tr bootstrap --yes --mcp
-tr start "current task"
-```
-
-Without `--yes`, `tr bootstrap` prints a dry-run plan. With `--yes`, it installs global
-agent bootstrap skills, initializes `.threadroot/` if needed, runs doctor, and prints
-task context. With `--mcp`, it also writes Codex MCP config using a durable command for
-the current launch path. `npx` runs write a pinned `npx --yes threadroot@<version> mcp`
-command instead of a transient npm cache path; local dev runs use
-`node /path/dist/index.js mcp`; unknown launch paths fall back to `threadroot mcp`. The
-setup verifies the stdio server handshake. It does not write provider-specific project
-files unless you pass `--expose`.
-
-Global setup installs a tiny `threadroot` skill into supported agent user-skill
-directories so agents know to call `threadroot bootstrap --yes` when setup is missing
-and `threadroot start "<task>"` when they see `.threadroot/`.
-
-Supported global skill targets:
-
-| Agent | Project exposure path | Global setup path |
-| --- | --- | --- |
-| Codex | `.agents/skills/` | `~/.agents/skills/` |
-| Claude Code | `.claude/skills/` | `~/.claude/skills/` |
-| Cursor | `.cursor/skills/` | `~/.cursor/skills/` |
-| GitHub Copilot | `.github/skills/` | `~/.copilot/skills/` |
-| Gemini CLI | `.gemini/skills/` | `~/.gemini/skills/` |
-| Windsurf | `.windsurf/skills/` | `~/.codeium/windsurf/skills/` |
-| Antigravity | `.agent/skills/` | `~/.gemini/antigravity/skills/` |
-| OpenCode | `.opencode/skills/` | `~/.config/opencode/skills/` |
-
-Use project exposure only when you want repo-local native skill discovery:
-
-```bash
-tr expose codex
-tr expose all
-tr expose all --undo
-```
-
-`tr expose` writes one managed `threadroot/SKILL.md` shim per provider. It does not copy
-every Threadroot skill into provider directories.
-
-## Built-in content
-
-`tr init` seeds a useful harness on an empty repo:
-
-- **Starter skills:** system-design, build-skill, build-tool, code-review, security-review,
-  add-test, debug-failure, write-docs, conventional-commits.
-- **Starter tools:** wrapped from the repo's detected command surface (scripts, Make/just),
-  auto-added to `tools.allow`.
-- **Profile presets:** `nextjs`, `vite-react`, `fastapi`, `python-cli`, `node-cli`,
-  `dbt`, and `empty` (detected by the scanner or set with `--profile`).
-- **Adapters:** disabled by default to keep new repos local-only; use `tr expose` for
-  skill-compatible providers or `tr compile --adapter <name>` for legacy instruction
-  files.
-
-Modern skills use the Agent Skills-style folder shape:
+Threadroot gives coding agents the right skills, tools, connections, and memory without flooding the context window. Durable agent state lives under one canonical project folder:
 
 ```text
-.threadroot/skills/system-design/
-  SKILL.md
-  references/
-  scripts/
-  assets/
-  evals/triggers.json
+.threadroot/
 ```
 
-`SKILL.md` should have a clear `description` that says what the skill does and when an
-agent should use it. Keep the body procedural and move long details into `references/`.
-Use `tr skills validate` to catch naming, trigger-description, broken links, missing
-references, eval coverage, and progressive-disclosure issues. Use `tr skills inspect
-<path>` before trusting installed skills; it prints the skill metadata plus references,
-scripts, assets, evals, and declared allowed tools.
+No cloud account or API key is required for the OSS CLI.
 
-This repository also includes a public curated pack under `skills/`. Validate it with:
+## Why
+
+AI coding setups usually become scattered across `AGENTS.md`, `CLAUDE.md`, Cursor rules, Copilot instructions, ad hoc prompts, and random tool commands.
+
+Threadroot treats that setup like infrastructure:
+
+- version-controlled harness state in `.threadroot/`
+- progressive-disclosure skills
+- explicit, testable local tools
+- local CLI connections with no stored secrets
+- MCP access for agents
+- scanner and lockfile provenance for third-party skills
+
+## Quick Start
+
+In a new or existing repo:
 
 ```bash
-tr skills validate --path skills
-tr skills inspect skills/system-design
+npm exec --package=threadroot -- threadroot bootstrap --yes --mcp
+npm exec --package=threadroot -- threadroot start "start this project"
 ```
 
-## Tools and connections
-
-Tools are explicit, testable agent capabilities. They can declare `risk`, `confirm`,
-`connection`, inputs, and an optional finite `healthcheck`.
+Or after install:
 
 ```bash
-tr tools create --from-command "pnpm test" --description "Run the test suite"
-tr tools check
-tr run test
+threadroot bootstrap --yes --mcp
+threadroot start "start this project"
 ```
 
-Connections wrap locally authenticated CLIs without storing secrets:
+Bootstrap creates a local harness and one-time global agent setup when requested. Provider-native project files are not created unless you explicitly run `threadroot expose <agent>` or `threadroot skills expose`.
+
+## Agent Bootstrap Prompt
+
+Paste this into Codex, Claude, Cursor, Copilot, or another coding agent:
+
+```text
+You are working in this repository. Set up Threadroot as the local AI agent capability harness.
+
+Use only real Threadroot commands. Do not invent commands.
+
+1. Check Threadroot:
+   npx --yes threadroot@latest --version
+
+2. Bootstrap the repo:
+   npx --yes threadroot@latest bootstrap --yes --mcp --task "start this project"
+
+3. Start the session:
+   npx --yes threadroot@latest start "start this project"
+
+4. If no installed skill fits the task, search first:
+   npx --yes threadroot@latest skills find "<task-specific query>"
+
+5. Install skills only through Threadroot:
+   npx --yes threadroot@latest skills add <source> --skill <name>
+
+6. If no good skill exists, create a project-specific skill under .threadroot/skills/.
+
+7. For repeatable commands, use tools:
+   npx --yes threadroot@latest tools detect
+   npx --yes threadroot@latest tools create --from-command "<command>"
+
+8. For local services, use connections:
+   npx --yes threadroot@latest connections add <name> --provider <provider> --command <command>
+
+When complete, tell me:
+Success: Threadroot is ready. Run threadroot start "<task>" for future sessions.
+```
+
+## What Init Creates
+
+Every initialized project starts with exactly four Threadroot-adapted seed skills:
+
+```text
+.threadroot/skills/find-skills/SKILL.md
+.threadroot/skills/create-skill/SKILL.md
+.threadroot/skills/create-tool/SKILL.md
+.threadroot/skills/create-connection/SKILL.md
+```
+
+These are not a bundled skill library. They teach agents how to find or create the specific capability needed for the current task.
+
+Threadroot also creates:
+
+```text
+.threadroot/harness.yaml
+.threadroot/lock.json
+.threadroot/memory/project.md
+.threadroot/tools/*.yaml   # when local package scripts are detected
+```
+
+All seed skill provenance is recorded in `.threadroot/lock.json`, including upstream references where the seed was adapted from.
+
+## Core Commands
 
 ```bash
-tr connections add aws-dev \
-  --provider aws \
-  --command aws \
-  --profile dev \
-  --risk high \
-  --confirm \
-  --allow "sts get-caller-identity,s3 ls,logs tail" \
-  --deny "delete,terminate,iam" \
-  --healthcheck "aws sts get-caller-identity --profile dev"
-tr connections check
+threadroot bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose <list>] [--json]
+threadroot init [--no-import] [--profile <profile>] [--expose <list>]
+threadroot start "<task>" [--json]
+threadroot context "<task>" [--json]
+threadroot status [--json]
+threadroot doctor [--json]
+threadroot diff
+threadroot compile
 ```
 
-Use official CLIs for auth (`gh auth login`, `aws configure sso`, `az login`, Snowflake
-CLI config). Threadroot records what the agent may use; it does not become a secret vault.
+## Skills
 
-## Capability packs
-
-Packs install curated sets of skills, tools, rules, and connections:
+Threadroot stores skills under `.threadroot/skills/` and routes agents to full skill bodies only when relevant.
 
 ```bash
-tr packs list
-tr packs inspect typescript-node
-tr packs install testing
+threadroot skills find "improve nextjs performance"
+threadroot skills add vercel-labs/skills --skill find-skills
+threadroot skills inspect .threadroot/skills/<name>
+threadroot skills scan .threadroot/skills/<name>
+threadroot skills trust <name>
+threadroot skills expose <name|all> --agent <agent|universal|all>
 ```
 
-Built-in v1 packs: `typescript-node`, `react-app`, `python`, `testing`, `code-review`,
-`security-review`, and `system-design`.
+`skills add` supports GitHub shorthand, GitHub URLs, skills.sh URLs, and local paths. Installs are scanned without executing bundled code and recorded in `.threadroot/lock.json`.
 
-## Installing objects
+Threadroot detects risk signals; it does not certify third-party skills as safe.
+
+## Tools
+
+A tool is an executable, testable agent capability.
 
 ```bash
-tr install github:Sevan1211/threadroot/skills/system-design@main --kind skill
-tr install github:Sevan1211/threadroot/skills/build-tool@main --kind skill
-tr install github:owner/repo/skills/code-review.md@v1
-tr install ./local/tools/echo.yaml --kind tool
+threadroot tools detect
+threadroot tools create --from-command "pnpm test" --description "Run tests" --healthcheck "pnpm --version"
+threadroot tools list
+threadroot tools check
+threadroot run test
 ```
 
-Fetches shell out to `git` (shallow clone, no `.git` kept, never runs repo scripts), pin the
-resolved commit SHA plus a `sha256:` integrity digest into `lock.json`, and mark installed
-tools **untrusted** until you add them to `tools.allow`. Skill directories are copied as a
-folder and recorded with a deterministic tree hash. External skills that include scripts
-or declare allowed tools are surfaced by `tr doctor` as trust warnings so humans and agents
-inspect them before use.
+Agent-authored tools default to `confirm:true`. High-risk tools cannot run without explicit confirmation.
+
+## Connections
+
+A connection wraps a locally authenticated CLI or service. Threadroot does not store secrets.
+
+```bash
+threadroot connections add gh-readonly --provider github --command gh --risk low --healthcheck "gh auth status"
+threadroot connections list
+threadroot connections check
+```
+
+Use official tools such as `gh`, `aws`, `az`, `gcloud`, `snow`, `dbt`, `docker`, `kubectl`, or `vercel` for authentication.
+
+Connection-backed tools should reference a connection instead of embedding broad cloud commands directly.
+
+## Automation Policy
+
+Threadroot keeps project-level automation policy in `.threadroot/harness.yaml`.
+
+```bash
+threadroot automation status
+threadroot automation approve
+threadroot automation reset
+```
+
+Default mode is `ask`. After approval, MCP agents may create low-risk capability manifests. Hard stops still require human review: blocked scans, executable scripts in third-party skills, provider permission fields, high-risk tools or connections, destructive commands, cloud mutations, and anything involving secrets.
 
 ## MCP
 
-Threadroot runs a local MCP server over stdio that exposes the harness to agents:
+Run the local MCP server:
 
 ```bash
-tr mcp
-tr mcp check            # verify Codex global MCP config and required tools
-tr mcp setup            # print config snippets and a pasteable agent bootstrap prompt
-tr mcp setup --write    # opt-in: write project-local MCP config for supported agents
+threadroot mcp
 ```
 
-Tools: `context`, `skills_list`, `skills_get`, `tools_list`, `tools_check`, `tools_run`,
-`tools_create`, `tools_detect`, `connections_list`, `connections_check`, `memory_read`,
-`memory_append`, `status`, `doctor`.
+Write/check setup:
 
-MCP can run tools that are already safe under the harness policy. It cannot self-confirm
-`confirm:true`, high-risk, untrusted, or connection-policy-blocked tools; agents should ask
-the user to run `threadroot run <tool> --yes` after review.
+```bash
+threadroot mcp setup --write
+threadroot mcp check
+```
 
-`tr mcp setup` also prints a copy/paste agent prompt that follows the real CLI flow:
-check availability, run `threadroot bootstrap --yes`, run `threadroot start "<task>"`,
-and ask before writing project-local MCP config.
-
-After changing Codex MCP config, reload VS Code/Codex or start a new Codex session. `tr mcp
-check` proves the server works from the terminal; the agent surface still has to load its
-MCP configuration.
-
-## Profiles
-
-`nextjs`, `vite-react`, `fastapi`, `python-cli`, `node-cli`, `dbt`, `empty`.
+MCP exposes lazy access to context, skills, tools, connections, memory, status, and doctor. Clients may need a reload/new session after MCP config changes.
 
 ## Development
 
 ```bash
+pnpm install
 pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
-```
-
-## Website and cloud integration
-
-The public CLI is the stable foundation for the private website/cloud repo. See
-[INTEGRATION.md](./INTEGRATION.md) for the prompt-generator contract, JSON command
-surface, future auth/sync shape, and cloud data model sketch.
-
-## Publishing
-
-The npm package ships only `dist/`, `skills/`, `packs/`, and package metadata. Before
-publishing:
-
-```bash
-pnpm release:check
+pnpm package:smoke
 pnpm pack:check
 ```
 
-See [RELEASE.md](./RELEASE.md) for the full publish checklist.
+The npm package ships `dist/`, `skills/`, README/license/security docs, and integration docs.
 
-Contributions should run the same release gate. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+## Security
 
-## Smoke test this checkout
-
-Use a temporary copy when testing generated files against Threadroot itself:
-
-```bash
-pnpm install
-pnpm build
-THREADROOT_ROOT="$(pwd)"
-TMP_REPO="$(mktemp -d /tmp/threadroot-smoke.XXXXXX)"
-rsync -a --exclude .git --exclude node_modules --exclude dist ./ "$TMP_REPO/"
-cd "$TMP_REPO"
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" bootstrap --yes --agent codex --mcp --no-import --packs testing --json
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" mcp check --json
-HOME="$TMP_REPO/home" node "$THREADROOT_ROOT/dist/index.js" start "write tests" --json
-node "$THREADROOT_ROOT/dist/index.js" expose codex
-node "$THREADROOT_ROOT/dist/index.js" status
-node "$THREADROOT_ROOT/dist/index.js" context "write tests"
-node "$THREADROOT_ROOT/dist/index.js" context "write tests" --json
-node "$THREADROOT_ROOT/dist/index.js" skills validate
-node "$THREADROOT_ROOT/dist/index.js" skills validate --path skills
-node "$THREADROOT_ROOT/dist/index.js" skills inspect skills/system-design
-node "$THREADROOT_ROOT/dist/index.js" packs list
-node "$THREADROOT_ROOT/dist/index.js" packs inspect testing
-node "$THREADROOT_ROOT/dist/index.js" tools create --from-command "node --version" --description "Check Node.js"
-node "$THREADROOT_ROOT/dist/index.js" tools check
-node "$THREADROOT_ROOT/dist/index.js" connections add node-local --provider node --command node --risk low --allow "--version" --deny "rm,delete" --healthcheck "node --version"
-node "$THREADROOT_ROOT/dist/index.js" connections check
-node "$THREADROOT_ROOT/dist/index.js" compile
-node "$THREADROOT_ROOT/dist/index.js" diff
-node "$THREADROOT_ROOT/dist/index.js" doctor
-find .threadroot -maxdepth 2 -type f | sort
-```
+- `.threadroot/` is the source of truth.
+- Provider-native files are generated shims, not canonical state.
+- Third-party skills are scanned and locked, not blindly trusted.
+- Tools are explicit and allow-listed.
+- Connections wrap locally authenticated CLIs and never store secrets.
+- MCP uses the same authorization and confirmation paths as the CLI.

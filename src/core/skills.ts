@@ -315,6 +315,7 @@ export async function validateSkillPath(targetPath: string): Promise<SkillValida
         references: [],
         memory: { budget: {} },
         tools: { allow: [] },
+        automation: { mode: "ask" },
       },
       skills: await loadSkillsAtPath(targetPath),
       rules: [],

@@ -18,7 +18,7 @@ import { walkRepo } from "../scan/walk.js";
 import { stringify as stringifyYaml } from "yaml";
 import type { ProfileId } from "../../types.js";
 import { exposeProject } from "../expose.js";
-import { PROJECT_MEMORY_TEMPLATE, writeBuiltinSkills } from "./builtins.js";
+import { PROJECT_MEMORY_TEMPLATE, writeSeedSkills } from "./builtins.js";
 import { type ImportReport, importVendorFiles } from "./import.js";
 
 const DEFAULT_ADAPTERS: AdapterId[] = [];
@@ -93,6 +93,7 @@ async function writeManifest(repoRoot: string, manifest: HarnessManifest): Promi
     version: manifest.version,
     profile: manifest.profile,
     adapters: manifest.adapters,
+    automation: manifest.automation,
   };
   if (manifest.tools.allow.length > 0) {
     body.tools = { allow: manifest.tools.allow };
@@ -186,7 +187,7 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   const adapters = options.adapters ?? DEFAULT_ADAPTERS;
 
   const tools = await writeStarterTools(repoRoot, profile, options.force ?? false);
-  const skills = await writeBuiltinSkills(repoRoot);
+  const skills = await writeSeedSkills(repoRoot);
   const memory = await writeProjectMemory(repoRoot);
 
   const manifest = harnessManifestSchema.parse({
@@ -195,6 +196,7 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
     profile,
     adapters,
     tools: { allow: tools },
+    automation: { mode: "ask" },
   });
   await writeManifest(repoRoot, manifest);
 

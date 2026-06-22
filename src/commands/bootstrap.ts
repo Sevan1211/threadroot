@@ -11,7 +11,6 @@ export type BootstrapCliOptions = JsonCliOptions & {
   task?: string;
   mcp?: boolean;
   expose?: string;
-  packs?: string;
   global?: boolean;
   init?: boolean;
   import?: boolean;
@@ -26,7 +25,6 @@ export async function runBootstrap(repoRoot: string, options: BootstrapCliOption
     task: options.task,
     mcp: options.mcp,
     expose: options.expose,
-    packs: options.packs,
     noGlobal: options.global === false,
     noInit: options.init === false,
     import: options.import,
@@ -36,7 +34,7 @@ export async function runBootstrap(repoRoot: string, options: BootstrapCliOption
   if (options.json) {
     printJson(report);
   } else {
-  printBootstrapReport(report);
+    printBootstrapReport(report);
   }
 
   if (report.mode === "write" && report.doctor && !report.doctor.ok) {

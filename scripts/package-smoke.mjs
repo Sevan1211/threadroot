@@ -74,8 +74,40 @@ try {
   });
   await run(bin, ["mcp", "check"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["automation", "approve"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["expose", "codex"], { cwd: projectDir });
-  await run(bin, ["packs", "list"], { cwd: projectDir });
+  const externalSkillDir = path.join(projectDir, "external-skill");
+  await mkdir(externalSkillDir, { recursive: true });
+  await writeFile(
+    path.join(externalSkillDir, "SKILL.md"),
+    [
+      "---",
+      "name: package-smoke-skill",
+      "description: Use when validating package smoke skill installation.",
+      "license: MIT",
+      "compatibility: Agent Skills-compatible clients.",
+      "---",
+      "",
+      "# package-smoke-skill",
+      "",
+      "Validate the packaged skills add workflow.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await run(bin, ["skills", "add", "./external-skill", "--dry-run", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "add", "./external-skill", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "inspect", ".threadroot/skills/package-smoke-skill"], {
+    cwd: projectDir,
+    env: { HOME: homeDir },
+  });
+  await run(bin, ["skills", "trust", "package-smoke-skill"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "expose", "package-smoke-skill", "--agent", "universal"], {
+    cwd: projectDir,
+    env: { HOME: homeDir },
+  });
   await run(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
 } finally {
   if (tarballPath) {

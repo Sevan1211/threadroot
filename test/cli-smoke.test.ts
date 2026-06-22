@@ -10,11 +10,13 @@ let repo: string;
 
 beforeEach(async () => {
   repo = await mkdtemp(path.join(tmpdir(), "tr-cli-"));
+  vi.stubEnv("HOME", path.join(repo, "home"));
   await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
 });
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   process.exitCode = undefined;
   await rm(repo, { recursive: true, force: true });
 });
@@ -55,7 +57,7 @@ describe("CLI smoke", () => {
 
     const context = await run("context", "write tests");
     expect(context).toContain("task: write tests");
-    expect(context).toContain("add-test");
+    expect(context).toContain("memory:");
 
     const contextJson = JSON.parse(await run("context", "write tests", "--json")) as { task: string };
     expect(contextJson.task).toBe("write tests");
@@ -64,7 +66,7 @@ describe("CLI smoke", () => {
     expect(skills).toContain("Skills valid.");
 
     const skillsJson = JSON.parse(await run("skills", "list", "--json")) as { skills: Array<{ name: string }> };
-    expect(skillsJson.skills.map((skill) => skill.name)).toContain("add-test");
+    expect(skillsJson.skills.map((skill) => skill.name)).toContain("find-skills");
 
     const diff = await run("diff");
     expect(diff).toContain("No drift");
@@ -80,13 +82,13 @@ describe("CLI smoke", () => {
     const toolsJson = JSON.parse(await run("tools", "list", "--json")) as { tools: unknown[] };
     expect(Array.isArray(toolsJson.tools)).toBe(true);
 
-    const packsJson = JSON.parse(await run("packs", "list", "--json")) as { packs: Array<{ name: string }> };
-    expect(packsJson.packs.map((pack) => pack.name)).toContain("testing");
-
     const connectionsJson = JSON.parse(await run("connections", "list", "--json")) as { connections: unknown[] };
     expect(Array.isArray(connectionsJson.connections)).toBe(true);
 
+    const automationJson = JSON.parse(await run("automation", "status", "--json")) as { mode: string };
+    expect(automationJson.mode).toBe("ask");
+
     const expose = await run("expose", "codex", "--dry-run");
     expect(expose).toContain(".agents");
-  });
+  }, 15000);
 });

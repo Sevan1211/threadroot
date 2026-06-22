@@ -1,6 +1,11 @@
 import readline from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
+import path from "node:path";
 import { z } from "zod";
+import {
+  AutomationPolicyError,
+  assertAgentMutationAllowed,
+} from "../core/automation.js";
 import {
   HarnessError,
   type EffectiveHarness,
@@ -10,9 +15,14 @@ import {
   resolveHarness,
 } from "../core/harness/index.js";
 import { doctor } from "../core/doctor.js";
+import { projectLockPath, userLockPath } from "../core/harness/paths.js";
 import { harnessStatus } from "../core/status.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
-import { checkConnections } from "../core/connections/index.js";
+import { checkConnections, createConnection } from "../core/connections/index.js";
+import { readLockFile } from "../core/install/lock.js";
+import type { LockEntry } from "../core/install/source.js";
+import { findSkills } from "../core/skills-find.js";
+import { scanSkillPath } from "../core/skills-scan.js";
 import { THREADROOT_VERSION } from "../core/version.js";
 
 type JsonRpcRequest = {
@@ -65,6 +75,13 @@ const toolRegistry: ToolSpec[] = [
     },
   }),
   defineTool({
+    name: "skills_find",
+    description: "Find task-specific Agent Skills and return Threadroot install commands.",
+    inputSchema: objectSchema({ query: { type: "string", description: "Skill search query." } }, ["query"]),
+    args: z.object({ query: z.string().min(1) }),
+    run: (_repoRoot, args) => findSkills(args.query),
+  }),
+  defineTool({
     name: "skills_list",
     description: "List the skills defined in this repo's harness (name, when, tags).",
     inputSchema: objectSchema({}),
@@ -74,13 +91,24 @@ const toolRegistry: ToolSpec[] = [
       if (!harness) {
         return { skills: [], note: "No harness found. Run `tr init` first." };
       }
+      const lockEntries = await skillLockEntries(repoRoot);
       return {
-        skills: harness.skills.map((skill) => ({
-          name: skill.name,
-          when: skill.frontmatter.when,
-          tags: skill.frontmatter.tags,
-          scope: skill.frontmatter.scope,
-        })),
+        skills: harness.skills.map((skill) => {
+          const entry = lockEntries.get(skill.name);
+          return {
+            name: skill.name,
+            when: skill.frontmatter.when,
+            tags: skill.frontmatter.tags,
+            scope: skill.frontmatter.scope,
+            sourcePath: skill.sourcePath,
+            risk: entry?.risk ?? "low",
+            reviewed: entry ? (entry.reviewed ?? entry.sourceKind === "local") : true,
+            provenance: entry?.source,
+            registryId: entry?.registryId,
+            auditUrl: entry?.auditUrl,
+            externalScan: entry?.externalScan,
+          };
+        }),
       };
     },
   }),
@@ -95,7 +123,16 @@ const toolRegistry: ToolSpec[] = [
       if (!skill) {
         throw new Error(`Unknown skill: ${args.name}`);
       }
-      return { name: skill.name, frontmatter: skill.frontmatter, body: skill.body, sourcePath: skill.sourcePath };
+      const lockEntries = await skillLockEntries(repoRoot);
+      const lockEntry = lockEntries.get(skill.name);
+      return {
+        name: skill.name,
+        frontmatter: skill.frontmatter,
+        body: skill.body,
+        sourcePath: skill.sourcePath,
+        provenance: lockEntry,
+        scan: await scanSkillPath(pathForScan(skill.sourcePath)),
+      };
     },
   }),
   defineTool({
@@ -215,6 +252,22 @@ const toolRegistry: ToolSpec[] = [
       input: z.record(z.unknown()).optional(),
     }),
     run: async (repoRoot, args) => {
+      const requestedRisk = args.risk ?? "low";
+      if (requestedRisk !== "low") {
+        return {
+          ok: false,
+          blocked: "risk_policy",
+          message: "MCP can only create low-risk tools automatically. Ask the user to run `threadroot tools create` for medium/high-risk tools.",
+        };
+      }
+      try {
+        await assertAgentMutationAllowed(repoRoot, "creating tools through MCP");
+      } catch (error) {
+        if (error instanceof AutomationPolicyError) {
+          return { ok: false, blocked: "automation_policy", message: error.message };
+        }
+        throw error;
+      }
       const created = await createTool(
         repoRoot,
         {
@@ -274,6 +327,73 @@ const toolRegistry: ToolSpec[] = [
     inputSchema: objectSchema({}),
     args: z.object({}),
     run: (repoRoot) => checkConnections(repoRoot),
+  }),
+  defineTool({
+    name: "connections_create",
+    description:
+      "Author a local CLI connection manifest without storing secrets. MCP can only create low-risk connections after project automation approval.",
+    inputSchema: objectSchema(
+      {
+        name: { type: "string", description: "Connection name (lowercase, hyphenated)." },
+        provider: { type: "string", description: "Provider name, such as github, aws, azure, gcp, or snowflake." },
+        command: { type: "string", description: "Local CLI command, such as gh, aws, az, gcloud, or snow." },
+        description: { type: "string", description: "What this connection is for." },
+        profile: { type: "string", description: "Local CLI profile/account label." },
+        risk: { type: "string", enum: ["low", "medium", "high"], description: "Risk level." },
+        confirm: { type: "boolean", description: "Require confirmation before connection-backed tools run." },
+        healthcheck: { type: "string", description: "Read-only command that verifies the connection works." },
+        allow: { type: "array", items: { type: "string" }, description: "Allowed command fragments." },
+        deny: { type: "array", items: { type: "string" }, description: "Denied command fragments." },
+        scope: { type: "string", enum: ["user", "project"], description: "Connection scope." },
+      },
+      ["name", "provider", "command"],
+    ),
+    args: z.object({
+      name: z.string().min(1),
+      provider: z.string().min(1),
+      command: z.string().min(1),
+      description: z.string().optional(),
+      profile: z.string().optional(),
+      risk: z.enum(["low", "medium", "high"]).optional(),
+      confirm: z.boolean().optional(),
+      healthcheck: z.string().optional(),
+      allow: z.array(z.string()).optional(),
+      deny: z.array(z.string()).optional(),
+      scope: z.enum(["user", "project"]).optional(),
+    }),
+    run: async (repoRoot, args) => {
+      const requestedRisk = args.risk ?? "medium";
+      if (requestedRisk !== "low") {
+        return {
+          ok: false,
+          blocked: "risk_policy",
+          message:
+            "MCP can only create low-risk connections automatically. Ask the user to run `threadroot connections add` after reviewing medium/high-risk access.",
+        };
+      }
+      try {
+        await assertAgentMutationAllowed(repoRoot, "creating connections through MCP");
+      } catch (error) {
+        if (error instanceof AutomationPolicyError) {
+          return { ok: false, blocked: "automation_policy", message: error.message };
+        }
+        throw error;
+      }
+      const created = await createConnection(repoRoot, {
+        name: args.name,
+        provider: args.provider,
+        command: args.command,
+        description: args.description,
+        profile: args.profile,
+        risk: args.risk,
+        confirm: args.confirm,
+        healthcheck: args.healthcheck,
+        allow: args.allow,
+        deny: args.deny,
+        scope: args.scope,
+      });
+      return { ok: true, path: created.path, connection: created.manifest };
+    },
   }),
   defineTool({
     name: "memory_read",
@@ -407,6 +527,25 @@ async function loadHarnessOrNull(repoRoot: string): Promise<EffectiveHarness | n
     }
     throw error;
   }
+}
+
+async function skillLockEntries(repoRoot: string): Promise<Map<string, LockEntry>> {
+  const [projectLock, userLock] = await Promise.all([
+    readLockFile(projectLockPath(repoRoot)),
+    readLockFile(userLockPath()),
+  ]);
+  const entries = new Map<string, LockEntry>();
+  for (const entry of userLock.objects) {
+    if (entry.kind === "skill") entries.set(entry.name, entry);
+  }
+  for (const entry of projectLock.objects) {
+    if (entry.kind === "skill") entries.set(entry.name, entry);
+  }
+  return entries;
+}
+
+function pathForScan(skillSourcePath: string): string {
+  return path.basename(skillSourcePath) === "SKILL.md" ? path.dirname(skillSourcePath) : skillSourcePath;
 }
 
 function objectSchema(properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> {
