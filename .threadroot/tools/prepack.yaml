@@ -1,7 +1,0 @@
-name: prepack
-description: Run the `prepack` package script
-scope: project
-risk: low
-confirm: false
-input: {}
-run: pnpm run prepack

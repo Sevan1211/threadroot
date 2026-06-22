@@ -1,7 +1,0 @@
-name: release-check
-description: Run the `release:check` package script
-scope: project
-risk: high
-confirm: true
-input: {}
-run: pnpm run release:check

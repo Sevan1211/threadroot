@@ -1,7 +1,0 @@
-name: prepublishonly
-description: Run the `prepublishOnly` package script
-scope: project
-risk: low
-confirm: false
-input: {}
-run: pnpm run prepublishOnly

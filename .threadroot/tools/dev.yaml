@@ -1,7 +1,0 @@
-name: dev
-description: Run the `dev` package script
-scope: project
-risk: low
-confirm: false
-input: {}
-run: pnpm run dev

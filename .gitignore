@@ -5,6 +5,10 @@ coverage/
 .env
 .env.*
 
+# Threadroot is local-only for now. The platform will handle portable/project
+# harness distribution later.
+.threadroot/
+
 # threadroot:begin local-state
 .threadroot/cache/
 .threadroot/tmp/

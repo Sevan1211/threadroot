@@ -1,7 +1,0 @@
-name: lint
-description: Run the `lint` package script
-scope: project
-risk: low
-confirm: false
-input: {}
-run: pnpm run lint
