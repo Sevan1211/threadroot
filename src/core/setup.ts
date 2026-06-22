@@ -35,6 +35,8 @@ export type SetupEntry = {
   message?: string;
 };
 
+export type ManagedSetupStatus = "missing" | "current" | "stale" | "unmanaged";
+
 export type GlobalSetupResult = {
   entries: SetupEntry[];
 };
@@ -90,8 +92,10 @@ function codexAgentsBlock(): string {
     "## Threadroot",
     "",
     "When a repository contains `.threadroot/`, treat it as the source of truth for agent harness context.",
-    "Before coding, prefer `threadroot start \"<task>\"` over broad, unfocused file reads.",
-    "If `.threadroot/` is missing and the user wants setup, run `threadroot bootstrap --yes`.",
+    "Before coding, run `threadroot start \"<task>\"` before broad, unfocused file reads.",
+    "If the repo map is missing or stale, run `threadroot map --write`.",
+    "If `.threadroot/` is missing and the user wants setup, run `threadroot bootstrap --yes --mcp`.",
+    "Use Threadroot MCP tools when available; otherwise use the CLI commands printed by `threadroot start`.",
     "Do not create provider-specific project files unless the user asks; use `threadroot expose <agent>` for that.",
     CODEX_AGENTS_END,
     "",
@@ -286,4 +290,31 @@ export async function setupGlobal(options: GlobalSetupOptions = {}): Promise<Glo
 
 export async function hasGlobalThreadrootSkill(home: string | undefined, agent: AgentProviderId): Promise<boolean> {
   return fileExists(globalSkillPath(home ?? homedir(), AGENT_PROVIDERS[agent]));
+}
+
+export async function globalThreadrootSkillStatus(
+  home: string | undefined,
+  agent: AgentProviderId,
+): Promise<ManagedSetupStatus> {
+  const root = home ?? homedir();
+  const provider = AGENT_PROVIDERS[agent];
+  const existing = await readMaybe(globalSkillPath(root, provider));
+  if (existing === undefined) {
+    return "missing";
+  }
+  if (!existing.includes(THREADROOT_MANAGED_MARKER)) {
+    return "unmanaged";
+  }
+  return existing === threadrootSkillContent(provider, "global") ? "current" : "stale";
+}
+
+export async function codexGlobalAgentsStatus(home: string | undefined): Promise<ManagedSetupStatus> {
+  const root = home ?? homedir();
+  const existing = await readMaybe(codexAgentsPath(root));
+  if (existing === undefined || !hasManagedBlock(existing, CODEX_AGENTS_BEGIN, CODEX_AGENTS_END)) {
+    return "missing";
+  }
+  return upsertManagedBlock(existing, codexAgentsBlock(), CODEX_AGENTS_BEGIN, CODEX_AGENTS_END) === existing
+    ? "current"
+    : "stale";
 }

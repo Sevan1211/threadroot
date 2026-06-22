@@ -4,6 +4,26 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.7 - Stable self-use harness
+
+### Added
+
+- A compact repo map command, `threadroot map --write|--check`, so agents can navigate codebases through a generated `.threadroot/memory/repo-map.md` before broad file reads.
+- MCP `repo_map`, `repo_search`, and `repo_read` tools for lazy, targeted codebase awareness.
+- A bundled `threadroot` seed skill that explains the harness, command map, capability workflow, MCP fallback behavior, and safety boundaries to agents.
+- Init now updates `.gitignore` with Threadroot local-state ignores and generates the initial repo map automatically.
+- Doctor checks for missing/stale repo maps, stale global Threadroot setup, and accidental whole-directory `.threadroot` ignores.
+
+### Changed
+
+- Seed skills are now owned inside `src/core/init/seed-skills.ts`; the npm package no longer ships a top-level `skills/` directory.
+- Session context now reports repo-map status and keeps memory excerpts compact for lower-token starts.
+- The global Threadroot skill and MCP bootstrap prompt now teach agents to refresh stale repo maps.
+
+### Removed
+
+- Empty/stale top-level pack assets and source directories from the package surface.
+
 ## 0.1.6 - Adaptive capability harness
 
 ### Added

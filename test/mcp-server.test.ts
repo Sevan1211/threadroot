@@ -43,6 +43,9 @@ describe("mcp server handleMessage", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "context",
+        "repo_map",
+        "repo_search",
+        "repo_read",
         "skills_find",
         "skills_list",
         "skills_get",
@@ -80,6 +83,38 @@ describe("mcp server handleMessage", () => {
     const status = JSON.parse(content[0].text) as { exists: boolean; manifest: { name: string } };
     expect(status.exists).toBe(true);
     expect(status.manifest.name).toBe("demo");
+  });
+
+  it("returns repo map status and targeted repo reads", async () => {
+    const repo = await harnessRepo();
+    await fs.writeFile(path.join(repo, "src-feature.ts"), "export const feature = 'threadroot-map';\n", "utf8");
+
+    const refreshed = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/call",
+      params: { name: "repo_map", arguments: { write: true } },
+    });
+    const refreshedResult = refreshed?.result as { structuredContent: { status: string; path: string } };
+    expect(refreshedResult.structuredContent).toMatchObject({ status: "current", path: ".threadroot/memory/repo-map.md" });
+
+    const search = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: { name: "repo_search", arguments: { query: "threadroot-map" } },
+    });
+    const searchResult = search?.result as { structuredContent: { matches: Array<{ path: string }> } };
+    expect(searchResult.structuredContent.matches[0]?.path).toBe("src-feature.ts");
+
+    const read = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 22,
+      method: "tools/call",
+      params: { name: "repo_read", arguments: { path: "src-feature.ts" } },
+    });
+    const readResult = read?.result as { structuredContent: { content: string } };
+    expect(readResult.structuredContent.content).toContain("threadroot-map");
   });
 
   it("does not let MCP self-confirm risky tool execution", async () => {

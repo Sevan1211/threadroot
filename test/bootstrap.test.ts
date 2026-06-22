@@ -48,7 +48,7 @@ describe("bootstrapProject", () => {
     expect(report.status?.exists).toBe(true);
     expect(report.doctor?.ok).toBe(true);
     expect(report.context?.skills.map((skill) => skill.name)).toEqual(
-      expect.arrayContaining(["find-skills", "create-skill", "create-tool", "create-connection"]),
+      expect.arrayContaining(["threadroot", "find-skills", "create-skill", "create-tool", "create-connection"]),
     );
 
     const manifest = await readFile(path.join(repo, ".threadroot/harness.yaml"), "utf8");
@@ -57,6 +57,7 @@ describe("bootstrapProject", () => {
 
     const skill = await readFile(path.join(home, ".agents/skills/threadroot/SKILL.md"), "utf8");
     expect(skill).toContain("threadroot context");
+    expect(skill).toContain("threadroot map --write");
   });
 
   it("returns starter skills when the bootstrap task has no direct skill match", async () => {

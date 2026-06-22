@@ -36,7 +36,7 @@ describe("initHarness", () => {
     expect(report.name).toBe("demo-app");
     expect(report.profile).toBe("node-cli");
     expect(report.adapters).toEqual([]);
-    expect(report.skills.length).toBe(4);
+    expect(report.skills.length).toBe(5);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
 
     const harness = await resolveHarness(repo);
@@ -45,6 +45,7 @@ describe("initHarness", () => {
       "create-skill",
       "create-tool",
       "find-skills",
+      "threadroot",
     ]);
     expect(harness.manifest.automation.mode).toBe("ask");
     expect(harness.manifest.tools.allow).toEqual(expect.arrayContaining(["test", "build"]));
@@ -56,6 +57,7 @@ describe("initHarness", () => {
       "create-skill",
       "create-tool",
       "find-skills",
+      "threadroot",
     ]);
     expect(lock.objects.find((entry) => entry.name === "find-skills")).toMatchObject({
       source: "threadroot:seed/find-skills",
@@ -66,6 +68,8 @@ describe("initHarness", () => {
 
     await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(report.compiled).toEqual([]);
+    await expect(readFile(path.join(repo, ".threadroot/memory/repo-map.md"), "utf8")).resolves.toContain("# Repo Map");
+    await expect(readFile(path.join(repo, ".gitignore"), "utf8")).resolves.toContain(".threadroot/cache/");
   });
 
   it("refuses to clobber an existing harness without force", async () => {

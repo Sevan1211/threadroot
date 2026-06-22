@@ -35,6 +35,7 @@ describe("mcp setup guide", () => {
   it("uses real commands in the agent prompt", () => {
     const prompt = agentLaunchPrompt("/tmp/demo");
     expect(prompt).toContain("threadroot bootstrap --yes");
+    expect(prompt).toContain("threadroot map --write");
     expect(prompt).toContain("threadroot skills find");
     expect(prompt).toContain("threadroot skills add <source>");
     expect(prompt).toContain("threadroot automation status");

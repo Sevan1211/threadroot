@@ -6,8 +6,10 @@ export type McpServerEntry = {
   args: string[];
 };
 
+export type ProjectMcpAgent = "copilot" | "cursor" | "claude";
+
 type ConfigTarget = {
-  agent: "copilot" | "cursor" | "claude";
+  agent: ProjectMcpAgent;
   file: string;
   /** Top-level key holding the server map (VS Code uses `servers`). */
   key: "servers" | "mcpServers";
@@ -23,7 +25,7 @@ export type WriteMcpConfigInput = {
   repoRoot: string;
   entry: McpServerEntry;
   /** Restrict to specific agents; defaults to all project-local targets. */
-  agents?: Array<ConfigTarget["agent"]>;
+  agents?: ProjectMcpAgent[];
 };
 
 export type WriteMcpConfigResult = {

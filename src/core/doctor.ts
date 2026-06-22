@@ -8,9 +8,11 @@ import { externalSkillNames, externalToolNames, readLockFile } from "./install/l
 import { validateResolvedSkillsDeep } from "./skills.js";
 import { scanSkillPath } from "./skills-scan.js";
 import { checkConnection } from "./connections/index.js";
-import { hasGlobalThreadrootSkill } from "./setup.js";
+import { codexGlobalAgentsStatus, globalThreadrootSkillStatus } from "./setup.js";
 import { checkToolHealth } from "./tools/index.js";
 import { checkCodexMcp } from "./mcp-check.js";
+import { repoMapStatus } from "./repo-map.js";
+import { threadrootWholeDirectoryIgnored } from "./gitignore.js";
 
 export type DoctorSeverity = "error" | "warning" | "info";
 
@@ -87,14 +89,72 @@ async function mcpConfigHints(repoRoot: string, home?: string): Promise<DoctorFi
 }
 
 async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
-  if (await hasGlobalThreadrootSkill(home, "codex")) {
+  const findings: DoctorFinding[] = [];
+  const skillStatus = await globalThreadrootSkillStatus(home, "codex");
+  if (skillStatus === "missing") {
+    findings.push(
+      finding(
+        "info",
+        "global_setup_missing",
+        "Codex global Threadroot setup was not detected. Run `threadroot bootstrap --yes --agent codex` for one-time machine setup.",
+      ),
+    );
+  } else if (skillStatus === "stale") {
+    findings.push(
+      finding(
+        "warning",
+        "global_threadroot_skill_stale",
+        "Codex global Threadroot skill differs from the current template. Run `threadroot setup --global --agent codex --force` and reload Codex.",
+      ),
+    );
+  } else if (skillStatus === "unmanaged") {
+    findings.push(
+      finding(
+        "warning",
+        "global_threadroot_skill_unmanaged",
+        "Codex global Threadroot skill exists but is not Threadroot-managed. Inspect it or re-run setup with `--force` if you want Threadroot to replace it.",
+      ),
+    );
+  }
+
+  const agentsStatus = await codexGlobalAgentsStatus(home);
+  if (agentsStatus === "stale") {
+    findings.push(
+      finding(
+        "warning",
+        "codex_global_agents_stale",
+        "Codex global AGENTS.md Threadroot block is stale. Run `threadroot setup --global --agent codex --force` and reload Codex.",
+      ),
+    );
+  }
+  return findings;
+}
+
+async function repoMapHints(repoRoot: string): Promise<DoctorFinding[]> {
+  const status = await repoMapStatus(repoRoot);
+  if (status.status === "current") {
     return [];
   }
   return [
     finding(
-      "info",
-      "global_setup_missing",
-      "Codex global Threadroot setup was not detected. Run `threadroot bootstrap --yes --agent codex` for one-time machine setup.",
+      "warning",
+      status.status === "missing" ? "repo_map_missing" : "repo_map_stale",
+      `Repo map is ${status.status}. Run \`threadroot map --write\` so agents can navigate the codebase without loading everything.`,
+      status.path,
+    ),
+  ];
+}
+
+async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
+  if (!(await threadrootWholeDirectoryIgnored(repoRoot))) {
+    return [];
+  }
+  return [
+    finding(
+      "warning",
+      "threadroot_whole_dir_ignored",
+      "The whole `.threadroot/` directory is ignored. Track canonical harness files and ignore only local/cache/runtime state for cross-agent portability.",
+      ".gitignore",
     ),
   ];
 }
@@ -322,6 +382,8 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
     }
   }
 
+  findings.push(...(await repoMapHints(repoRoot)));
+  findings.push(...(await gitignoreHints(repoRoot)));
   findings.push(...(await globalSetupHints(options.home)));
   findings.push(...(await mcpConfigHints(repoRoot, options.home)));
   return summarize(findings);

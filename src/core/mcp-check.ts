@@ -9,6 +9,9 @@ import { THREADROOT_VERSION } from "./version.js";
 
 export const REQUIRED_MCP_TOOLS = [
   "context",
+  "repo_map",
+  "repo_search",
+  "repo_read",
   "skills_find",
   "skills_list",
   "skills_get",

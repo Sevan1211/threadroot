@@ -1,6 +1,6 @@
 {
   "name": "threadroot",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Adaptive AI agent capability harness: skills, tools, connections, memory, and MCP in one local-first .threadroot directory.",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,6 @@
   ],
   "files": [
     "dist",
-    "skills",
     "CHANGELOG.md",
     "INTEGRATION.md",
     "SECURITY.md"

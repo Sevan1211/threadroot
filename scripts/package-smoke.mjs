@@ -56,6 +56,12 @@ try {
   await run("tar", ["-xzf", tarballPath, "-C", extractDir]);
 
   const packageDir = path.join(extractDir, "package");
+  if (existsSync(path.join(packageDir, "skills"))) {
+    throw new Error("Packed package must not include top-level skills/. Seed skills are source-owned.");
+  }
+  if (existsSync(path.join(packageDir, "packs"))) {
+    throw new Error("Packed package must not include packs/.");
+  }
   const repoNodeModules = path.join(repoRoot, "node_modules");
   if (!existsSync(repoNodeModules)) {
     throw new Error("node_modules is required for package smoke. Run `pnpm install` first.");
@@ -73,7 +79,9 @@ try {
     env: { HOME: homeDir },
   });
   await run(bin, ["mcp", "check"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "inspect", ".threadroot/skills/threadroot"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["automation", "approve"], { cwd: projectDir, env: { HOME: homeDir } });
@@ -108,6 +116,8 @@ try {
     cwd: projectDir,
     env: { HOME: homeDir },
   });
+  await rm(externalSkillDir, { recursive: true, force: true });
+  await run(bin, ["map", "--write"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
 } finally {
   if (tarballPath) {

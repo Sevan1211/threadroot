@@ -62,6 +62,9 @@ describe("CLI smoke", () => {
     const contextJson = JSON.parse(await run("context", "write tests", "--json")) as { task: string };
     expect(contextJson.task).toBe("write tests");
 
+    const map = await run("map", "--check");
+    expect(map).toContain("repo map: current");
+
     const skills = await run("skills", "validate");
     expect(skills).toContain("Skills valid.");
 

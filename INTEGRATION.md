@@ -70,6 +70,7 @@ threadroot automation approve --json
 Verification:
 
 ```bash
+threadroot map --check --json
 threadroot doctor --json
 threadroot status --json
 threadroot start "<task>" --json
@@ -91,8 +92,9 @@ threadroot skills expose <name-or-all> --agent <agent-or-universal>
 
 ## Default Harness Model
 
-Every initialized project starts with four seed skills:
+Every initialized project starts with five seed skills:
 
+- `threadroot`
 - `find-skills`
 - `create-skill`
 - `create-tool`
@@ -101,11 +103,12 @@ Every initialized project starts with four seed skills:
 The website should describe these as adaptive capabilities, not a bundled library. Agents should:
 
 1. Start with `threadroot start "<task>"`.
-2. Use installed skills when relevant.
-3. Search with `threadroot skills find "<query>"` when no installed skill fits.
-4. Install through `threadroot skills add <source> --skill <name>`.
-5. Create a project-specific skill under `.threadroot/skills/` when no good external skill exists.
-6. Create tools/connections only through Threadroot commands.
+2. Refresh stale codebase navigation with `threadroot map --write`.
+3. Use installed skills when relevant.
+4. Search with `threadroot skills find "<query>"` when no installed skill fits.
+5. Install through `threadroot skills add <source> --skill <name>`.
+6. Create a project-specific skill under `.threadroot/skills/` when no good external skill exists.
+7. Create tools/connections only through Threadroot commands.
 
 ## External Skill Mapping
 
@@ -156,6 +159,8 @@ threadroot start "<task>" --json
 threadroot status --json
 threadroot doctor --json
 threadroot context "<task>" --json
+threadroot map --write --json
+threadroot map --check --json
 threadroot mcp check --json
 threadroot mcp setup --json
 threadroot automation status --json
@@ -244,7 +249,7 @@ The OSS core is ready for website work when:
 
 - `pnpm release:check` passes.
 - `threadroot bootstrap --yes --json` initializes a temp repo.
-- Initialized repos contain exactly the four seed skills by default.
+- Initialized repos contain exactly the five seed skills by default.
 - `threadroot doctor --json` reports `ok: true` or actionable findings.
 - Skill installs write `.threadroot/lock.json` provenance.
 - MCP check verifies the local stdio server.

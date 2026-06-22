@@ -59,19 +59,22 @@ Use only real Threadroot commands. Do not invent commands.
 3. Start the session:
    npx --yes threadroot@latest start "start this project"
 
-4. If no installed skill fits the task, search first:
+4. If the repo map is missing or stale, refresh it:
+   npx --yes threadroot@latest map --write
+
+5. If no installed skill fits the task, search first:
    npx --yes threadroot@latest skills find "<task-specific query>"
 
-5. Install skills only through Threadroot:
+6. Install skills only through Threadroot:
    npx --yes threadroot@latest skills add <source> --skill <name>
 
-6. If no good skill exists, create a project-specific skill under .threadroot/skills/.
+7. If no good skill exists, create a project-specific skill under .threadroot/skills/.
 
-7. For repeatable commands, use tools:
+8. For repeatable commands, use tools:
    npx --yes threadroot@latest tools detect
    npx --yes threadroot@latest tools create --from-command "<command>"
 
-8. For local services, use connections:
+9. For local services, use connections:
    npx --yes threadroot@latest connections add <name> --provider <provider> --command <command>
 
 When complete, tell me:
@@ -80,16 +83,17 @@ Success: Threadroot is ready. Run threadroot start "<task>" for future sessions.
 
 ## What Init Creates
 
-Every initialized project starts with exactly four Threadroot-adapted seed skills:
+Every initialized project starts with five Threadroot-adapted seed skills:
 
 ```text
+.threadroot/skills/threadroot/SKILL.md
 .threadroot/skills/find-skills/SKILL.md
 .threadroot/skills/create-skill/SKILL.md
 .threadroot/skills/create-tool/SKILL.md
 .threadroot/skills/create-connection/SKILL.md
 ```
 
-These are not a bundled skill library. They teach agents how to find or create the specific capability needed for the current task.
+These are not a bundled skill library. They teach agents how to use Threadroot, then find or create the specific capability needed for the current task.
 
 Threadroot also creates:
 
@@ -97,7 +101,9 @@ Threadroot also creates:
 .threadroot/harness.yaml
 .threadroot/lock.json
 .threadroot/memory/project.md
+.threadroot/memory/repo-map.md
 .threadroot/tools/*.yaml   # when local package scripts are detected
+.gitignore                 # Threadroot-managed local/cache ignores
 ```
 
 All seed skill provenance is recorded in `.threadroot/lock.json`, including upstream references where the seed was adapted from.
@@ -109,6 +115,7 @@ threadroot bootstrap [--yes] [--agent <list>] [--task <task>] [--mcp] [--expose 
 threadroot init [--no-import] [--profile <profile>] [--expose <list>]
 threadroot start "<task>" [--json]
 threadroot context "<task>" [--json]
+threadroot map --write|--check [--json]
 threadroot status [--json]
 threadroot doctor [--json]
 threadroot diff
@@ -187,7 +194,7 @@ threadroot mcp setup --write
 threadroot mcp check
 ```
 
-MCP exposes lazy access to context, skills, tools, connections, memory, status, and doctor. Clients may need a reload/new session after MCP config changes.
+MCP exposes lazy access to context, repo-map/search/read, skills, tools, connections, memory, status, and doctor. Clients may need a reload/new session after MCP config changes.
 
 ## Development
 
@@ -201,7 +208,7 @@ pnpm package:smoke
 pnpm pack:check
 ```
 
-The npm package ships `dist/`, `skills/`, README/license/security docs, and integration docs.
+The npm package ships `dist/`, README/license/security docs, changelog, and integration docs. Seed skills are compiled from source templates; no top-level `skills/` or `packs/` directory is shipped.
 
 ## Security
 

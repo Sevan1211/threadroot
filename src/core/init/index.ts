@@ -18,6 +18,8 @@ import { walkRepo } from "../scan/walk.js";
 import { stringify as stringifyYaml } from "yaml";
 import type { ProfileId } from "../../types.js";
 import { exposeProject } from "../expose.js";
+import { ensureThreadrootGitignore } from "../gitignore.js";
+import { writeRepoMap } from "../repo-map.js";
 import { PROJECT_MEMORY_TEMPLATE, writeSeedSkills } from "./builtins.js";
 import { type ImportReport, importVendorFiles } from "./import.js";
 
@@ -189,6 +191,11 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   const tools = await writeStarterTools(repoRoot, profile, options.force ?? false);
   const skills = await writeSeedSkills(repoRoot);
   const memory = await writeProjectMemory(repoRoot);
+  await ensureThreadrootGitignore(repoRoot);
+  const repoMap = await writeRepoMap(repoRoot);
+  if (!memory.includes(path.join(repoRoot, repoMap.path))) {
+    memory.push(path.join(repoRoot, repoMap.path));
+  }
 
   const manifest = harnessManifestSchema.parse({
     name,

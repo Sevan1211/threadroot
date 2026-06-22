@@ -24,6 +24,7 @@ import type { LockEntry } from "../core/install/source.js";
 import { findSkills } from "../core/skills-find.js";
 import { scanSkillPath } from "../core/skills-scan.js";
 import { THREADROOT_VERSION } from "../core/version.js";
+import { readRepoFile, repoMapStatus, searchRepo, writeRepoMap } from "../core/repo-map.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -73,6 +74,44 @@ const toolRegistry: ToolSpec[] = [
       }
       return assembleContext(repoRoot, args.task, { harness });
     },
+  }),
+  defineTool({
+    name: "repo_map",
+    description: "Return the compact codebase map status and excerpt; optionally refresh .threadroot/memory/repo-map.md.",
+    inputSchema: objectSchema({
+      write: { type: "boolean", description: "Write or refresh the tracked repo map before returning it." },
+    }),
+    args: z.object({ write: z.boolean().optional() }),
+    run: async (repoRoot, args) => {
+      const result = args.write ? await writeRepoMap(repoRoot) : await repoMapStatus(repoRoot);
+      return result;
+    },
+  }),
+  defineTool({
+    name: "repo_search",
+    description: "Search repo text files with ignore and size limits. Use before reading broad source files.",
+    inputSchema: objectSchema(
+      {
+        query: { type: "string", description: "Search query. All terms must appear on a matching line." },
+        limit: { type: "number", description: "Maximum number of matches to return." },
+      },
+      ["query"],
+    ),
+    args: z.object({ query: z.string().min(1), limit: z.number().int().positive().max(100).optional() }),
+    run: async (repoRoot, args) => ({ matches: await searchRepo(repoRoot, args.query, args.limit) }),
+  }),
+  defineTool({
+    name: "repo_read",
+    description: "Read one repo-relative text file with traversal, binary, ignore, and size protections.",
+    inputSchema: objectSchema(
+      {
+        path: { type: "string", description: "Repo-relative file path." },
+        maxBytes: { type: "number", description: "Maximum text characters to return." },
+      },
+      ["path"],
+    ),
+    args: z.object({ path: z.string().min(1), maxBytes: z.number().int().positive().max(100_000).optional() }),
+    run: (repoRoot, args) => readRepoFile(repoRoot, args.path, args.maxBytes),
   }),
   defineTool({
     name: "skills_find",
@@ -473,7 +512,7 @@ export async function handleMessage(
         serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
         capabilities: { tools: {} },
         instructions:
-          "Threadroot exposes the repository's AI agent harness. Call `context` before broad coding work, `doctor` for health and trust checks, inspect skills/tools before risky actions, and use `memory_append` for durable handoffs.",
+          "Threadroot exposes the repository's AI agent harness. Call `context` before broad coding work, use `repo_map`/`repo_search`/`repo_read` for targeted codebase awareness, run `doctor` for health and trust checks, inspect skills/tools before risky actions, and use `memory_append` for durable handoffs.",
       });
     }
 

@@ -4,3 +4,13 @@ coverage/
 .DS_Store
 .env
 .env.*
+
+# threadroot:begin local-state
+.threadroot/cache/
+.threadroot/tmp/
+.threadroot/logs/
+.threadroot/state/
+.threadroot/local.*
+.threadroot/*.local.*
+.threadroot/*.secret.*
+# threadroot:end local-state

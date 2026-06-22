@@ -87,8 +87,10 @@ describe("skills commands", () => {
   });
 
   it("inspects a skill path", async () => {
+    await initHarness(repo, { import: false, home: repo });
+
     const lines = captureLog();
-    await runSkillsInspect(process.cwd(), "skills/find-skills");
+    await runSkillsInspect(repo, ".threadroot/skills/find-skills");
     const output = lines.join("\n");
 
     expect(output).toContain("find-skills");
@@ -97,7 +99,9 @@ describe("skills commands", () => {
   });
 
   it("validates the repo-level seed skills", async () => {
-    const skillsPath = path.join(process.cwd(), "skills");
+    await initHarness(repo, { import: false, home: repo });
+
+    const skillsPath = path.join(repo, ".threadroot/skills");
     const report = await validateSkillPath(skillsPath);
     expect(report).toMatchObject({ ok: true, findings: [] });
   });

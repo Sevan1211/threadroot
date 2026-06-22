@@ -41,6 +41,12 @@ function printContext(context: HarnessContext | undefined): void {
   }
 
   console.log(`task: ${context.task}`);
+  if (context.repoMap) {
+    console.log(`repo map: ${context.repoMap.status} [${context.repoMap.path}]`);
+    if (context.repoMap.status !== "current") {
+      console.log("- next: threadroot map --write");
+    }
+  }
   if (context.skills.length > 0) {
     const skillLabel = context.skills.some((skill) => skill.score > 0) ? "relevant skills:" : "starter skills:";
     console.log(skillLabel);
@@ -79,6 +85,7 @@ function printCommandMap(): void {
   console.log("agent command map:");
   console.log('- `threadroot start "<task>"` - begin a focused agent session');
   console.log('- `threadroot context "<task>"` - get relevant skills, tools, rules, and memory');
+  console.log("- `threadroot map --write|--check` - maintain compact codebase navigation context");
   console.log("- `threadroot doctor` - check harness health and trust issues");
   console.log('- `threadroot skills find "<query>"` - discover task-specific skills without leaving `.threadroot/`');
   console.log("- `threadroot skills add|list|inspect|scan|trust|expose` - install and inspect skill capabilities");

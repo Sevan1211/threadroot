@@ -2,6 +2,7 @@ import { type EffectiveHarness, resolveHarness } from "./load.js";
 import { projectLockPath, userLockPath } from "./paths.js";
 import { readLockFile } from "../install/lock.js";
 import type { LockEntry } from "../install/source.js";
+import { repoMapStatus, type RepoMapSummary } from "../repo-map.js";
 
 export type ContextSkill = {
   name: string;
@@ -51,10 +52,12 @@ export type ContextConnection = {
 export type ContextMemory = {
   type: string;
   body: string;
+  truncated?: boolean;
 };
 
 export type HarnessContext = {
   task: string;
+  repoMap?: RepoMapSummary;
   skills: ContextSkill[];
   rules: ContextRule[];
   tools: ContextTool[];
@@ -131,6 +134,14 @@ function contextSkill(
   };
 }
 
+function compactMemory(type: string, body: string): ContextMemory {
+  const limit = type === "repo-map" ? 4_000 : 2_000;
+  if (body.length <= limit) {
+    return { type, body };
+  }
+  return { type, body: `${body.slice(0, limit).trimEnd()}\n\n[truncated]`, truncated: true };
+}
+
 /**
  * Assemble the task-relevant harness slice: ranked skills (deterministic
  * keyword match on name/when/tags), all available tools and rules, and durable
@@ -144,6 +155,7 @@ export async function assembleContext(
   const harness = options.harness ?? (await resolveHarness(repoRoot, { home: options.home }));
   const terms = taskTerms(task);
   const lockEntries = await skillLockEntries(repoRoot, options.home);
+  const map = await repoMapStatus(repoRoot).catch(() => undefined);
 
   let ranked = harness.skills
     .map((skill) => ({
@@ -161,6 +173,7 @@ export async function assembleContext(
 
   return {
     task,
+    repoMap: map,
     skills: ranked,
     rules: harness.rules.map((rule) => ({ name: rule.name, applyTo: rule.frontmatter.applyTo })),
     tools: harness.tools.map((tool) => ({
@@ -182,6 +195,6 @@ export async function assembleContext(
       confirm: connection.manifest.confirm,
       healthcheck: Boolean(connection.manifest.healthcheck),
     })),
-    memory: harness.memory.map((entry) => ({ type: entry.type, body: entry.body })),
+    memory: harness.memory.map((entry) => compactMemory(entry.type, entry.body)),
   };
 }

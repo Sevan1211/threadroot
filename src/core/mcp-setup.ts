@@ -88,12 +88,13 @@ Steps:
 2. If it is not available, try \`npm exec threadroot -- --help\` or \`pnpm dlx threadroot --help\`. If this is a local checkout, use \`${localCommand} --help\`.
 3. Run \`threadroot bootstrap --yes --agent all --mcp --task "current task"\`. If this is a local checkout, run \`${localCommand} bootstrap --yes --agent all --mcp --task "current task"\`.
 4. Run \`threadroot start "current task"\` with the user's actual task.
-5. If no installed skill fits the task, run \`threadroot skills find "<query>"\`. Install only through \`threadroot skills add <source> --skill <name>\`; inspect medium/high-risk or Snyk-warned skills with \`threadroot skills inspect .threadroot/skills/<name>\` before trusting them.
-6. If no good external skill exists, use the \`create-skill\` seed skill and create a project-specific skill under \`.threadroot/skills/<name>/SKILL.md\`.
-7. For repeatable repo commands, run \`threadroot tools detect\` and create minimal safe tools with \`threadroot tools create\`. For local services, create connections with \`threadroot connections add\`; never store secrets.
-8. Before agent-created capabilities, check \`threadroot automation status\`. Ask the user to run \`threadroot automation approve\` only if they want safe low-risk capability creation for this project.
-9. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` for the Threadroot bootstrap shim or \`threadroot skills expose <name|all> --agent <agent|universal|all>\` for installed skill shims.
-10. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
+5. If the repo map is missing or stale, run \`threadroot map --write\`, then re-run \`threadroot start "current task"\`.
+6. If no installed skill fits the task, run \`threadroot skills find "<query>"\`. Install only through \`threadroot skills add <source> --skill <name>\`; inspect medium/high-risk or Snyk-warned skills with \`threadroot skills inspect .threadroot/skills/<name>\` before trusting them.
+7. If no good external skill exists, use the \`create-skill\` seed skill and create a project-specific skill under \`.threadroot/skills/<name>/SKILL.md\`.
+8. For repeatable repo commands, run \`threadroot tools detect\` and create minimal safe tools with \`threadroot tools create\`. For local services, create connections with \`threadroot connections add\`; never store secrets.
+9. Before agent-created capabilities, check \`threadroot automation status\`. Ask the user to run \`threadroot automation approve\` only if they want safe low-risk capability creation for this project.
+10. If the user asks for provider-native project skill files, run \`threadroot expose <agent>\` for the Threadroot bootstrap shim or \`threadroot skills expose <name|all> --agent <agent|universal|all>\` for installed skill shims.
+11. If project-local MCP config is useful, ask before running \`threadroot mcp setup --write\`, then tell the user to reload their agent surface.
 
 Final response:
 Say exactly:

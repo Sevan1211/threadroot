@@ -13,6 +13,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runExpose, type ExposeCliOptions } from "./commands/expose.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runInstall, type InstallCliOptions } from "./commands/install.js";
+import { runMap, type MapCliOptions } from "./commands/map.js";
 import { runMcp, runMcpCheck, runMcpSetup, type McpCheckOptions, type McpSetupOptions } from "./commands/mcp.js";
 import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
 import {
@@ -144,6 +145,14 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Assemble the task-relevant harness slice: skills, rules, tools, connections, and memory.")
     .option("--json", "Print machine-readable JSON.")
     .action((task: string, options) => runContext(repoRoot, task, options));
+
+  program
+    .command("map")
+    .description("Generate or check the compact repo map used for codebase-aware agent context.")
+    .option("--write", "Write .threadroot/memory/repo-map.md.")
+    .option("--check", "Exit non-zero when the repo map is missing or stale.")
+    .option("--json", "Print machine-readable JSON.")
+    .action((options: MapCliOptions) => runMap(repoRoot, options));
 
   program
     .command("run")
