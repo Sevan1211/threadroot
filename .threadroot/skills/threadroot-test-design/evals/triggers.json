@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Add tests for a new MCP tool.",
+    "Write regression coverage for path traversal rejection.",
+    "Update package smoke for a new shipped file."
+  ],
+  "shouldNotTrigger": [
+    "Write marketing copy.",
+    "Create a cloud connection."
+  ]
+}

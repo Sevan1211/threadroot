@@ -1,0 +1,7 @@
+name: typecheck
+description: Run the `typecheck` package script
+scope: project
+risk: low
+confirm: false
+input: {}
+run: pnpm run typecheck

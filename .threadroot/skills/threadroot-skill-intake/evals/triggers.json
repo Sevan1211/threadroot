@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Install a skill from skills.sh.",
+    "Create a project-specific skill for MCP development.",
+    "Review whether a third-party skill is safe to trust."
+  ],
+  "shouldNotTrigger": [
+    "Run an existing test tool.",
+    "Change a TypeScript parser helper with no skill changes."
+  ]
+}

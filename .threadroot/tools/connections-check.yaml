@@ -1,0 +1,10 @@
+name: connections-check
+description: Run healthchecks for configured Threadroot local CLI connections.
+scope: project
+risk: low
+confirm: false
+healthcheck:
+  run: threadroot --version
+  expectExitCode: 0
+input: {}
+run: threadroot connections check

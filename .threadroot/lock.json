@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "objects": [
+    {
+      "name": "create-connection",
+      "kind": "skill",
+      "sourceKind": "local",
+      "source": "threadroot:seed/create-connection",
+      "objectPath": "skills/create-connection",
+      "integrity": "sha256:fd97fd919dcf45a2f2e867028cb38cf313a4ba7b14cea5c9f42b31e58be7241c",
+      "risk": "low",
+      "adaptedBy": "threadroot",
+      "reviewed": true,
+      "installedAt": "2026-06-22T03:36:06.387Z"
+    },
+    {
+      "name": "create-skill",
+      "kind": "skill",
+      "sourceKind": "local",
+      "source": "threadroot:seed/create-skill",
+      "objectPath": "skills/create-skill",
+      "integrity": "sha256:4eef511d41365cef638a1a4373c0228b66445affcf5128f1ebe01b72bb7cf8a1",
+      "risk": "low",
+      "registry": "skills.sh",
+      "registryId": "anthropics/skills/skill-creator",
+      "installUrl": "https://github.com/anthropics/skills",
+      "auditUrl": "https://www.skills.sh/anthropics/skills/skill-creator",
+      "upstreamSource": "https://www.skills.sh/anthropics/skills/skill-creator",
+      "adaptedBy": "threadroot",
+      "reviewed": true,
+      "installedAt": "2026-06-22T03:36:06.389Z"
+    },
+    {
+      "name": "create-tool",
+      "kind": "skill",
+      "sourceKind": "local",
+      "source": "threadroot:seed/create-tool",
+      "objectPath": "skills/create-tool",
+      "integrity": "sha256:bdbb3edc8b6f69fb72c61f1ee4530a3ac5711f41be7f202e2d7c5731b252ab37",
+      "risk": "low",
+      "adaptedBy": "threadroot",
+      "reviewed": true,
+      "installedAt": "2026-06-22T03:36:06.393Z"
+    },
+    {
+      "name": "find-skills",
+      "kind": "skill",
+      "sourceKind": "local",
+      "source": "threadroot:seed/find-skills",
+      "objectPath": "skills/find-skills",
+      "integrity": "sha256:9ab6704e2df239018cb6d33b27339b819e5c33ed88934d5732a09d7e3ff6351e",
+      "risk": "low",
+      "registry": "skills.sh",
+      "registryId": "vercel-labs/skills/find-skills",
+      "installUrl": "https://github.com/vercel-labs/skills",
+      "auditUrl": "https://www.skills.sh/vercel-labs/skills/find-skills",
+      "upstreamSource": "https://www.skills.sh/vercel-labs/skills/find-skills",
+      "adaptedBy": "threadroot",
+      "reviewed": true,
+      "installedAt": "2026-06-22T03:36:06.395Z"
+    },
+    {
+      "name": "threadroot",
+      "kind": "skill",
+      "sourceKind": "local",
+      "source": "threadroot:seed/threadroot",
+      "objectPath": "skills/threadroot",
+      "integrity": "sha256:6b1445b09ea264c34e8c0ebb36bea6d6df65dc57b5f6e766b172df3195efbd6f",
+      "risk": "low",
+      "adaptedBy": "threadroot",
+      "reviewed": true,
+      "installedAt": "2026-06-22T03:36:06.382Z"
+    }
+  ]
+}

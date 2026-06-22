@@ -1,0 +1,7 @@
+name: build
+description: Run the `build` package script
+scope: project
+risk: low
+confirm: false
+input: {}
+run: pnpm run build

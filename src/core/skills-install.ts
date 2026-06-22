@@ -366,6 +366,23 @@ async function detectSkillCandidates(sourceRoot: string, repoName: string, expli
   return candidates;
 }
 
+async function detectNamedSkillCandidates(sourceRoot: string, repoName: string, skillName: string): Promise<SkillCandidate[]> {
+  const candidates: SkillCandidate[] = [];
+  const seen = new Set<string>();
+  for (const objectPath of likelySkillObjectPaths(skillName, repoName)) {
+    const safePath = safeRelativePath(objectPath);
+    if (seen.has(safePath)) {
+      continue;
+    }
+    seen.add(safePath);
+    const candidate = await readSkillCandidate(sourceRoot, safePath);
+    if (candidate && filterSkillCandidates([candidate], skillName).length > 0) {
+      candidates.push(candidate);
+    }
+  }
+  return candidates;
+}
+
 async function hashDirectory(root: string): Promise<string> {
   const hash = createHash("sha256");
   hash.update("threadroot-skill-directory-v1\n");
@@ -532,6 +549,22 @@ function exactPathSelectionCommand(source: string, candidate: SkillCandidate): s
   return `threadroot skills add ${source} --path ${candidate.objectPath}`;
 }
 
+function likelySkillObjectPaths(skillName: string, repoName: string): string[] {
+  return [
+    skillName,
+    path.posix.join(repoName, skillName),
+    path.posix.join("skills", skillName),
+    path.posix.join(".agents/skills", skillName),
+    path.posix.join(".claude/skills", skillName),
+    path.posix.join(".cursor/skills", skillName),
+    path.posix.join(".github/skills", skillName),
+    path.posix.join(".gemini/skills", skillName),
+    path.posix.join(".windsurf/skills", skillName),
+    path.posix.join(".opencode/skills", skillName),
+    path.posix.join(".agent/skills", skillName),
+  ];
+}
+
 function filterSkillCandidates(candidates: SkillCandidate[], skillName: string): SkillCandidate[] {
   const wanted = skillName.toLowerCase();
   return candidates.filter((candidate) => {
@@ -612,7 +645,13 @@ export async function addSkill(repoRoot: string, rawSource: string, options: Ski
   }
 
   try {
-    const detectedCandidates = await detectSkillCandidates(sourceRoot, sourceRepoName(ref, sourceRoot), explicitPath);
+    const repoName = sourceRepoName(ref, sourceRoot);
+    const exactCandidates =
+      source.skillName && !explicitPath
+        ? await detectNamedSkillCandidates(sourceRoot, repoName, source.skillName)
+        : [];
+    const detectedCandidates =
+      exactCandidates.length > 0 ? exactCandidates : await detectSkillCandidates(sourceRoot, repoName, explicitPath);
     const candidates = source.skillName ? filterSkillCandidates(detectedCandidates, source.skillName) : detectedCandidates;
     const selectionCommands = detectedCandidates.map((candidate) => {
       const duplicates = detectedCandidates.filter((entry) => entry.name === candidate.name).length > 1;

@@ -1,0 +1,7 @@
+name: package-smoke
+description: Run the `package:smoke` package script
+scope: project
+risk: low
+confirm: false
+input: {}
+run: pnpm run package:smoke

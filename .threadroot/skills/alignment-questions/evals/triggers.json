@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Before you implement this, ask me whatever you need so we are aligned.",
+    "There are a few ways to handle this product behavior; help me choose the right direction.",
+    "I want you to clarify requirements before changing the code."
+  ],
+  "shouldNotTrigger": [
+    "Fix this typo in README.md.",
+    "Run the test suite and report failures."
+  ]
+}

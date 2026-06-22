@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Prepare version 0.1.8 for npm publish.",
+    "Check whether package smoke covers the new files.",
+    "Update changelog and publish commands."
+  ],
+  "shouldNotTrigger": [
+    "Add an internal unit test not related to release behavior.",
+    "Search for an external skill."
+  ]
+}

@@ -1,0 +1,20 @@
+name: github
+provider: github
+kind: cli
+command: gh
+profile: Sevan1211
+description: Local github CLI connection using `gh`.
+scope: project
+risk: low
+confirm: false
+healthcheck:
+  run: gh auth status
+  expectExitCode: 0
+allow:
+  - repo
+  - pr
+  - issue
+  - auth status
+deny:
+  - auth logout
+  - repo delete

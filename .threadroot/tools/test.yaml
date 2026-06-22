@@ -1,0 +1,7 @@
+name: test
+description: Run the `test` package script
+scope: project
+risk: low
+confirm: false
+input: {}
+run: pnpm run test

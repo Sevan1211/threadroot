@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, "g");
 
 export type SkillSearchCandidate = {
   name: string;
@@ -36,6 +37,10 @@ function cleanSkillName(value: string): string {
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-+/g, "-");
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_ESCAPE_PATTERN, "");
 }
 
 function parseSkillsShUrl(url: string): { source: string; name: string } | undefined {
@@ -86,7 +91,7 @@ function candidateFromSource(source: string, name: string, url?: string, summary
 
 export function parseSkillSearchOutput(query: string, stdout: string): SkillSearchCandidate[] {
   const candidates = new Map<string, SkillSearchCandidate>();
-  const lines = stdout.split(/\r?\n/);
+  const lines = stripAnsi(stdout).split(/\r?\n/);
   const urlPattern = /https?:\/\/[^\s)>\]]+/g;
 
   for (const line of lines) {
@@ -147,7 +152,7 @@ export async function findSkills(query: string, options: SkillSearchOptions = {}
 
   try {
     const result = await runner("npx", ["--yes", "skills", "find", trimmed]);
-    const raw = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`.trim();
+    const raw = stripAnsi(`${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`).trim();
     return {
       query: trimmed,
       status: "ok",

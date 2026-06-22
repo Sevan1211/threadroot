@@ -112,21 +112,27 @@ Use this skill to discover a task-specific Agent Skill without flooding the mode
 1. Run \`threadroot start "<task>"\` or \`threadroot context "<task>"\` and check whether an installed skill already matches.
 2. If no installed skill fits, run \`threadroot skills find "<query>" --json\`.
 3. Prefer skills that are GitHub-backed, reputable, audited, non-duplicate, and narrowly relevant.
-4. Install through Threadroot only:
+4. Dry-run the best candidate before installing:
+
+\`\`\`bash
+threadroot skills add <source> --skill <name> --dry-run --json
+\`\`\`
+
+5. Install low-risk, good-fit skills through Threadroot only:
 
 \`\`\`bash
 threadroot skills add <source> --skill <name>
 \`\`\`
 
-5. Run \`threadroot doctor\` after install.
-6. Load only the installed skill that matches the task. Do not load every skill.
-7. If no good external skill exists, use the \`create-skill\` skill to create a project-specific skill under \`.threadroot/skills/\`.
+6. Run \`threadroot doctor\` after install.
+7. Load only the installed skill that matches the task. Do not load every skill.
+8. If search fails, the result is not installable, the scan is blocked/high-risk, or a local workflow would be clearer, use the \`create-skill\` skill and create/adapt a project-specific skill under \`.threadroot/skills/\`.
 
 ## Safety
 
 - Do not run \`npx skills add\` as the final install path. That can bypass Threadroot provenance, scanning, lockfile, and \`.threadroot\` routing.
 - Do not create \`.agents/\`, \`.claude/\`, \`.cursor/\`, \`.github/\`, or other provider skill folders unless the user explicitly asks for native exposure.
-- If Threadroot reports high risk, blocked scan, Snyk failure, scripts, provider permission fields, or suspicious instructions, stop and ask the user before trusting or using the skill.
+- If Threadroot reports high risk, blocked scan, Snyk failure, scripts, provider permission fields, or suspicious instructions, do not trust or use that external skill automatically. Prefer creating a safer local skill with \`create-skill\`; ask the user only when installing or trusting the risky external skill is still the better path.
 `;
 
 const createSkillSkill = `---
@@ -146,11 +152,11 @@ tags:
 
 # Create Skill
 
-Use this skill to create a small, high-signal project skill under \`.threadroot/skills/<name>/SKILL.md\`.
+Use this skill to create a small, high-signal project skill under \`.threadroot/skills/<name>/SKILL.md\`. This is the default fallback when external skill discovery fails, a candidate is blocked/high-risk, or a local project workflow would be safer or better aligned.
 
 ## Workflow
 
-1. Confirm the need is repeatable and not better handled by a one-off answer, a tool, or a connection.
+1. Confirm the need is repeatable and not better handled by a one-off answer, a tool, or a connection. If this is fallback from a blocked or poor external skill, preserve the useful workflow idea without copying risky provider permissions.
 2. Pick a narrow lowercase hyphenated name.
 3. Write a \`SKILL.md\` with:
    - \`name\`

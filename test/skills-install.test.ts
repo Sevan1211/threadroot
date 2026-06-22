@@ -104,6 +104,29 @@ describe("skill source parsing", () => {
       auditUrl: "https://www.skills.sh/anthropics/skills/frontend-design",
     });
   });
+
+  it("can target one named skill without failing on unrelated invalid skills in the same repo", async () => {
+    const localSource = "external";
+    await writeSkill(repo, `${localSource}/skills/git-commit`, "git-commit");
+    await write(
+      repo,
+      `${localSource}/skills/aws-cloudwatch-investigation/SKILL.md`,
+      [
+        "---",
+        "name: AWS CloudWatch Investigation",
+        "description: Use when testing an upstream skill with a non-Threadroot name.",
+        "---",
+        "",
+        "# AWS CloudWatch Investigation",
+      ].join("\n"),
+    );
+
+    const result = await addSkill(repo, `./${localSource}`, { skillName: "git-commit", dryRun: true, snyk: false });
+
+    expect(result.needsSelection).toBe(false);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({ name: "git-commit", objectPath: "skills/git-commit" });
+  });
 });
 
 describe("skill scan", () => {

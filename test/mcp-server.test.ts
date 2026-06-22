@@ -115,6 +115,16 @@ describe("mcp server handleMessage", () => {
     });
     const readResult = read?.result as { structuredContent: { content: string } };
     expect(readResult.structuredContent.content).toContain("threadroot-map");
+
+    const repoMapRead = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 23,
+      method: "tools/call",
+      params: { name: "repo_read", arguments: { path: ".threadroot/memory/repo-map.md" } },
+    });
+    const repoMapReadResult = repoMapRead?.result as { structuredContent: { content: string; path: string } };
+    expect(repoMapReadResult.structuredContent).toMatchObject({ path: ".threadroot/memory/repo-map.md" });
+    expect(repoMapReadResult.structuredContent.content).toContain("# Repo Map");
   });
 
   it("does not let MCP self-confirm risky tool execution", async () => {

@@ -1,0 +1,10 @@
+name: tools-check
+description: Run healthchecks for all Threadroot harness tools.
+scope: project
+risk: low
+confirm: false
+healthcheck:
+  run: threadroot --version
+  expectExitCode: 0
+input: {}
+run: threadroot tools check

@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Commit these changes with a detailed message.",
+    "Prepare a consistent git commit for the current diff.",
+    "Review the worktree and make a focused commit."
+  ],
+  "shouldNotTrigger": [
+    "Explain what git commit means.",
+    "Install a GitHub CLI connection."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "shouldTrigger": [
+    "Add a new MCP tool for repo search.",
+    "Fix threadroot mcp check.",
+    "Change tools_run authorization through MCP."
+  ],
+  "shouldNotTrigger": [
+    "Only update README wording unrelated to MCP.",
+    "Add a normal package script."
+  ]
+}

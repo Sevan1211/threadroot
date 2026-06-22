@@ -52,14 +52,18 @@ describe("repo map", () => {
 
   it("supports safe targeted search and reads", async () => {
     await write("src/feature.ts", "export function threadrootFeature() { return 'map'; }\n");
+    await writeRepoMap(repo);
 
     const matches = await searchRepo(repo, "threadrootFeature");
     const read = await readRepoFile(repo, "src/feature.ts", 20);
+    const repoMap = await readRepoFile(repo, ".threadroot/memory/repo-map.md", 20);
 
     expect(matches[0]).toMatchObject({ path: "src/feature.ts", line: 1 });
     expect(read.truncated).toBe(true);
     expect(read.content).toBe("export function thre");
+    expect(repoMap.content).toBe("<!-- threadroot:repo");
     await expect(readRepoFile(repo, "../outside.txt")).rejects.toThrow(/outside the repository/);
     await expect(readRepoFile(repo, path.join(repo, "src/feature.ts"))).rejects.toThrow(/absolute repository path/);
+    await expect(readRepoFile(repo, ".threadroot/harness.yaml")).rejects.toThrow(/Cannot read repo text file/);
   });
 });

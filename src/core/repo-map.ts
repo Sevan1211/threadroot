@@ -12,7 +12,7 @@ import { walkRepo } from "./scan/walk.js";
 import type { ProfileId } from "../types.js";
 
 const execFileAsync = promisify(execFile);
-const REPO_MAP_RELATIVE_PATH = path.join(".threadroot", "memory", "repo-map.md");
+const REPO_MAP_RELATIVE_PATH = ".threadroot/memory/repo-map.md";
 const MAX_TEXT_FILE_BYTES = 256_000;
 const DEFAULT_SEARCH_LIMIT = 25;
 const DEFAULT_READ_LIMIT = 40_000;
@@ -319,7 +319,7 @@ function isProbablyText(buffer: Buffer): boolean {
 }
 
 async function readTextFile(repoRoot: string, relativePath: string, maxBytes: number): Promise<RepoReadResult | undefined> {
-  if (isIgnoredPath(relativePath)) {
+  if (isIgnoredPath(relativePath) && relativePath !== REPO_MAP_RELATIVE_PATH) {
     return undefined;
   }
   const filePath = toRepoPath(repoRoot, relativePath);

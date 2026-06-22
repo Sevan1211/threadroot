@@ -1,0 +1,7 @@
+name: pack-check
+description: Run the `pack:check` package script
+scope: project
+risk: low
+confirm: false
+input: {}
+run: pnpm run pack:check
