@@ -7,6 +7,7 @@ import { assembleContext, type HarnessContext } from "./harness/context.js";
 import { readRepoIndex, scoreIndexCandidates } from "./repo-index.js";
 import { repoMapStatus, searchRepo, type RepoSearchMatch } from "./repo-map.js";
 import { walkRepo } from "./scan/walk.js";
+import { matchingTraceRoutingHints } from "./trace-routing.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -108,6 +109,8 @@ const THREADROOT_VALUE_TERMS = new Set([
   "agents",
   "context",
   "cost",
+  "loop",
+  "loops",
   "mcp",
   "output",
   "outputs",
@@ -129,8 +132,12 @@ const THREADROOT_VALUE_HINTS: Array<{ path: string; score: number; reason: strin
   { path: "src/core/task-packet.ts", score: 20, reason: "Threadroot task-packet compiler" },
   { path: "src/commands/task.ts", score: 16, reason: "Threadroot task CLI surface" },
   { path: "src/core/working-set.ts", score: 14, reason: "Threadroot context candidate engine" },
+  { path: "src/core/loop.ts", score: 14, reason: "Threadroot improvement-loop runtime" },
+  { path: "src/core/improve.ts", score: 12, reason: "Threadroot trace-driven improvement surface" },
   { path: "src/mcp/server.ts", score: 12, reason: "Threadroot MCP context surface" },
   { path: "src/core/harness/context.ts", score: 10, reason: "Threadroot context assembly surface" },
+  { path: "src/core/provider-adapters.ts", score: 10, reason: "Threadroot provider adapter surface" },
+  { path: "src/core/connections/index.ts", score: 8, reason: "Threadroot connection surface" },
   { path: "test/mcp-server.test.ts", score: 8, reason: "Threadroot context-routing tests" },
   { path: "test/cli-smoke.test.ts", score: 7, reason: "Threadroot first-run workflow tests" },
   { path: "README.md", score: 5, reason: "Threadroot product promise" },
@@ -138,6 +145,51 @@ const THREADROOT_VALUE_HINTS: Array<{ path: string; score: number; reason: strin
 ];
 
 const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; paths: Array<{ path: string; score: number }>; reason: string }> = [
+  {
+    all: ["threadroot"],
+    any: ["audit", "product", "useful", "valuable", "review"],
+    reason: "Threadroot full-product audit surface",
+    paths: [
+      { path: "src/core/task-packet.ts", score: 120 },
+      { path: "src/core/loop.ts", score: 116 },
+      { path: "src/core/improve.ts", score: 114 },
+      { path: "src/core/working-set.ts", score: 112 },
+      { path: "src/core/provider-adapters.ts", score: 104 },
+      { path: "src/core/connections/index.ts", score: 98 },
+      { path: "README.md", score: 54 },
+      { path: "INTEGRATION.md", score: 50 },
+      { path: "src/mcp/server.ts", score: 42 },
+      { path: "test/trace-loop.test.ts", score: 40 },
+    ],
+  },
+  {
+    all: ["skills"],
+    any: ["built", "builtin", "built-in", "evaluate", "help", "value"],
+    reason: "skill value and trigger eval surface",
+    paths: [
+      { path: "src/core/init/seed-skills.ts", score: 150 },
+      { path: "src/core/context-evals.ts", score: 140 },
+      { path: "src/core/skills.ts", score: 136 },
+      { path: "test/init.test.ts", score: 128 },
+      { path: "test/skills.test.ts", score: 126 },
+      { path: "src/core/harness/context.ts", score: 70 },
+      { path: "src/commands/skills.ts", score: 50 },
+    ],
+  },
+  {
+    any: ["loop", "loops", "recursive", "improvement", "improvements", "candidate", "candidates", "promotion"],
+    reason: "loop and trace-driven improvement surface",
+    paths: [
+      { path: "src/core/loop.ts", score: 46 },
+      { path: "src/core/improve.ts", score: 44 },
+      { path: "src/core/trace-evals.ts", score: 34 },
+      { path: "src/core/provider-adapters.ts", score: 32 },
+      { path: "src/commands/loop.ts", score: 30 },
+      { path: "src/commands/improve.ts", score: 28 },
+      { path: "test/trace-loop.test.ts", score: 38 },
+      { path: "test/provider-adapters.test.ts", score: 24 },
+    ],
+  },
   {
     all: ["mcp"],
     any: ["resource", "resources", "task_packet", "tool", "tools", "handshake"],
@@ -730,6 +782,19 @@ function addSurfaceHints(candidates: Map<string, WorkingSetFile>, files: Set<str
   }
 }
 
+async function addTraceRoutingHints(candidates: Map<string, WorkingSetFile>, repoRoot: string, files: Set<string>, task: string): Promise<void> {
+  const hints = await matchingTraceRoutingHints(repoRoot, task).catch(() => []);
+  for (const hint of hints.slice(0, 8)) {
+    hint.expectedFiles.forEach((filePath, index) => {
+      if (!files.has(filePath)) {
+        return;
+      }
+      const score = Math.max(18, Math.min(90, Math.round(hint.score * 1.35) - index * 5));
+      addCandidate(candidates, filePath, score, `trace-derived routing hint: ${hint.id}`);
+    });
+  }
+}
+
 function isDocumentationTask(taskTerms: string[]): boolean {
   return taskTerms.some((term) => DOC_TASK_TERMS.has(term));
 }
@@ -846,6 +911,7 @@ export async function assembleWorkingSet(
   addPathMatches(candidates, filesInRepo, taskTerms);
   addThreadrootValueHints(candidates, fileSet, taskTerms);
   addSurfaceHints(candidates, fileSet, taskTerms);
+  await addTraceRoutingHints(candidates, repoRoot, fileSet, task);
   if (index) {
     for (const candidate of scoreIndexCandidates(index, task).slice(0, 40)) {
       if (!fileSet.has(candidate.path)) {

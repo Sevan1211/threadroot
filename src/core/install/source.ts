@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { z } from "zod";
 
 /**
@@ -74,7 +76,7 @@ function parseGithub(raw: string): ObjectSourceRef {
 }
 
 function isLocalPath(raw: string): boolean {
-  return raw.startsWith("./") || raw.startsWith("../") || raw.startsWith("/") || raw === "." || raw === "..";
+  return raw.startsWith("./") || raw.startsWith("../") || path.isAbsolute(raw) || raw === "." || raw === "..";
 }
 
 /**

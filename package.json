@@ -1,6 +1,6 @@
 {
   "name": "threadroot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
   "license": "MIT",
   "type": "module",
@@ -44,11 +44,11 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
+    "build": "node scripts/build.mjs",
     "dev": "tsx src/index.ts",
     "prepack": "pnpm build",
     "prepublishOnly": "pnpm typecheck && pnpm lint && pnpm test",
-    "pack:check": "npm --cache /tmp/threadroot-npm-cache pack --dry-run",
+    "pack:check": "node scripts/pack-check.mjs",
     "package:smoke": "node scripts/package-smoke.mjs",
     "release:check": "pnpm typecheck && pnpm lint && pnpm test && pnpm pack:check && pnpm package:smoke",
     "test": "vitest run",

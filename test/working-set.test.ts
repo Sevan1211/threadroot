@@ -75,4 +75,35 @@ describe("assembleWorkingSet", () => {
     expect(paths[0]?.startsWith("src/")).toBe(true);
     expect(paths.indexOf("CHANGELOG.md")).toBeGreaterThan(paths.indexOf("src/core/repo-index.ts"));
   });
+
+  it("routes full-product loop audits to loop, improvement, provider, and routing surfaces", async () => {
+    await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
+    await write("README.md", "# Threadroot\n\nProduct promise.\n");
+    await write("INTEGRATION.md", "# Integration\n\nMCP and website contract.\n");
+    await write("src/core/loop.ts", "export function startLoop() { return 'loop runtime'; }\n");
+    await write("src/core/improve.ts", "export function improveLatest() { return 'trace candidates'; }\n");
+    await write("src/core/task-packet.ts", "export function assembleTaskPacket() { return 'task packet'; }\n");
+    await write("src/core/working-set.ts", "export function assembleWorkingSet() { return 'routing'; }\n");
+    await write("src/core/provider-adapters.ts", "export function providerStatuses() { return 'providers'; }\n");
+    await write("src/core/connections/index.ts", "export function checkConnections() { return 'connections'; }\n");
+    await write("test/trace-loop.test.ts", "test('loop trace', () => undefined);\n");
+
+    await initHarness(repo, { import: false, home: repo });
+
+    const result = await assembleWorkingSet(repo, "review the full Threadroot product loops and recursive improvements", {
+      home: repo,
+      maxFiles: 10,
+    });
+    const paths = [...result.files, ...result.tests].map((file) => file.path).slice(0, 8);
+
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "src/core/loop.ts",
+        "src/core/improve.ts",
+        "src/core/task-packet.ts",
+        "src/core/working-set.ts",
+        "src/core/provider-adapters.ts",
+      ]),
+    );
+  });
 });

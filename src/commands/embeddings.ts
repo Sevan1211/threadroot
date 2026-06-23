@@ -32,7 +32,7 @@ export async function runEmbeddingsConfigure(repoRoot: string, options: Embeddin
   console.log(`embeddings: ${config.enabled ? "configured" : "disabled"}`);
   if (config.provider) console.log(`provider: ${config.provider}`);
   if (config.model) console.log(`model: ${config.model}`);
-  console.log("No embeddings are computed or uploaded until an explicit refresh adapter is available.");
+  console.log("Built-in local hashing embeddings stay active in the repo index; external provider calls remain explicit.");
 }
 
 export async function runEmbeddingsStatus(repoRoot: string, options: JsonCliOptions = {}): Promise<void> {
@@ -42,6 +42,7 @@ export async function runEmbeddingsStatus(repoRoot: string, options: JsonCliOpti
     return;
   }
   console.log(`embeddings: ${status.enabled ? "enabled" : "disabled"}`);
+  console.log(`built-in: ${status.builtIn.provider}/${status.builtIn.model} (${status.builtIn.indexedEmbeddings} indexed)`);
   console.log(`index: ${status.indexStatus}`);
   console.log(status.message);
 }

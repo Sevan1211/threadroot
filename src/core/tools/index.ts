@@ -2,6 +2,7 @@ import { type EffectiveHarness, resolveHarness } from "../harness/index.js";
 import type { LoadedTool } from "../harness/load.js";
 import { projectLockPath, userLockPath } from "../harness/paths.js";
 import { externalToolNames, readLockFile } from "../install/lock.js";
+import { appendTraceEventIfActive } from "../trace.js";
 import { authorizeTool } from "./authorize.js";
 import { authorizeConnectionCommand } from "./connection-policy.js";
 import { type ToolRunResult, executeScript, executeShell } from "./execute.js";
@@ -62,6 +63,11 @@ export async function runTool(repoRoot: string, options: RunToolOptions): Promis
     ? harness.connections.find((entry) => entry.name === tool.manifest.connection)
     : undefined;
   if (tool.manifest.connection && !connection) {
+    await appendTraceEventIfActive(repoRoot, {
+      type: "tool_blocked",
+      tool: tool.name,
+      message: `Unknown connection ${tool.manifest.connection}.`,
+    });
     return {
       status: "blocked",
       tool: tool.name,
@@ -77,6 +83,11 @@ export async function runTool(repoRoot: string, options: RunToolOptions): Promis
     connectionRisk: connection?.manifest.risk,
   });
   if (!decision.allowed) {
+    await appendTraceEventIfActive(repoRoot, {
+      type: "tool_blocked",
+      tool: tool.name,
+      message: decision.message,
+    });
     return { status: "blocked", tool: tool.name, reason: decision.reason, message: decision.message };
   }
 
@@ -88,6 +99,12 @@ export async function runTool(repoRoot: string, options: RunToolOptions): Promis
   if (connection) {
     const connectionDecision = authorizeConnectionCommand(connection, command);
     if (!connectionDecision.allowed) {
+      await appendTraceEventIfActive(repoRoot, {
+        type: "tool_blocked",
+        tool: tool.name,
+        command,
+        message: connectionDecision.message,
+      });
       return {
         status: "blocked",
         tool: tool.name,
@@ -100,6 +117,16 @@ export async function runTool(repoRoot: string, options: RunToolOptions): Promis
   const result = command
     ? await executeShell(command, execOptions)
     : await executeScript(repoRoot, tool.manifest.script!, execOptions);
+
+  await appendTraceEventIfActive(repoRoot, {
+    type: "run_tool",
+    tool: tool.name,
+    command: result.command,
+    exitCode: result.exitCode,
+    ok: result.ok,
+    durationMs: result.durationMs,
+    message: result.timedOut ? "Tool timed out." : result.ok ? "Tool passed." : "Tool failed.",
+  });
 
   return { status: "ran", tool: tool.name, result };
 }

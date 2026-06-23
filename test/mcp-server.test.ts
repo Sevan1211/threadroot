@@ -50,6 +50,19 @@ describe("mcp server handleMessage", () => {
         "refresh_context",
         "trace_context",
         "eval_context",
+        "trace_start",
+        "trace_event",
+        "trace_finish",
+        "trace_latest",
+        "eval_traces",
+        "improve_latest",
+        "improve_apply",
+        "loop_start",
+        "loop_next",
+        "loop_report",
+        "loop_run",
+        "loop_finish",
+        "providers_status",
         "repo_map",
         "repo_search",
         "repo_read",
@@ -92,6 +105,11 @@ describe("mcp server handleMessage", () => {
     });
     expect(tools.find((tool) => tool.name === "tools_run")).toMatchObject({
       annotations: { readOnlyHint: false, destructiveHint: true },
+    });
+    expect(tools.find((tool) => tool.name === "improve_apply")).toMatchObject({
+      title: "Apply Safe Improvements",
+      outputSchema: { type: "object" },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     });
     expect(tools.find((tool) => tool.name === "web_fetch")).toMatchObject({
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -205,13 +223,25 @@ describe("mcp server handleMessage", () => {
     expect(taskResult.structuredContent.index.exists).toBe(true);
     expect(taskResult.structuredContent.files.map((file) => file.path)).toContain("src/billing.ts");
     expect(taskResult.structuredContent.files.find((file) => file.path === "src/billing.ts")?.symbols[0]?.name).toBe("retryInvoice");
-    expect(taskResult.content.some((entry) => entry.type === "resource_link" && entry.uri === "threadroot://task/latest")).toBe(true);
-    expect(taskResult.content.some((entry) => entry.type === "resource_link" && entry.uri?.startsWith("threadroot://repo/"))).toBe(true);
+    expect(taskResult.content.some((entry) => entry.type === "resource_link")).toBe(false);
+
+    const linkedTask = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 245,
+      method: "tools/call",
+      params: {
+        name: "task_packet",
+        arguments: { task: "fix retryInvoice billing", includeResourceLinks: true },
+      },
+    });
+    const linkedTaskResult = linkedTask?.result as { content: Array<{ type: string; uri?: string }> };
+    expect(linkedTaskResult.content.some((entry) => entry.type === "resource_link" && entry.uri === "threadroot://task/latest")).toBe(true);
+    expect(linkedTaskResult.content.some((entry) => entry.type === "resource_link" && entry.uri?.startsWith("threadroot://repo/"))).toBe(true);
 
     const listed = await handleMessage(repo, { jsonrpc: "2.0", id: 242, method: "resources/list" });
     const listedResult = listed?.result as { resources: Array<{ uri: string }> };
     expect(listedResult.resources.map((resource) => resource.uri)).toEqual(
-      expect.arrayContaining(["threadroot://task/latest", "threadroot://index"]),
+      expect.arrayContaining(["threadroot://task/latest", "threadroot://index", "threadroot://providers"]),
     );
 
     const read = await handleMessage(repo, {
@@ -244,6 +274,35 @@ describe("mcp server handleMessage", () => {
     const result = response?.result as { structuredContent: { fetchAvailable: boolean; searchAvailable: boolean } };
     expect(result.structuredContent.fetchAvailable).toBe(true);
     expect(result.structuredContent.searchAvailable).toBe(false);
+  });
+
+  it("reports provider capabilities through MCP", async () => {
+    const response = await handleMessage(await tempRepo(), {
+      jsonrpc: "2.0",
+      id: 26,
+      method: "tools/call",
+      params: { name: "providers_status", arguments: {} },
+    });
+    const result = response?.result as {
+      content: Array<{ type: string; text: string }>;
+      structuredContent: {
+        providers: Array<{
+          id: string;
+          automation: { status: string };
+          mcp: { access: { mode: string; checkCommand?: string; smokeTools: string[] } };
+        }>;
+      };
+    };
+    expect(result.content[0]?.text).toContain("Threadroot provider status");
+    expect(result.content[0]?.text).toContain("check: threadroot mcp check --json");
+    expect(result.structuredContent.providers.map((provider) => provider.id)).toEqual(
+      expect.arrayContaining(["codex", "claude", "cursor"]),
+    );
+    expect(result.structuredContent.providers.find((provider) => provider.id === "codex")?.mcp.access).toMatchObject({
+      mode: "threadroot-check",
+      checkCommand: "threadroot mcp check --json",
+    });
+    expect(result.structuredContent.providers.find((provider) => provider.id === "cursor")?.automation.status).toBe("mcp-first");
   });
 
   it("does not let MCP self-confirm risky tool execution", async () => {

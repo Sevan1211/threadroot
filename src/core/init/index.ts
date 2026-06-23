@@ -59,6 +59,7 @@ export type InitReport = {
   importFiles: string[];
   ignore: GitignorePolicyResult;
   compiled: string[];
+  nextSteps: Array<{ command: string; reason: string }>;
 };
 
 async function pathExists(target: string): Promise<boolean> {
@@ -256,5 +257,15 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
     importFiles,
     ignore,
     compiled: written,
+    nextSteps: [
+      {
+        command: "threadroot connections discover --json",
+        reason: "Find locally authenticated CLIs that can become safe Threadroot connections.",
+      },
+      {
+        command: "threadroot connect codex --refresh-skill",
+        reason: "Connect Codex to Threadroot MCP and refresh the global Threadroot skill.",
+      },
+    ],
   };
 }

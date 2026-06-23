@@ -8,6 +8,14 @@ import { spawn } from "node:child_process";
 
 const repoRoot = process.cwd();
 
+function npmInvocation() {
+  const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  if (existsSync(npmCli)) {
+    return { command: process.execPath, args: [npmCli] };
+  }
+  return { command: process.platform === "win32" ? "npm.cmd" : "npm", args: [] };
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -35,6 +43,14 @@ function run(command, args, options = {}) {
   });
 }
 
+function runThreadroot(bin, args, options = {}) {
+  return run(process.execPath, [bin, ...args], options);
+}
+
+function quotedNodeCommand(script) {
+  return `"${process.execPath}" -e "${script.replace(/"/g, '\\"')}"`;
+}
+
 const workDir = await mkdtemp(path.join(tmpdir(), "threadroot-package-smoke."));
 const cacheDir = path.join(workDir, "npm-cache");
 let tarballPath;
@@ -44,7 +60,8 @@ try {
   const baseName = String(pkg.name).replace(/^@/, "").replace(/\//g, "-");
   tarballPath = path.join(repoRoot, `${baseName}-${pkg.version}.tgz`);
 
-  await run("npm", ["--cache", cacheDir, "pack"]);
+  const npm = npmInvocation();
+  await run(npm.command, [...npm.args, "--cache", cacheDir, "pack"]);
   if (!existsSync(tarballPath)) {
     throw new Error(`npm pack did not create ${tarballPath}.`);
   }
@@ -73,19 +90,60 @@ try {
   await writeFile(path.join(projectDir, "package.json"), '{"name":"threadroot-package-smoke"}\n', "utf8");
 
   const bin = path.join(packageDir, "dist", "index.js");
-  await run(bin, ["--version"], { cwd: projectDir });
-  await run(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["connect", "codex"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["task", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["index", "--status"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["eval", "context"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["embeddings", "status"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["web", "status"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "inspect", ".threadroot/skills/threadroot"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["automation", "approve"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["--version"], { cwd: projectDir });
+  await runThreadroot(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["connect", "codex"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["providers"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["connections", "discover", "--include-missing"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["task", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  const fakeAgent = path.join(projectDir, "fake-agent.mjs");
+  await writeFile(
+    fakeAgent,
+    [
+      "process.stdin.resume();",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', () => {});",
+      "process.stdin.on('end', () => console.log(JSON.stringify({ ok: true })));",
+    ].join("\n"),
+    "utf8",
+  );
+  await runThreadroot(bin, ["loop", "start", "package smoke loop", "--agent", "codex", "--max-iterations", "1"], {
+    cwd: projectDir,
+    env: { HOME: homeDir },
+  });
+  await runThreadroot(
+    bin,
+    [
+      "loop",
+      "run",
+      "--iterations",
+      "1",
+      "--agent-command",
+      process.execPath,
+      "--agent-arg",
+      fakeAgent,
+      "--agent-adapter",
+      "custom",
+      "--require",
+      quotedNodeCommand("process.exit(0)"),
+      "--no-write-candidates",
+    ],
+    { cwd: projectDir, env: { HOME: homeDir } },
+  );
+  await runThreadroot(bin, ["loop", "report"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["loop", "finish"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["index", "--status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["eval", "context"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["embeddings", "status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["web", "status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "validate"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "inspect", ".threadroot/skills/threadroot"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "inspect", ".threadroot/skills/closing-loop-research"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "inspect", ".threadroot/skills/loop-automation-engineering"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["automation", "approve"], { cwd: projectDir, env: { HOME: homeDir } });
   const externalSkillDir = path.join(projectDir, "external-skill");
   await mkdir(externalSkillDir, { recursive: true });
   await writeFile(
@@ -105,18 +163,21 @@ try {
     ].join("\n"),
     "utf8",
   );
-  await run(bin, ["skills", "ingest", "./external-skill", "--dry-run", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "ingest", "./external-skill", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "inspect", ".threadroot/skills/package-smoke-skill"], {
+  await runThreadroot(bin, ["skills", "ingest", "./external-skill", "--dry-run", "--no-snyk"], {
     cwd: projectDir,
     env: { HOME: homeDir },
   });
-  await run(bin, ["skills", "trust", "package-smoke-skill"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["memory", "gc"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "ingest", "./external-skill", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["skills", "inspect", ".threadroot/skills/package-smoke-skill"], {
+    cwd: projectDir,
+    env: { HOME: homeDir },
+  });
+  await runThreadroot(bin, ["skills", "trust", "package-smoke-skill"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["memory", "gc"], { cwd: projectDir, env: { HOME: homeDir } });
   await rm(externalSkillDir, { recursive: true, force: true });
-  await run(bin, ["map", "--write"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["index"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["map", "--write"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["index"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
 } finally {
   if (tarballPath) {
     await rm(tarballPath, { force: true });

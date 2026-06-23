@@ -1,19 +1,29 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { checkConnection, createConnection } from "../src/core/connections/index.js";
+import { checkConnection, createConnection, discoverConnectionCandidates } from "../src/core/connections/index.js";
 import { connectionManifestSchema, type LoadedConnection } from "../src/core/harness/index.js";
 
 let dir: string;
+let originalPath: string | undefined;
+let originalPathext: string | undefined;
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), "tr-connections-"));
+  originalPath = process.env.PATH;
+  originalPathext = process.env.PATHEXT;
 });
 
 afterEach(async () => {
+  process.env.PATH = originalPath;
+  if (originalPathext === undefined) {
+    delete process.env.PATHEXT;
+  } else {
+    process.env.PATHEXT = originalPathext;
+  }
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -117,5 +127,28 @@ describe("connections", () => {
       confirm: true,
     });
     expect(parsed.confirm).toBe(true);
+  });
+
+  it("discovers available local CLI connection templates without creating manifests", async () => {
+    const bin = path.join(dir, "bin");
+    await mkdir(bin, { recursive: true });
+    await writeFile(path.join(bin, process.platform === "win32" ? "gh.cmd" : "gh"), process.platform === "win32" ? "@echo off\r\n" : "#!/bin/sh\n", "utf8");
+    if (process.platform !== "win32") {
+      await chmod(path.join(bin, "gh"), 0o755);
+    }
+    process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ""}`;
+    process.env.PATHEXT = ".COM;.EXE;.BAT;.CMD";
+
+    const result = await discoverConnectionCandidates(dir);
+    const github = result.candidates.find((candidate) => candidate.name === "github-local");
+
+    expect(github).toMatchObject({
+      provider: "github",
+      command: "gh",
+      status: "available",
+      risk: "medium",
+    });
+    expect(github?.createCommand).toContain("threadroot connections add github-local");
+    expect(github?.deny).toContain("secret");
   });
 });

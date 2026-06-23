@@ -56,6 +56,11 @@ describe("CLI smoke", () => {
     expect(status).toContain("harness: demo");
     expect(status).toContain("adapters: none (local-only)");
 
+    const providers = await run("providers");
+    expect(providers).toContain("Threadroot provider access");
+    expect(providers).toContain("codex");
+    expect(providers).toContain("cursor");
+
     const statusJson = JSON.parse(await run("status", "--json")) as { exists: boolean; manifest: { name: string } };
     expect(statusJson.exists).toBe(true);
     expect(statusJson.manifest.name).toBe("demo");

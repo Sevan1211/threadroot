@@ -2,6 +2,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 import { assembleTaskPacket } from "./task-packet.js";
+import { readTraceRoutingEvalCases } from "./trace-routing.js";
 
 export type ContextEvalCase = {
   id: string;
@@ -89,7 +90,28 @@ export const DEFAULT_CONTEXT_EVALS: ContextEvalCase[] = [
   { id: "task-packet", task: "compile task packet with symbols and snippets", expectedFiles: ["src/core/task-packet.ts", "src/commands/task.ts"] },
   { id: "eval-context", task: "evaluate context retrieval quality", expectedFiles: ["src/core/context-evals.ts", "src/commands/eval.ts"] },
   { id: "embeddings", task: "configure optional embeddings", expectedFiles: ["src/core/embeddings.ts", "src/commands/embeddings.ts"] },
+  { id: "local-embeddings-routing", task: "improve built in local embedding routing", expectedFiles: ["src/core/repo-index.ts", "src/core/embeddings.ts"] },
   { id: "mcp-resources", task: "expose MCP resources for latest task and index", expectedFiles: ["src/mcp/server.ts", "test/mcp-server.test.ts"] },
+  {
+    id: "product-audit-loop",
+    task: "review the full Threadroot product: loops, MCP tools, skills, connections, indexing, providers, and recursive improvements",
+    expectedFiles: [
+      "src/core/loop.ts",
+      "src/core/improve.ts",
+      "src/core/task-packet.ts",
+      "src/core/working-set.ts",
+      "src/core/provider-adapters.ts",
+    ],
+    expectedTests: ["test/trace-loop.test.ts"],
+    expectedSkills: ["closing-loop-research", "loop-automation-engineering"],
+  },
+  {
+    id: "skill-trigger-value",
+    task: "evaluate whether built in Threadroot skills actually help loop and product work",
+    expectedFiles: ["src/core/init/seed-skills.ts", "src/core/context-evals.ts", "src/core/skills.ts"],
+    expectedTests: ["test/init.test.ts", "test/skills.test.ts"],
+    expectedSkills: ["create-skill"],
+  },
 ];
 
 function atK(actual: string[], expected: string[], k: number): number {
@@ -145,10 +167,19 @@ async function isApplicableCase(repoRoot: string, entry: ContextEvalCase): Promi
   return true;
 }
 
-export async function runContextEvals(repoRoot: string, cases = DEFAULT_CONTEXT_EVALS): Promise<ContextEvalReport> {
+export async function runContextEvals(repoRoot: string, cases?: ContextEvalCase[]): Promise<ContextEvalReport> {
+  const traceCases: ContextEvalCase[] = (await readTraceRoutingEvalCases(repoRoot)).map((entry) => ({
+    id: entry.id,
+    task: entry.task,
+    expectedFiles: entry.expectedFiles,
+  }));
+  const evalCases: ContextEvalCase[] = cases ?? [
+    ...DEFAULT_CONTEXT_EVALS,
+    ...traceCases,
+  ];
   const results: ContextEvalCaseResult[] = [];
   const skippedCases: string[] = [];
-  for (const entry of cases) {
+  for (const entry of evalCases) {
     if (!(await isApplicableCase(repoRoot, entry))) {
       skippedCases.push(entry.id);
       continue;

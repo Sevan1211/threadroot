@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { findExecutable } from "./command-lookup.js";
 import type { ExternalScannerReport } from "./install/source.js";
 
 const run = promisify(execFile);
@@ -25,8 +26,13 @@ function trimOutput(value: string): string | undefined {
 }
 
 async function commandExists(command: string, args: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
+  const executable = await findExecutable(command);
+  if (!executable) {
+    return false;
+  }
+  const plan = scannerExecPlan(executable, args);
   try {
-    await run(command, args, { env, timeout: 10_000 });
+    await run(plan.command, plan.args, { env, timeout: 10_000, windowsHide: true });
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -41,15 +47,23 @@ async function resolveSnykCommand(
   commandOverride?: string,
 ): Promise<{ command: string; argsPrefix: string[] } | undefined> {
   if (commandOverride) {
-    return { command: commandOverride, argsPrefix: [] };
+    return { command: (await findExecutable(commandOverride)) ?? commandOverride, argsPrefix: [] };
   }
   if (await commandExists("snyk-agent-scan", ["--help"], env)) {
-    return { command: "snyk-agent-scan", argsPrefix: [] };
+    return { command: (await findExecutable("snyk-agent-scan")) ?? "snyk-agent-scan", argsPrefix: [] };
   }
   if (await commandExists("uvx", ["--version"], env)) {
-    return { command: "uvx", argsPrefix: ["snyk-agent-scan@latest"] };
+    return { command: (await findExecutable("uvx")) ?? "uvx", argsPrefix: ["snyk-agent-scan@latest"] };
   }
   return undefined;
+}
+
+function scannerExecPlan(command: string, args: string[]): { command: string; args: string[] } {
+  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/iu.test(command)) {
+    return { command, args };
+  }
+  const comspec = process.env.ComSpec ?? "cmd.exe";
+  return { command: comspec, args: ["/d", "/c", "call", command, ...args] };
 }
 
 export async function runSnykAgentScan(
@@ -87,11 +101,13 @@ export async function runSnykAgentScan(
 
   const args = [...resolved.argsPrefix, targetPath];
   const command = [resolved.command, ...args];
+  const plan = scannerExecPlan(resolved.command, args);
   try {
-    const { stdout, stderr } = await run(resolved.command, args, {
+    const { stdout, stderr } = await run(plan.command, plan.args, {
       env,
       timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxBuffer: 1024 * 1024,
+      windowsHide: true,
     });
     return {
       provider: "snyk-agent-scan",

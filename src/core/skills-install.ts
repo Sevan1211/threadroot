@@ -87,7 +87,7 @@ function splitRef(body: string): { body: string; ref?: string } {
 }
 
 function isLocalish(value: string): boolean {
-  return value === "." || value === ".." || value.startsWith("./") || value.startsWith("../") || value.startsWith("/");
+  return value === "." || value === ".." || value.startsWith("./") || value.startsWith("../") || path.isAbsolute(value);
 }
 
 function parseGithubUrl(value: string): ObjectSourceRef | undefined {

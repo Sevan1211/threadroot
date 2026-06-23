@@ -27,7 +27,7 @@ async function writeReport(repoRoot: string, report: ImportReport): Promise<stri
 
 export async function runImport(repoRoot: string, options: ImportCliOptions = {}): Promise<void> {
   if (options.moveProviderFiles) {
-    const message = "`--move-provider-files` is not implemented yet; Threadroot import is non-destructive in 0.2.0.";
+    const message = "`--move-provider-files` is not implemented yet; Threadroot import is non-destructive in this release.";
     if (options.json) {
       printJson({ ok: false, error: "not_implemented", message });
     } else {
@@ -67,6 +67,6 @@ export async function runImport(repoRoot: string, options: ImportCliOptions = {}
     }
   }
   if (options.consolidate) {
-    console.log("note: consolidation is report-only in 0.2.0; visible provider files are never moved automatically.");
+    console.log("note: consolidation is report-only in this release; visible provider files are never moved automatically.");
   }
 }

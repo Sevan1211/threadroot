@@ -7,8 +7,8 @@ This document is the handoff surface for the future website/cloud repo. The OSS 
 Threadroot OSS is the local repo intelligence runtime for coding agents:
 
 - `.threadroot/` is the only default project artifact.
-- `.threadroot/` is local-only in `0.2.0` and should not be committed to git.
-- The CLI initializes, validates, indexes repo context, routes task packets, imports existing provider files non-destructively, scans skills, evaluates context quality, and serves MCP.
+- `.threadroot/` is local-only in `0.2.1` and should not be committed to git.
+- The CLI initializes, validates, indexes repo context, routes task packets, imports existing provider files non-destructively, scans skills, evaluates context quality, applies guarded repo-local trace lessons, and serves MCP.
 - MCP exposes the same local harness to agent clients.
 - Skills, tools, connections, memory, web fetch, and policy execute locally.
 - No secrets are stored in the repo.
@@ -39,7 +39,7 @@ Ask only for high-signal details:
 
 ## Prompt-to-CLI Mapping
 
-Prefer the 0.2.0 public path:
+Prefer the 0.2.1 public path:
 
 ```bash
 threadroot init --profile <profile> --json
@@ -71,6 +71,13 @@ Verification:
 
 ```bash
 threadroot task "<task>" --json
+threadroot trace start "<task>" --json
+threadroot trace finish --status partial --json
+threadroot eval traces --latest --json
+threadroot improve latest --json
+threadroot providers --json
+threadroot loop start "<goal>" --agent <agent> --time 60m --max-iterations 6 --json
+threadroot loop run --iterations 1 --require "pnpm typecheck" --json
 threadroot index --status --json
 threadroot eval context --json
 threadroot map --check --json
@@ -87,13 +94,15 @@ Success: Threadroot is ready. Run threadroot task "<task>" for future sessions.
 
 ## Default Harness Model
 
-Every initialized project starts with five seed skills:
+Every initialized project starts with seven seed skills:
 
 - `threadroot`
 - `find-skills`
 - `create-skill`
 - `create-tool`
 - `create-connection`
+- `closing-loop-research`
+- `loop-automation-engineering`
 
 The website should describe these as adaptive procedures, not a bundled library. Agents should:
 
@@ -117,12 +126,24 @@ threadroot task "<task>" --json
 threadroot refresh --json
 threadroot index --status --json
 threadroot eval context --json
+threadroot eval traces --json
 threadroot embeddings status --json
+threadroot providers --json
 threadroot import --json
 threadroot status --json
 threadroot doctor --json
 threadroot map --check --json
 threadroot mcp check --json
+threadroot trace start "<task>" --json
+threadroot trace event note --message "<note>" --json
+threadroot trace finish --status partial --json
+threadroot trace latest --json
+threadroot improve latest --json
+threadroot loop start "<goal>" --json
+threadroot loop next --json
+threadroot loop run --json
+threadroot loop report --json
+threadroot loop finish --json
 threadroot web status --json
 threadroot web fetch <url> --json
 threadroot automation status --json
@@ -141,6 +162,7 @@ threadroot tools detect --json
 threadroot tools create --json
 threadroot tools check --json
 threadroot run <tool> --brief --json
+threadroot connections discover --json
 threadroot connections list --json
 threadroot connections add <name> --provider <provider> --command <command> --json
 threadroot connections check --json
@@ -187,6 +209,7 @@ threadroot tools create \
 Connection creation wraps official local CLIs only:
 
 ```bash
+threadroot connections discover --json
 threadroot connections add aws-dev \
   --provider aws \
   --command aws \
@@ -203,6 +226,7 @@ Rules:
 
 - Connections must not store credentials.
 - Users authenticate through official CLIs such as `gh`, `aws`, `az`, `gcloud`, or Snowflake CLI.
+- Prefer `threadroot connections discover --json` before asking users to hand-author manifests; it reports local CLI candidates, risk, healthcheck, allow/deny fragments, rationale, and the exact add command.
 - MCP cannot self-confirm risky tool execution.
 - MCP can create low-risk tool/connection manifests only after `threadroot automation approve`.
 - High-risk, destructive, secret-bearing, or cloud-mutating actions require local human review.
@@ -215,11 +239,37 @@ The website should treat `threadroot task "<task>" --json` as the canonical cont
 
 `threadroot eval context --json` is the local quality gate for routing changes. Built-in cases that do not apply to the current repo are skipped and reported in `skippedCases`. Cloud dashboards can display recall, precision, MRR, nDCG, irrelevant-file, command-hit, skill-hit, skipped-case, and token metrics.
 
-Embeddings are optional and disabled by default. Do not ask for API keys during onboarding unless the user explicitly wants semantic retrieval.
+Built-in local hashing embeddings are always available through the repo index and require no keys, network, or upload. Do not ask for API keys during onboarding unless the user explicitly wants an external embedding provider and accepts upload/cost implications.
+
+## Loop Automation
+
+Loop mode is local-first agent orchestration. The website should generate commands that keep Threadroot as the controller and the user's provider CLI as the worker:
+
+```bash
+threadroot loop start "<goal>" --agent codex --time 60m --max-iterations 6 --risk low --json
+threadroot providers --json
+threadroot loop run \
+  --iterations 1 \
+  --require "pnpm typecheck" \
+  --require "pnpm test" \
+  --json
+threadroot loop report --json
+```
+
+Rules:
+
+- Do not require a Threadroot API key or hosted model for loop mode.
+- Prefer provider subscriptions the user already has, such as Codex or Claude Code.
+- Use `threadroot providers --json` first to detect which CLIs are installed, which providers are MCP-first, and which default runner is safe on the current machine.
+- Treat Codex and Claude Code as default automated runner targets when their CLIs are available; treat Cursor as MCP-first unless the user supplies a verified `--agent-command`.
+- Use `--agent-command` and `--agent-adapter codex|claude|custom` when the provider binary path is not the default command.
+- Treat `improve latest` output as ranked candidates plus an `applied` report. Guarded repo-local routing/eval/validation-skill lessons may apply automatically; memory, new tools, connections, and higher-risk changes still require local policy/user approval.
+- Show `reportPath`, `finalReportPath`, provider output paths, compact output paths, verification output paths, stopped reason, compression metrics, and trace-eval metrics.
+- Stop or ask for review on failed verification, timeouts, high-risk tools, cloud mutation, deploys, or secrets.
 
 ## Web
 
-Threadroot-native web support in `0.2.0` is known-URL fetch:
+Threadroot-native web support in `0.2.1` is known-URL fetch:
 
 ```bash
 threadroot web status --json
@@ -258,9 +308,11 @@ The OSS core is ready for website work when:
 - `pnpm release:check` passes.
 - `threadroot init --json` initializes a temp repo with no visible provider files.
 - `threadroot connect <agent> --json` writes only `.threadroot/providers/<agent>/connection.json` by default.
-- Initialized repos contain exactly the five seed skills by default.
+- `threadroot providers --json` reports provider CLI availability, MCP setup, default runner status, event capture, and compression guidance.
+- Initialized repos contain exactly the seven seed skills by default.
 - `threadroot task "<task>" --json` returns ranked files, symbols, snippets, commands, skills, memory, index status, and token estimates.
 - `threadroot doctor --json` reports `ok: true` or actionable findings.
 - Skill installs write `.threadroot/lock.json` provenance.
 - MCP check verifies the local stdio server where configured.
+- Loop smoke verifies trace, eval, improve, loop report, and required verification command output.
 - README and generated prompts reference only real commands.

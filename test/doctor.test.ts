@@ -32,22 +32,34 @@ function codes(report: Awaited<ReturnType<typeof doctor>>): string[] {
 }
 
 async function writeFakeMcpServer(): Promise<string> {
-  const filePath = path.join(repo, "fake-mcp.sh");
+  const filePath = path.join(repo, "fake-mcp.mjs");
   const tools = REQUIRED_MCP_TOOLS.map((name) => ({ name, description: name, inputSchema: { type: "object" } }));
   await write(
-    "fake-mcp.sh",
+    "fake-mcp.mjs",
     [
-      "#!/usr/bin/env bash",
-      "set -euo pipefail",
-      `tools='${JSON.stringify(tools)}'`,
-      "while IFS= read -r line; do",
-      "  if [[ \"$line\" == *'\"method\":\"initialize\"'* ]]; then",
-      "    printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"serverInfo\":{\"name\":\"fake-threadroot\"},\"capabilities\":{\"tools\":{}}}}'",
-      "  elif [[ \"$line\" == *'\"method\":\"tools/list\"'* ]]; then",
-      "    printf '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":%s}}\\n' \"$tools\"",
-      "  fi",
-      "done",
-      "",
+      "import readline from 'node:readline';",
+      `const tools = ${JSON.stringify(tools)};`,
+      "const serverInfo = { name: 'fake-threadroot' };",
+      "const rl = readline.createInterface({ input: process.stdin });",
+      "rl.on('line', (line) => {",
+      "  const message = JSON.parse(line);",
+      "  if (message.method === 'initialize') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { serverInfo, capabilities: { tools: {} } } }) + '\\n');",
+      "  }",
+      "  if (message.method === 'tools/list') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { tools } }) + '\\n');",
+      "  }",
+      "  if (message.method === 'tools/call' && message.params?.name === 'task_packet') {",
+      "    process.stdout.write(JSON.stringify({",
+      "      jsonrpc: '2.0',",
+      "      id: message.id,",
+      "      result: {",
+      "        content: [{ type: 'text', text: 'task packet smoke ok' }],",
+      "        structuredContent: { task: message.params.arguments?.task ?? 'smoke', files: [], tests: [], nextReads: [], tokenEstimate: 0, index: { exists: true } },",
+      "      },",
+      "    }) + '\\n');",
+      "  }",
+      "});",
     ].join("\n"),
   );
   return filePath;
@@ -243,7 +255,7 @@ describe("doctor", () => {
   it("does not show MCP missing hints when global Codex MCP verifies", async () => {
     await initHarness(repo, { import: false, home: repo });
     const server = await writeFakeMcpServer();
-    await writeCodexMcpConfig({ command: "bash", args: [server] });
+    await writeCodexMcpConfig({ command: process.execPath, args: [server] });
 
     const report = await doctor(repo, { home: repo });
 

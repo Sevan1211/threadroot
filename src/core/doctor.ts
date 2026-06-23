@@ -1,20 +1,26 @@
+import { execFile } from "node:child_process";
 import os from "node:os";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { compile, detectDrift } from "./compile/index.js";
+import { findExecutable } from "./command-lookup.js";
 import { HarnessError, resolveHarness } from "./harness/index.js";
 import { projectHarnessDir, projectLockPath, userHarnessDir, userLockPath } from "./harness/paths.js";
 import { externalSkillNames, externalToolNames, readLockFile } from "./install/lock.js";
 import { validateResolvedSkillsDeep } from "./skills.js";
 import { scanSkillPath } from "./skills-scan.js";
-import { checkConnection } from "./connections/index.js";
+import { checkConnection, discoverConnectionCandidates } from "./connections/index.js";
 import { checkToolHealth } from "./tools/index.js";
 import { checkCodexMcp } from "./mcp-check.js";
 import { repoMapStatus } from "./repo-map.js";
 import { indexStatus } from "./repo-index.js";
 import { threadrootIgnoredByGit, threadrootTrackedFiles } from "./gitignore.js";
 import { walkRepo } from "./scan/walk.js";
+import { THREADROOT_VERSION } from "./version.js";
+
+const execFileAsync = promisify(execFile);
 
 export type DoctorSeverity = "error" | "warning" | "info";
 
@@ -152,7 +158,7 @@ async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
       finding(
         "warning",
         "threadroot_not_ignored",
-        "`.threadroot/` is not ignored by git. For 0.2.0, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
+        "`.threadroot/` is not ignored by git. For 0.2.1, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
         ".threadroot/",
       ),
     );
@@ -272,6 +278,109 @@ async function staleInstructionHints(repoRoot: string, home?: string): Promise<D
     );
   }
   return findings;
+}
+
+async function runCliProbe(
+  command: string,
+  args: string[],
+): Promise<{ ok: boolean; stdout: string; stderr: string; message?: string }> {
+  try {
+    const plan = cliProbePlan(command, args);
+    const result = await execFileAsync(plan.command, plan.args, {
+      timeout: 3_000,
+      maxBuffer: 512 * 1024,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return { ok: true, stdout: result.stdout, stderr: result.stderr };
+  } catch (error) {
+    const candidate = error as Error & { stdout?: string; stderr?: string };
+    return {
+      ok: false,
+      stdout: candidate.stdout ?? "",
+      stderr: candidate.stderr ?? "",
+      message: candidate.message,
+    };
+  }
+}
+
+function cliProbePlan(command: string, args: string[]): { command: string; args: string[] } {
+  if (process.platform !== "win32" || !/\.(?:cmd|bat)$/iu.test(command)) {
+    return { command, args };
+  }
+  const comspec = process.env.ComSpec ?? "cmd.exe";
+  return {
+    command: comspec,
+    args: ["/d", "/c", "call", command, ...args],
+  };
+}
+
+async function globalCliHints(home?: string): Promise<DoctorFinding[]> {
+  if (home && path.resolve(home) !== path.resolve(os.homedir())) {
+    return [];
+  }
+
+  const executable = await findExecutable("threadroot");
+  if (!executable) {
+    return [];
+  }
+
+  const findings: DoctorFinding[] = [];
+  const version = await runCliProbe(executable, ["--version"]);
+  if (!version.ok) {
+    findings.push(
+      finding(
+        "warning",
+        "global_cli_unhealthy",
+        `Global threadroot command exists but failed \`--version\`: ${version.message ?? version.stderr.trim()}`,
+        executable,
+      ),
+    );
+    return findings;
+  }
+
+  const reportedVersion = version.stdout.trim().match(/\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/u)?.[0];
+  if (reportedVersion && reportedVersion !== THREADROOT_VERSION) {
+    findings.push(
+      finding(
+        "warning",
+        "global_cli_version_drift",
+        `Global threadroot ${reportedVersion} differs from local source ${THREADROOT_VERSION}. Reinstall/update the package and restart agent sessions before judging loop or MCP behavior.`,
+        executable,
+      ),
+    );
+  }
+
+  const loopHelp = await runCliProbe(executable, ["loop", "--help"]);
+  if (!loopHelp.ok || !loopHelp.stdout.includes("report")) {
+    findings.push(
+      finding(
+        "warning",
+        "global_cli_missing_loop",
+        "Global threadroot command does not expose the current loop subcommands. Update the installed CLI before relying on first-run loop instructions.",
+        executable,
+      ),
+    );
+  }
+  return findings;
+}
+
+async function connectionDiscoveryHints(repoRoot: string, connectionCount: number, home?: string): Promise<DoctorFinding[]> {
+  if (connectionCount > 0) {
+    return [];
+  }
+  const discovered = await discoverConnectionCandidates(repoRoot, { home });
+  const available = discovered.candidates.filter((candidate) => candidate.status === "available");
+  if (available.length === 0) {
+    return [];
+  }
+  return [
+    finding(
+      "info",
+      "connections_available",
+      `No Threadroot connections are configured, but local CLI candidates are available: ${available.map((candidate) => candidate.command).join(", ")}. Run \`threadroot connections discover\` to review safe manifests without storing secrets.`,
+    ),
+  ];
 }
 
 /**
@@ -500,7 +609,9 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
 
   findings.push(...(await repoMapHints(repoRoot)));
   findings.push(...(await indexHints(repoRoot)));
+  findings.push(...(await connectionDiscoveryHints(repoRoot, harness.connections.length, options.home)));
   findings.push(...(await staleInstructionHints(repoRoot, options.home)));
+  findings.push(...(await globalCliHints(options.home)));
   findings.push(...(await gitignoreHints(repoRoot)));
   findings.push(...(await visibleProviderFileHints(repoRoot)));
   findings.push(...(await mcpConfigHints(repoRoot, options.home)));

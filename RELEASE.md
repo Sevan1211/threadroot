@@ -17,10 +17,19 @@ npm view threadroot
 
 If `npm view threadroot` returns package metadata, the unscoped package name is already taken. Rename the package or use a scope before publishing.
 
-## Publish 0.1.x manually
+## Commit, push, and publish 0.2.1 manually
+
+```bash
+git status
+git add .
+git commit -m "Release threadroot 0.2.1"
+git push origin HEAD
+```
 
 ```bash
 npm login
+npm view threadroot version
+npm pack --dry-run
 npm publish --access public
 ```
 
@@ -28,6 +37,13 @@ If your npm account supports provenance for this publish path, prefer:
 
 ```bash
 npm publish --access public --provenance
+```
+
+After publishing, create a GitHub release or tag:
+
+```bash
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 For a later automated release, prefer npm trusted publishing from a GitHub-hosted

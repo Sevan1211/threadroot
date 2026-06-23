@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { THREADROOT_VERSION } from "../src/core/version.js";
 import { webFetch, webStatus } from "../src/core/web.js";
 
 let repo: string;
@@ -41,5 +42,9 @@ describe("web", () => {
     expect(second.cached).toBe(true);
     expect(second.hash).toBe(first.hash);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    const fetchOptions = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(fetchOptions).toMatchObject({
+      headers: { "user-agent": `threadroot-web-fetch/${THREADROOT_VERSION}` },
+    });
   });
 });

@@ -2,7 +2,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { projectHarnessDir } from "./harness/paths.js";
-import { indexStatus } from "./repo-index.js";
+import {
+  buildRepoIndex,
+  indexStatus,
+  LOCAL_EMBEDDING_DIMENSIONS,
+  LOCAL_EMBEDDING_MODEL,
+  LOCAL_EMBEDDING_PROVIDER,
+} from "./repo-index.js";
 
 export type EmbeddingsConfig = {
   enabled: boolean;
@@ -20,6 +26,13 @@ export type EmbeddingsStatus = {
   model?: string;
   endpoint?: string;
   dimension?: number;
+  builtIn: {
+    enabled: true;
+    provider: string;
+    model: string;
+    dimension: number;
+    indexedEmbeddings: number;
+  };
   indexStatus: string;
   message: string;
 };
@@ -49,12 +62,24 @@ export async function writeEmbeddingsConfig(
 export async function embeddingsStatus(repoRoot: string): Promise<EmbeddingsStatus> {
   const config = await readEmbeddingsConfig(repoRoot);
   const status = await indexStatus(repoRoot);
+  const builtIn = {
+    enabled: true as const,
+    provider: LOCAL_EMBEDDING_PROVIDER,
+    model: LOCAL_EMBEDDING_MODEL,
+    dimension: LOCAL_EMBEDDING_DIMENSIONS,
+    indexedEmbeddings: status.counts?.embeddings ?? 0,
+  };
   if (!config?.enabled) {
     return {
       configured: Boolean(config),
-      enabled: false,
+      enabled: true,
+      provider: LOCAL_EMBEDDING_PROVIDER,
+      model: LOCAL_EMBEDDING_MODEL,
+      dimension: LOCAL_EMBEDDING_DIMENSIONS,
+      builtIn,
       indexStatus: status.status,
-      message: "Embeddings are disabled. Threadroot uses deterministic lexical, symbol, graph, memory, and skill routing.",
+      message:
+        "Built-in local hashing embeddings are active with zero keys, zero network, and repo-local storage. External provider embeddings are not configured.",
     };
   }
   return {
@@ -64,18 +89,21 @@ export async function embeddingsStatus(repoRoot: string): Promise<EmbeddingsStat
     model: config.model,
     endpoint: config.endpoint,
     dimension: config.dimension,
+    builtIn,
     indexStatus: status.status,
-    message: "Embeddings are configured, but refresh requires an explicit provider adapter. No model calls are made automatically.",
+    message:
+      "Built-in local hashing embeddings are active. External provider embeddings are configured but never called automatically; refresh keeps provider calls explicit.",
   };
 }
 
 export async function refreshEmbeddings(repoRoot: string): Promise<EmbeddingsStatus & { refreshedChunks: number }> {
+  await buildRepoIndex(repoRoot, { force: true });
   const status = await embeddingsStatus(repoRoot);
   return {
     ...status,
-    refreshedChunks: 0,
-    message: status.enabled
-      ? "Embedding refresh skipped: provider adapters are explicit and are not called automatically yet."
-      : status.message,
+    refreshedChunks: status.builtIn.indexedEmbeddings,
+    message: status.configured
+      ? "Refreshed built-in local hashing embeddings. External provider refresh remains explicit and no model calls were made."
+      : "Refreshed built-in local hashing embeddings with zero keys, zero network, and repo-local storage.",
   };
 }

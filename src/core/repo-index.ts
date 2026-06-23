@@ -26,6 +26,9 @@ const MAX_TEXT_BYTES = 256_000;
 const MAX_CHUNK_CHARS = 2_400;
 const INDEX_LOCK_TIMEOUT_MS = 10_000;
 const INDEX_LOCK_STALE_MS = 30_000;
+export const LOCAL_EMBEDDING_PROVIDER = "threadroot-local";
+export const LOCAL_EMBEDDING_MODEL = "hashing-v1";
+export const LOCAL_EMBEDDING_DIMENSIONS = 128;
 
 export type RepoIndexBackend = "sqlite" | "json-fallback";
 
@@ -126,7 +129,7 @@ export type RepoIndexSnapshot = {
   adapters: {
     sqlite: "better-sqlite3" | "node:sqlite" | "unavailable";
     treeSitter: "not-installed";
-    embeddings: "disabled" | "configured";
+    embeddings: "disabled" | "configured" | "local-hash";
   };
   warnings: string[];
 };
@@ -686,6 +689,85 @@ async function indexMemory(repoRoot: string): Promise<{ memoryEvents: RepoIndexM
   return { memoryEvents, chunks };
 }
 
+const EMBEDDING_STOPWORDS = new Set([
+  "about",
+  "after",
+  "again",
+  "also",
+  "because",
+  "before",
+  "being",
+  "could",
+  "does",
+  "doing",
+  "from",
+  "have",
+  "into",
+  "just",
+  "make",
+  "more",
+  "need",
+  "only",
+  "should",
+  "than",
+  "that",
+  "this",
+  "with",
+  "would",
+]);
+
+function embeddingTokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9_./:-]+/)
+    .filter((term) => term.length > 2)
+    .filter((term) => !EMBEDDING_STOPWORDS.has(term));
+}
+
+function hashEmbeddingToken(token: string, dimensions: number): { index: number; sign: number } {
+  const digest = createHash("sha1").update(token).digest();
+  return {
+    index: digest.readUInt32BE(0) % dimensions,
+    sign: digest[4]! % 2 === 0 ? 1 : -1,
+  };
+}
+
+function localEmbeddingVector(text: string, dimensions = LOCAL_EMBEDDING_DIMENSIONS): number[] {
+  const vector = Array.from({ length: dimensions }, () => 0);
+  for (const token of embeddingTokens(text)) {
+    const { index, sign } = hashEmbeddingToken(token, dimensions);
+    vector[index] += sign;
+  }
+  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  return magnitude > 0 ? vector.map((value) => Number((value / magnitude).toFixed(6))) : vector;
+}
+
+function buildLocalEmbeddings(chunks: RepoIndexChunk[]): RepoIndexEmbedding[] {
+  return chunks.map((chunk) => ({
+    chunkId: chunk.id,
+    provider: LOCAL_EMBEDDING_PROVIDER,
+    model: LOCAL_EMBEDDING_MODEL,
+    textHash: hashContent(chunk.text),
+    vector: localEmbeddingVector(`${chunk.path}\n${chunk.kind}\n${chunk.text}`),
+  }));
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  const length = Math.min(a.length, b.length);
+  let dot = 0;
+  let aMagnitude = 0;
+  let bMagnitude = 0;
+  for (let index = 0; index < length; index += 1) {
+    const av = a[index] ?? 0;
+    const bv = b[index] ?? 0;
+    dot += av * bv;
+    aMagnitude += av * av;
+    bMagnitude += bv * bv;
+  }
+  const denominator = Math.sqrt(aMagnitude) * Math.sqrt(bMagnitude);
+  return denominator > 0 ? dot / denominator : 0;
+}
+
 async function assembleSnapshot(
   repoRoot: string,
   backend: RepoIndexBackend,
@@ -722,6 +804,7 @@ async function assembleSnapshot(
     skillChunks = [];
   }
   const memory = await indexMemory(repoRoot);
+  const chunks = [...codeChunks, ...skillChunks, ...memory.chunks];
   return {
     version: INDEX_VERSION,
     backend,
@@ -731,15 +814,15 @@ async function assembleSnapshot(
     files,
     symbols,
     edges,
-    chunks: [...codeChunks, ...skillChunks, ...memory.chunks],
+    chunks,
     skills,
     memoryEvents: memory.memoryEvents,
     runs: [],
-    embeddings: [],
+    embeddings: buildLocalEmbeddings(chunks),
     adapters: {
       sqlite: backend === "sqlite" ? sqliteAdapter : "unavailable",
       treeSitter: "not-installed",
-      embeddings: "disabled",
+      embeddings: "local-hash",
     },
     warnings:
       backend === "sqlite"
@@ -842,6 +925,17 @@ function writeSqlite(db: InstanceType<SqliteModule["DatabaseSync"]>, snapshot: R
   for (const event of snapshot.memoryEvents) {
     putMemory.run(event.id, event.type, event.body, event.source, event.confidence, event.scope, event.createdAt, event.provenance);
   }
+
+  const putEmbedding = db.prepare("INSERT INTO embeddings(chunk_id, provider, model, text_hash, vector) VALUES (?, ?, ?, ?, ?)");
+  for (const embedding of snapshot.embeddings) {
+    putEmbedding.run(
+      embedding.chunkId,
+      embedding.provider,
+      embedding.model,
+      embedding.textHash,
+      JSON.stringify(embedding.vector),
+    );
+  }
 }
 
 function rowString(row: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -869,6 +963,13 @@ function normalizeSqliteAdapter(value: unknown): RepoIndexSnapshot["adapters"]["
     return "node:sqlite";
   }
   return "unavailable";
+}
+
+function normalizeEmbeddingsAdapter(value: unknown): RepoIndexSnapshot["adapters"]["embeddings"] {
+  if (value === "disabled" || value === "configured" || value === "local-hash") {
+    return value;
+  }
+  return "disabled";
 }
 
 function readSqliteSnapshot(repoRoot: string, db: InstanceType<SqliteModule["DatabaseSync"]>): RepoIndexSnapshot | undefined {
@@ -971,7 +1072,7 @@ function readSqliteSnapshot(repoRoot: string, db: InstanceType<SqliteModule["Dat
       adapters: {
         sqlite: normalizeSqliteAdapter(adapters.sqlite),
         treeSitter: adapters.treeSitter ?? "not-installed",
-        embeddings: adapters.embeddings ?? "disabled",
+        embeddings: normalizeEmbeddingsAdapter(adapters.embeddings),
       },
       warnings,
     };
@@ -1077,7 +1178,7 @@ export async function indexStatus(repoRoot: string): Promise<RepoIndexStatus> {
   const adapters: RepoIndexSnapshot["adapters"] = {
     sqlite: sqlite?.driver ?? "unavailable",
     treeSitter: "not-installed",
-    embeddings: "disabled",
+    embeddings: "local-hash",
   };
   if (!snapshot) {
     return {
@@ -1188,6 +1289,30 @@ export function scoreIndexCandidates(snapshot: RepoIndexSnapshot, task: string):
       addCandidate(candidates, chunk.path, score * multiplier, `${chunk.kind} chunk match`, "chunk", chunk.text.slice(0, 120), chunk.startLine);
     }
   }
+
+  const chunkById = new Map(snapshot.chunks.map((chunk) => [chunk.id, chunk]));
+  const queryVector = localEmbeddingVector(task);
+  snapshot.embeddings
+    .filter((embedding) => embedding.provider === LOCAL_EMBEDDING_PROVIDER && embedding.model === LOCAL_EMBEDDING_MODEL)
+    .map((embedding) => ({ embedding, similarity: cosineSimilarity(queryVector, embedding.vector) }))
+    .filter((entry) => entry.similarity >= 0.18)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 50)
+    .forEach(({ embedding, similarity }) => {
+      const chunk = chunkById.get(embedding.chunkId);
+      if (!chunk || chunk.path.startsWith(".threadroot/")) {
+        return;
+      }
+      addCandidate(
+        candidates,
+        chunk.path,
+        Math.max(1, Math.round(similarity * 24)),
+        "local embedding rerank",
+        "embedding",
+        `${LOCAL_EMBEDDING_MODEL} similarity ${similarity.toFixed(3)}`,
+        chunk.startLine,
+      );
+    });
 
   const seeded = [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, 20);
   const seededPaths = new Set(seeded.map((candidate) => candidate.path));

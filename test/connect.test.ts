@@ -71,11 +71,17 @@ describe("connectProviders", () => {
     expect(dry.agents[0]?.skillPath).toBeUndefined();
     await expect(exists(".agents/skills/threadroot/SKILL.md")).resolves.toBe(false);
 
-    const report = await connectProviders(repo, { agents: "codex", home: repo, refreshSkill: true });
-    expect(report.agents[0]?.skillPath).toBe(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"));
+    const report = await connectProviders(repo, { agents: "codex,claude", home: repo, refreshSkill: true });
+    const codex = report.agents.find((entry) => entry.agent === "codex");
+    const claude = report.agents.find((entry) => entry.agent === "claude");
+    expect(codex?.skillPath).toBe(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"));
+    expect(claude?.skillPath).toBeUndefined();
+    expect(claude?.notes).toContain("Global Threadroot skill refresh is Codex-only in this release.");
     const skill = await readFile(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"), "utf8");
     expect(skill).toContain("threadroot task \"<task>\" --json");
     expect(skill).toContain("threadroot refresh --json");
+    expect(skill).toContain("threadroot improve latest --json");
+    expect(skill).not.toContain("threadroot improve apply --auto-safe --json");
     expect(skill).toContain("MCP `task_packet`");
     expect(skill).not.toContain("threadroot start");
     expect(skill).not.toContain("threadroot bootstrap");

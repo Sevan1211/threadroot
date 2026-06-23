@@ -36,15 +36,20 @@ describe("initHarness", () => {
     expect(report.name).toBe("demo-app");
     expect(report.profile).toBe("node-cli");
     expect(report.adapters).toEqual([]);
-    expect(report.skills.length).toBe(5);
+    expect(report.skills.length).toBe(7);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
+    expect(report.nextSteps.map((step) => step.command)).toEqual(
+      expect.arrayContaining(["threadroot connections discover --json", "threadroot connect codex --refresh-skill"]),
+    );
 
     const harness = await resolveHarness(repo);
     expect(harness.skills.map((s) => s.name).sort()).toEqual([
+      "closing-loop-research",
       "create-connection",
       "create-skill",
       "create-tool",
       "find-skills",
+      "loop-automation-engineering",
       "threadroot",
     ]);
     expect(harness.manifest.automation.mode).toBe("ask");
@@ -53,10 +58,12 @@ describe("initHarness", () => {
 
     const lock = await readLockFile(projectLockPath(repo));
     expect(lock.objects.filter((entry) => entry.kind === "skill").map((entry) => entry.name).sort()).toEqual([
+      "closing-loop-research",
       "create-connection",
       "create-skill",
       "create-tool",
       "find-skills",
+      "loop-automation-engineering",
       "threadroot",
     ]);
     expect(lock.objects.find((entry) => entry.name === "find-skills")).toMatchObject({

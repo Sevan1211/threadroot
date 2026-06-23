@@ -8,20 +8,22 @@ Threadroot is a local repo intelligence runtime for coding agents. It keeps task
 .threadroot/
 ```
 
-For `0.2.0`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
+For `0.2.1`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
 
 ## Why
 
 AI coding setups usually sprawl across provider instruction files, MCP configs, prompts, notes, shell snippets, and stale docs. Threadroot gives agents a smaller, fresher first packet:
 
 - `threadroot task` packets with ranked files, symbol outlines, snippets, tests, commands, skills, warnings, and token estimates
-- a local repo intelligence index with a deterministic fallback and optional SQLite/FTS5 acceleration when `better-sqlite3` is installed
+- a local repo intelligence index with deterministic lexical, symbol, graph, and built-in zero-key local vector routing, plus optional SQLite/FTS5 acceleration when `better-sqlite3` is installed
 - built-in context evals for recall, precision, MRR, nDCG, token count, and irrelevant-file rate
 - progressive-disclosure skills under `.threadroot/skills/`
 - explicit local tools and connections with risk/confirmation metadata
 - MCP tools/resources for compatible agents
+- trace-driven self-improvement that applies only safe repo-local routing, eval, and validation skill lessons automatically
 - non-destructive import reports for existing provider files
 - known-URL web fetch with local cache and provenance
+- provider status for Codex, Claude Code, Cursor, Copilot/VS Code, Gemini, Windsurf, OpenCode, and Antigravity automation/MCP surfaces
 
 ## Quick Start
 
@@ -30,6 +32,7 @@ In a new or existing repo:
 ```bash
 npm exec --package=threadroot -- threadroot init
 npm exec --package=threadroot -- threadroot connect codex --refresh-skill
+npm exec --package=threadroot -- threadroot providers --json
 npm exec --package=threadroot -- threadroot task "start this project"
 ```
 
@@ -38,6 +41,7 @@ Or after install:
 ```bash
 threadroot init
 threadroot connect codex --refresh-skill
+threadroot providers --json
 threadroot task "start this project"
 ```
 
@@ -55,7 +59,12 @@ threadroot connect claude --project-files
 
 ```bash
 threadroot task "fix auth bug"
+threadroot providers --json
+threadroot trace start "fix auth bug"
 threadroot run test --brief
+threadroot trace finish --status passed
+threadroot eval traces
+threadroot improve latest
 threadroot eval context
 threadroot doctor
 ```
@@ -69,6 +78,20 @@ threadroot task "fix flaky billing retry test" --json
 The result includes ranked files, symbol outlines, snippets, tests, likely commands, recommended skills, relevant memory, freshness/trust/permission warnings, next reads, omitted sections, debug-ranking details when requested, and an approximate token estimate.
 
 `threadroot eval context` runs built-in gold-context cases that apply to the current repo and skips non-applicable built-ins instead of reporting misleading scores. Use `--min-recall`, `--min-precision`, `--min-ndcg`, and `--max-average-tokens` as release gates for routing quality and token cost.
+
+`threadroot improve latest` ranks trace-driven candidates by priority and score, writes pending candidates, and automatically applies only guarded repo-local lessons: routing hints, trace-derived context evals, and generated validation-skill lessons. Memory, new tools, connections, and higher-risk changes remain candidates until explicit policy or user approval.
+
+For budgeted agent improvement work, use loop sessions:
+
+```bash
+threadroot loop start "Improve MCP routing quality" --agent codex --time 60m --max-iterations 6 --risk low
+threadroot loop next
+threadroot loop run --iterations 1 --require "pnpm typecheck" --require "pnpm test"
+threadroot loop report
+threadroot loop finish
+```
+
+`threadroot providers --json` reports the current machine's provider CLI availability, default runner, MCP setup, event capture, and compression strategy. `loop run` uses provider adapters for automated iterations. Codex uses `codex exec --json --sandbox workspace-write`; Claude Code uses print mode with stream JSON, `--permission-mode auto`, hook events, and cross-machine prompt-cache flags; Cursor is MCP-first unless you pass an explicit `--agent-command`. Custom binaries can be parsed with `--agent-adapter codex|claude|custom`. Required verification commands are captured into the active trace and determine whether the iteration is `passed`, `failed`, or `partial`.
 
 ## Repo Intelligence
 
@@ -94,19 +117,19 @@ threadroot index --force
 
 The shipped extractor is language-aware for TypeScript, JavaScript, Python, Go, Rust, JSON, YAML, Markdown, and broad text fallbacks. Tree-sitter grammar adapters remain a future native path.
 
-Optional embeddings are explicit and disabled by default:
+Threadroot includes built-in local hashing embeddings for indexed chunks. They are deterministic, free, repo-local, and require no keys or network. External embedding providers remain explicit opt-in:
 
 ```bash
 threadroot embeddings status
-threadroot embeddings configure --provider local --model my-embedding-model
 threadroot embeddings refresh
+threadroot embeddings configure --provider local --model my-embedding-model
 ```
 
-Threadroot does not call embedding providers or upload code unless an explicit adapter is configured and invoked.
+Threadroot does not call external embedding providers or upload code unless an explicit adapter is configured and invoked. `embeddings refresh` rebuilds the built-in local vectors.
 
 ## What Init Creates
 
-Every initialized project starts with five Threadroot-adapted seed skills:
+Every initialized project starts with seven Threadroot-adapted seed skills:
 
 ```text
 .threadroot/skills/threadroot/SKILL.md
@@ -114,6 +137,8 @@ Every initialized project starts with five Threadroot-adapted seed skills:
 .threadroot/skills/create-skill/SKILL.md
 .threadroot/skills/create-tool/SKILL.md
 .threadroot/skills/create-connection/SKILL.md
+.threadroot/skills/closing-loop-research/SKILL.md
+.threadroot/skills/loop-automation-engineering/SKILL.md
 ```
 
 Threadroot also creates local harness objects such as:
@@ -140,6 +165,12 @@ threadroot task "<task>" [--budget <tokens>] [--max-files <count>] [--debug-rank
 threadroot refresh [--force] [--json]
 threadroot index [--status] [--force] [--json]
 threadroot eval context [--json] [--min-recall <score>] [--min-precision <score>] [--min-ndcg <score>] [--max-average-tokens <tokens>]
+threadroot eval traces [--latest] [--json] [--min-recall <score>] [--min-mrr <score>] [--max-failed-tool-runs <count>]
+threadroot providers [--json]
+threadroot trace start|event|finish|latest [--json]
+threadroot improve latest [--write-candidates] [--no-auto-apply] [--dry-run] [--json]
+threadroot improve apply [--no-auto-safe] [--dry-run] [--json]
+threadroot loop start|next|report|run|finish [--json]
 threadroot embeddings status|configure|refresh [--json]
 threadroot import [--dry-run] [--consolidate] [--json]
 threadroot map --write|--check [--json]
@@ -147,6 +178,8 @@ threadroot status [--json]
 threadroot doctor [--json]
 threadroot mcp
 threadroot mcp check [--json]
+threadroot connections discover [--include-missing] [--json]
+threadroot connections list|add|check [--json]
 ```
 
 ## Skills
@@ -179,17 +212,18 @@ threadroot tools check
 threadroot run test --brief
 ```
 
-`--brief` stores full stdout/stderr under `.threadroot/cache/runs/` and prints a compact result with parsed failure locations and suggested next reads.
+`--brief` stores full stdout/stderr under `.threadroot/cache/runs/`, writes a paired compact `.brief.md`, and returns parsed failure locations, suggested next reads, and deterministic compression metrics. The compact view collapses repeated output and preserves file:line/error signals; the raw log remains the source of truth.
 
 A connection wraps a locally authenticated CLI or service. Threadroot does not store secrets:
 
 ```bash
+threadroot connections discover
 threadroot connections add gh-readonly --provider github --command gh --risk low --healthcheck "gh auth status"
 threadroot connections list
 threadroot connections check
 ```
 
-High-risk and confirmation-marked actions require explicit human approval. MCP agents cannot self-confirm risky tools.
+`connections discover` inspects PATH and proposes reviewed templates. GitHub is the first-class default because issues, PRs, checks, and workflow runs are the most common agent context source. The GitHub template carries read-oriented allow rules, mutation deny rules, and terms-aware notes for local auth, repository visibility, private data, and rate limits. Other templates for Docker, dbt, Snowflake, AWS, Azure, GCP, Kubernetes, and Vercel are available but secondary. High-risk and confirmation-marked actions require explicit human approval. MCP agents cannot self-confirm risky tools.
 
 ## Web
 
@@ -218,7 +252,7 @@ Check Codex MCP config:
 threadroot mcp check
 ```
 
-MCP exposes lazy tools including `task_packet`, `index_status`, `refresh_context`, `trace_context`, `eval_context`, repo map/search/read, skills, tools, connections, memory, web status/fetch, status, and doctor. Tool responses include structured content, compact text summaries, trust annotations, and resource links where useful. MCP also exposes resources such as `threadroot://repo-map`, `threadroot://task/latest`, `threadroot://runs/latest`, `threadroot://skills`, `threadroot://memory`, and `threadroot://index`, plus templates such as `threadroot://repo/{path}`, `threadroot://skill/{name}`, and `threadroot://memory/{type}`.
+MCP exposes lazy tools including `task_packet`, `index_status`, `refresh_context`, `trace_context`, `eval_context`, `eval_traces`, `providers_status`, trace tools, improvement tools, loop tools, repo map/search/read, skills, tools, connection list/discovery/check/create, memory, web status/fetch, status, and doctor. Tool responses include structured content, compact text summaries, trust annotations, and resource links where useful. MCP also exposes resources such as `threadroot://repo-map`, `threadroot://task/latest`, `threadroot://runs/latest`, `threadroot://trace/latest`, `threadroot://loop/current`, `threadroot://providers`, `threadroot://skills`, `threadroot://memory`, and `threadroot://index`, plus templates such as `threadroot://repo/{path}`, `threadroot://skill/{name}`, and `threadroot://memory/{type}`.
 
 ## Development
 
@@ -239,8 +273,8 @@ The npm package ships only runtime output and public docs. It must not ship `.th
 
 ## Security
 
-- `.threadroot/` is local-only in `0.2.0`; do not commit it.
-- `.threadroot/cache/index/`, `.threadroot/cache/runs/`, web cache, local memory, provider receipts, and embeddings config are local state.
+- `.threadroot/` is local-only in `0.2.1`; do not commit it.
+- `.threadroot/cache/index/`, `.threadroot/cache/runs/`, web cache, local memory, provider receipts, trace-derived lessons, and embeddings config are local state.
 - Provider-native files are opt-in adapter outputs, not the default source.
 - Third-party skills are scanned and locked, not blindly trusted.
 - Tools are explicit and allow-listed.

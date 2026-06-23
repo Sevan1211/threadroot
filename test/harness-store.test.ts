@@ -79,7 +79,7 @@ describe("harness store", () => {
     expect(harness.manifest.name).toBe("demo");
     expect(harness.skills.map((s) => s.name)).toEqual(["commit", "system-design"]);
     expect(harness.skills[0].origin).toBe("user");
-    expect(harness.skills[1].sourcePath).toMatch(/system-design\/SKILL\.md$/);
+    expect(harness.skills[1].sourcePath.replace(/\\/g, "/")).toMatch(/system-design\/SKILL\.md$/);
 
     const tool = harness.tools.find((t) => t.name === "test");
     expect(tool?.origin).toBe("project");

@@ -1,4 +1,4 @@
-import { createConnection, checkConnections } from "../core/connections/index.js";
+import { createConnection, checkConnections, discoverConnectionCandidates } from "../core/connections/index.js";
 import { HarnessError, resolveHarness } from "../core/harness/index.js";
 import type { RiskLevel } from "../core/harness/schema.js";
 import { printJson, type JsonCliOptions } from "./json.js";
@@ -19,6 +19,9 @@ export type ConnectionAddOptions = JsonCliOptions & {
 
 export type ConnectionsListOptions = JsonCliOptions;
 export type ConnectionsCheckOptions = JsonCliOptions;
+export type ConnectionsDiscoverOptions = JsonCliOptions & {
+  includeMissing?: boolean;
+};
 
 function parseList(value: string | undefined): string[] {
   return (value ?? "")
@@ -131,5 +134,32 @@ export async function runConnectionsCheck(repoRoot: string, options: Connections
   }
   if (failures > 0) {
     process.exitCode = 1;
+  }
+}
+
+export async function runConnectionsDiscover(
+  repoRoot: string,
+  options: ConnectionsDiscoverOptions = {},
+): Promise<void> {
+  const report = await discoverConnectionCandidates(repoRoot, { includeMissing: options.includeMissing });
+  if (options.json) {
+    printJson(report);
+    return;
+  }
+
+  if (report.candidates.length === 0) {
+    console.log("No local CLI connection candidates found.");
+    return;
+  }
+
+  console.log(
+    `connection discovery: ${report.summary.available} available, ${report.summary.configured} configured, ${report.summary.missing} missing`,
+  );
+  for (const candidate of report.candidates) {
+    const flags = [candidate.provider, candidate.status, candidate.risk, candidate.confirm ? "confirm" : null]
+      .filter(Boolean)
+      .join(", ");
+    console.log(`- ${candidate.name} [${flags}] ${candidate.description}`);
+    console.log(`  ${candidate.createCommand}`);
   }
 }

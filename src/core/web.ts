@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { projectHarnessDir } from "./harness/paths.js";
+import { THREADROOT_VERSION } from "./version.js";
 
 export type WebStatus = {
   fetchAvailable: boolean;
@@ -99,7 +100,7 @@ export async function webFetch(repoRoot: string, rawUrl: string, options: WebFet
   }
 
   const response = await fetch(url, {
-    headers: { "user-agent": "threadroot-web-fetch/0.1" },
+    headers: { "user-agent": `threadroot-web-fetch/${THREADROOT_VERSION}` },
     redirect: "follow",
   });
   if (!response.ok) {

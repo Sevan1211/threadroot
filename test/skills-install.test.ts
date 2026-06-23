@@ -275,13 +275,19 @@ describe("skills ingest backend", () => {
     });
     const getContent = get?.result as { structuredContent: { scan: { risk: string }; sourcePath: string } };
     expect(getContent.structuredContent.scan.risk).toBe("low");
-    expect(getContent.structuredContent.sourcePath).toContain(".threadroot/skills/ui-polish/SKILL.md");
+    expect(getContent.structuredContent.sourcePath.replace(/\\/g, "/")).toContain(".threadroot/skills/ui-polish/SKILL.md");
   });
 
   it("records a passing Snyk Agent Scan result when configured", async () => {
     await writeSkill(repo, "external/ui-polish", "ui-polish");
-    const fakeSnyk = path.join(repo, "fake-snyk-agent-scan");
-    await writeFile(fakeSnyk, "#!/usr/bin/env bash\necho 'Snyk Agent Scan: ok'\n", "utf8");
+    const fakeSnyk = path.join(repo, process.platform === "win32" ? "fake-snyk-agent-scan.cmd" : "fake-snyk-agent-scan");
+    await writeFile(
+      fakeSnyk,
+      process.platform === "win32"
+        ? "@echo off\r\necho Snyk Agent Scan: ok\r\n"
+        : "#!/usr/bin/env sh\necho 'Snyk Agent Scan: ok'\n",
+      "utf8",
+    );
     await chmod(fakeSnyk, 0o755);
 
     const result = await addSkill(repo, "./external/ui-polish", {

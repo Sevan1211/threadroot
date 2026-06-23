@@ -1,4 +1,5 @@
 import { runContextEvals } from "../core/context-evals.js";
+import { runTraceEvals } from "../core/trace-evals.js";
 import { printJson, type JsonCliOptions } from "./json.js";
 
 export type EvalCliOptions = JsonCliOptions & {
@@ -6,6 +7,13 @@ export type EvalCliOptions = JsonCliOptions & {
   minPrecision?: string;
   minNdcg?: string;
   maxAverageTokens?: string;
+};
+
+export type TraceEvalCliOptions = JsonCliOptions & {
+  latest?: boolean;
+  minRecall?: string;
+  minMrr?: string;
+  maxFailedToolRuns?: string;
 };
 
 type EvalGate = {
@@ -73,6 +81,59 @@ export async function runEvalContext(repoRoot: string, options: EvalCliOptions =
   console.log(`average tokens: ${Math.round(report.summary.averageTokens)}`);
   for (const gate of gates) {
     const relation = gate.metric === "averageTokens" ? "<=" : ">=";
+    console.log(`gate ${gate.passed ? "pass" : "fail"}: ${gate.metric} ${gate.actual.toFixed(3)} ${relation} ${gate.threshold}`);
+  }
+  if (failedGates.length > 0) {
+    process.exitCode = 1;
+  }
+}
+
+export async function runEvalTraces(repoRoot: string, options: TraceEvalCliOptions = {}): Promise<void> {
+  const report = await runTraceEvals(repoRoot, { latest: options.latest });
+  const minRecall = parseNumber(options.minRecall);
+  const minMrr = parseNumber(options.minMrr);
+  const maxFailedToolRuns = parseNumber(options.maxFailedToolRuns);
+  const gates: EvalGate[] = [];
+  if (minRecall !== undefined) {
+    gates.push({
+      metric: "realRunRecallAt5",
+      actual: report.summary.realRunRecallAt5,
+      threshold: minRecall,
+      passed: report.summary.realRunRecallAt5 >= minRecall,
+    });
+  }
+  if (minMrr !== undefined) {
+    gates.push({
+      metric: "realRunMrr",
+      actual: report.summary.realRunMrr,
+      threshold: minMrr,
+      passed: report.summary.realRunMrr >= minMrr,
+    });
+  }
+  if (maxFailedToolRuns !== undefined) {
+    gates.push({
+      metric: "failedToolRuns",
+      actual: report.summary.failedToolRuns,
+      threshold: maxFailedToolRuns,
+      passed: report.summary.failedToolRuns <= maxFailedToolRuns,
+    });
+  }
+  const failedGates = gates.filter((gate) => !gate.passed);
+  if (options.json) {
+    printJson(gates.length > 0 ? { ...report, gates } : report);
+    if (failedGates.length > 0) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+  console.log(`trace eval: ${report.summary.cases} trace(s)`);
+  console.log(`Real-run Recall@5: ${report.summary.realRunRecallAt5.toFixed(3)}`);
+  console.log(`Real-run Precision@5: ${report.summary.realRunPrecisionAt5.toFixed(3)}`);
+  console.log(`Real-run MRR: ${report.summary.realRunMrr.toFixed(3)}`);
+  console.log(`tool runs: ${report.summary.totalToolRuns}`);
+  console.log(`failed tool runs: ${report.summary.failedToolRuns}`);
+  for (const gate of gates) {
+    const relation = gate.metric === "failedToolRuns" ? "<=" : ">=";
     console.log(`gate ${gate.passed ? "pass" : "fail"}: ${gate.metric} ${gate.actual.toFixed(3)} ${relation} ${gate.threshold}`);
   }
   if (failedGates.length > 0) {

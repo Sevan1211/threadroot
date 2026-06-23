@@ -6,13 +6,40 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 ## Unreleased
 
-- No unreleased changes yet.
+No unreleased changes yet.
+
+## 0.2.1 - Closed-loop self-improvement and local routing vectors
+
+### Added
+
+- `threadroot improve latest` now writes candidates and applies only guarded repo-local lessons by default: routing hints, trace-derived context evals, and generated validation-skill lessons.
+- MCP `improve_latest` now follows the same auto-safe default for agents, with opt-out and dry-run arguments for inspection.
+- Built-in local hashing embeddings for indexed chunks. They require no API keys, make no network calls, store vectors under `.threadroot/cache/index/`, and add a local similarity rerank signal to context routing.
+- Trace-derived routing hints now carry repo-local usage policy metadata for provenance, sharing, stale-evidence handling, and secret hygiene.
+- GitHub connection discovery now carries first-class allow/deny and terms-aware guidance for local auth, repository visibility, private data, rate limits, and separating risky mutations from read-only inspection.
+
+### Changed
+
+- Loop automation now uses the same `improve latest` safe-apply path as CLI and MCP instead of a separate follow-up apply call.
+- `threadroot improve apply` keeps compatibility but auto-safe mode is now on by default; use `--no-auto-safe` for reporting-only behavior.
+- Embedding status and refresh commands now describe and refresh the built-in local vector signal instead of presenting embeddings as a placeholder-only surface.
+- Release docs now target `0.2.1` and describe the commit, push, and npm publish flow.
+
+### Measured
+
+- Local release sweep continues to gate on `pnpm release:check`, package smoke, and context evals before publishing.
 
 ## 0.2.0 - Agent-first MCP and public launch polish
 
 ### Added
 
 - `threadroot connect <agent> --refresh-skill` to explicitly install or refresh the global Threadroot agent skill with the current `task_packet`/`repo_read` workflow.
+- Trace-driven loop runtime commands: `threadroot trace`, `threadroot eval traces`, `threadroot improve latest`, and `threadroot loop start|next|report|run|finish`.
+- MCP loop and trace tools including `trace_start`, `trace_event`, `trace_finish`, `trace_latest`, `eval_traces`, `improve_latest`, `loop_start`, `loop_next`, `loop_report`, `loop_run`, and `loop_finish`.
+- `threadroot providers` and MCP `providers_status` for provider CLI availability, default runner status, MCP setup, event capture, compression guidance, and cross-machine setup notes.
+- Provider-adapter loop execution for Codex and Claude Code JSONL streams, plus `--agent-command` and `--agent-adapter` for custom provider binaries.
+- Required verification gates for automated loops via `threadroot loop run --require <command>`, with captured raw logs, compact output artifacts, trace events, compression metrics, trace-eval summaries, and final session reports.
+- Portable package checks through `scripts/pack-check.mjs`.
 - `threadroot refresh [--force]` and MCP `refresh_context` to refresh stale repo-map/index state through the same path used by task packets.
 - `threadroot eval context` regression gates: `--min-recall`, `--min-precision`, `--min-ndcg`, and `--max-average-tokens`.
 - MCP 2025-06-18 initialization, prompt support, resource templates, tool annotations, output schemas, compact tool summaries, and task-packet resource links.
@@ -24,6 +51,12 @@ Threadroot follows semantic versioning after the first public release. While `0.
 - Task packets now enforce a default compact budget, trimming snippets, memory, repo-map excerpts, long reasons, debug-ranking details, and lower-ranked files before flooding the model.
 - Task packets now refresh stale repo-map and index state before routing, then report a compact freshness summary.
 - Context evals now combine ranked files and tests by score instead of appending tests after all source files.
+- CI now runs on Ubuntu, Windows, and macOS across Node 20 and 22.
+- MCP `task_packet` resource links are opt-in so shape-sensitive clients receive compact text plus `structuredContent` by default.
+- Codex MCP checks now verify a `task_packet` smoke call and can read current Codex MCP config through `codex mcp get threadroot --json`.
+- Run briefs and loop reports now preserve raw output while emitting deterministic compact summaries with estimated token savings.
+- Provider status now includes structured MCP access guidance, including the Codex `threadroot mcp check --json` smoke path and core tool checks for MCP-first clients.
+- Package smoke and tests now avoid POSIX-only assumptions and use portable Node fixtures.
 - Routing hints were tightened for MCP resources/prompts, init, status, package smoke, and GitHub skill-source fetch tasks.
 - Routing hints now prioritize owning tests alongside command/module surfaces for MCP, repo-map, doctor, provider connect/import, tool policy, automation, adapter, docs, and eval tasks.
 - `better-sqlite3` is now an optional peer accelerator instead of a default optional dependency, avoiding npm's deprecated `prebuild-install` warning during normal install.

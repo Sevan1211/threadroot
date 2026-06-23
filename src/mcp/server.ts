@@ -18,7 +18,7 @@ import { doctor } from "../core/doctor.js";
 import { projectHarnessDir, projectLockPath, userLockPath } from "../core/harness/paths.js";
 import { harnessStatus } from "../core/status.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
-import { checkConnections, createConnection } from "../core/connections/index.js";
+import { checkConnections, createConnection, discoverConnectionCandidates } from "../core/connections/index.js";
 import { readLockFile } from "../core/install/lock.js";
 import type { LockEntry } from "../core/install/source.js";
 import { findSkills } from "../core/skills-find.js";
@@ -29,9 +29,14 @@ import { readRepoFile, repoMapStatus, searchRepo, writeRepoMap } from "../core/r
 import { indexStatus, readRepoIndex } from "../core/repo-index.js";
 import { createRunBrief } from "../core/run-brief.js";
 import { runContextEvals } from "../core/context-evals.js";
+import { runTraceEvals } from "../core/trace-evals.js";
+import { applyImprovementCandidates, improveLatest } from "../core/improve.js";
 import { assembleTaskPacket, readLatestTaskPacket, writeLatestTaskPacket } from "../core/task-packet.js";
 import { embeddingsStatus } from "../core/embeddings.js";
 import { webFetch, webStatus } from "../core/web.js";
+import { appendTraceEvent, finishTrace, latestTrace, startTrace } from "../core/trace.js";
+import { currentLoopSession, finishLoop, nextLoop, reportLoop, runLoop, startLoop } from "../core/loop.js";
+import { providerStatuses } from "../core/provider-adapters.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -125,6 +130,7 @@ const toolRegistry: ToolSpec[] = [
         maxFiles: { type: "number", description: "Maximum ranked non-test files to return." },
         debugRanking: { type: "boolean", description: "Include retrieval scoring details." },
         forceIndex: { type: "boolean", description: "Refresh the repo index before compiling." },
+        includeResourceLinks: { type: "boolean", description: "Include MCP resource_link content entries for clients that support them." },
       },
       ["task"],
     ),
@@ -143,6 +149,7 @@ const toolRegistry: ToolSpec[] = [
       maxFiles: z.number().int().positive().max(100).optional(),
       debugRanking: z.boolean().optional(),
       forceIndex: z.boolean().optional(),
+      includeResourceLinks: z.boolean().optional(),
     }),
     run: async (repoRoot, args) => {
       const packet = await assembleTaskPacket(repoRoot, args.task, args);
@@ -204,6 +211,233 @@ const toolRegistry: ToolSpec[] = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     args: z.object({}),
     run: (repoRoot) => runContextEvals(repoRoot),
+  }),
+  defineTool({
+    name: "trace_start",
+    title: "Start Trace",
+    description: "Start a local trace receipt for an agent run and capture the starting task packet.",
+    inputSchema: objectSchema(
+      {
+        task: { type: "string", description: "Task or goal this trace records." },
+        agent: { type: "string", description: "Agent/provider label, such as codex or claude." },
+        budgetTokens: { type: "number", description: "Preferred task packet budget." },
+        maxFiles: { type: "number", description: "Maximum ranked non-test files." },
+        forceIndex: { type: "boolean", description: "Refresh the repo index before compiling the packet." },
+      },
+      ["task"],
+    ),
+    outputSchema: outputObjectSchema({ runId: { type: "string" }, task: { type: "string" }, status: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({
+      task: z.string().min(1),
+      agent: z.string().optional(),
+      budgetTokens: z.number().int().positive().max(100_000).optional(),
+      maxFiles: z.number().int().positive().max(100).optional(),
+      forceIndex: z.boolean().optional(),
+    }),
+    run: (repoRoot, args) => startTrace(repoRoot, args.task, args),
+  }),
+  defineTool({
+    name: "trace_event",
+    title: "Append Trace Event",
+    description: "Append a read, edit, tool, command, eval, improvement, or note event to the active trace.",
+    inputSchema: objectSchema(
+      {
+        type: {
+          type: "string",
+          enum: ["read_file", "edit_file", "run_tool", "tool_blocked", "command", "eval", "improvement", "note"],
+          description: "Trace event type.",
+        },
+        path: { type: "string", description: "Repo-relative file path for read/edit events." },
+        tool: { type: "string", description: "Harness tool name for tool events." },
+        command: { type: "string", description: "Command label for command/tool events." },
+        exitCode: { type: "number", description: "Command exit code." },
+        ok: { type: "boolean", description: "Whether the event succeeded." },
+        durationMs: { type: "number", description: "Event duration in milliseconds." },
+        message: { type: "string", description: "Short event note." },
+      },
+      ["type"],
+    ),
+    outputSchema: outputObjectSchema({ runId: { type: "string" }, events: { type: "array" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({
+      type: z.enum(["read_file", "edit_file", "run_tool", "tool_blocked", "command", "eval", "improvement", "note"]),
+      path: z.string().optional(),
+      tool: z.string().optional(),
+      command: z.string().optional(),
+      exitCode: z.number().int().nullable().optional(),
+      ok: z.boolean().optional(),
+      durationMs: z.number().int().nonnegative().optional(),
+      message: z.string().optional(),
+    }),
+    run: (repoRoot, args) => appendTraceEvent(repoRoot, args),
+  }),
+  defineTool({
+    name: "trace_finish",
+    title: "Finish Trace",
+    description: "Finish the active trace receipt with an outcome status and optional summary.",
+    inputSchema: objectSchema({
+      status: { type: "string", enum: ["passed", "failed", "partial", "blocked", "cancelled"], description: "Trace outcome status." },
+      summary: { type: "string", description: "Short outcome summary." },
+    }),
+    outputSchema: outputObjectSchema({ runId: { type: "string" }, status: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({
+      status: z.enum(["passed", "failed", "partial", "blocked", "cancelled"]).default("partial"),
+      summary: z.string().optional(),
+    }),
+    run: (repoRoot, args) => finishTrace(repoRoot, args.status, args.summary),
+  }),
+  defineTool({
+    name: "trace_latest",
+    title: "Latest Trace",
+    description: "Return the latest local trace receipt, if one exists.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ runId: { type: "string" }, status: { type: "string" } }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({}),
+    run: async (repoRoot) => (await latestTrace(repoRoot)) ?? { trace: null },
+  }),
+  defineTool({
+    name: "eval_traces",
+    title: "Evaluate Traces",
+    description: "Evaluate real trace receipts for needed-file recall, tool failures, and loop evidence.",
+    inputSchema: objectSchema({
+      latest: { type: "boolean", description: "Evaluate only the latest trace." },
+    }),
+    outputSchema: outputObjectSchema({ summary: { type: "object" }, cases: { type: "array" } }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({ latest: z.boolean().optional() }),
+    run: (repoRoot, args) => runTraceEvals(repoRoot, { latest: args.latest }),
+  }),
+  defineTool({
+    name: "improve_latest",
+    title: "Improve Latest Trace",
+    description:
+      "Analyze the latest trace, write candidates, and apply guarded local trace-derived routing, eval, and skill lessons by default.",
+    inputSchema: objectSchema({
+      writeCandidates: { type: "boolean", description: "Write pending candidates under .threadroot/improvements/pending/." },
+      autoApplySafe: { type: "boolean", description: "Apply guarded local trace-derived routing, eval, and skill lessons. Defaults to true." },
+      dryRun: { type: "boolean", description: "Report what would be applied without writing artifacts." },
+    }),
+    outputSchema: outputObjectSchema({ candidates: { type: "array" }, summary: { type: "object" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({ writeCandidates: z.boolean().optional(), autoApplySafe: z.boolean().optional(), dryRun: z.boolean().optional() }),
+    run: (repoRoot, args) =>
+      improveLatest(repoRoot, {
+        writeCandidates: args.writeCandidates ?? (args.autoApplySafe !== false),
+        autoApplySafe: args.autoApplySafe !== false,
+        dryRun: args.dryRun,
+      }),
+  }),
+  defineTool({
+    name: "improve_apply",
+    title: "Apply Safe Improvements",
+    description:
+      "Apply guarded local trace-derived improvement candidates into routing hints, context evals, and generated skill lessons.",
+    inputSchema: objectSchema({
+      autoSafe: { type: "boolean", description: "Apply only guarded local trace-derived improvements." },
+      dryRun: { type: "boolean", description: "Report what would be applied without writing artifacts." },
+    }),
+    outputSchema: outputObjectSchema({ applied: { type: "array" }, skipped: { type: "array" }, summary: { type: "object" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({ autoSafe: z.boolean().optional(), dryRun: z.boolean().optional() }),
+    run: (repoRoot, args) => applyImprovementCandidates(repoRoot, { autoSafe: args.autoSafe !== false, dryRun: args.dryRun }),
+  }),
+  defineTool({
+    name: "loop_start",
+    title: "Start Loop",
+    description: "Start a local manual/assisted loop session for budgeted agent improvement.",
+    inputSchema: objectSchema(
+      {
+        goal: { type: "string", description: "Loop goal." },
+        agent: { type: "string", description: "Agent/provider label." },
+        timeMinutes: { type: "number", description: "Time budget in minutes." },
+        maxIterations: { type: "number", description: "Maximum iteration prompts." },
+        risk: { type: "string", enum: ["low", "medium", "high"], description: "Risk budget." },
+      },
+      ["goal"],
+    ),
+    outputSchema: outputObjectSchema({ sessionId: { type: "string" }, status: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({
+      goal: z.string().min(1),
+      agent: z.string().optional(),
+      timeMinutes: z.number().int().positive().optional(),
+      maxIterations: z.number().int().positive().optional(),
+      risk: z.enum(["low", "medium", "high"]).optional(),
+    }),
+    run: (repoRoot, args) => startLoop(repoRoot, args.goal, args),
+  }),
+  defineTool({
+    name: "loop_next",
+    title: "Next Loop Prompt",
+    description: "Generate the next loop prompt and start its trace.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ prompt: { type: "string" }, session: { type: "object" }, trace: { type: "object" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({}),
+    run: (repoRoot) => nextLoop(repoRoot),
+  }),
+  defineTool({
+    name: "loop_report",
+    title: "Loop Report",
+    description: "Return loop status, latest trace eval, and improvement candidates.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ session: { type: "object" } }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({}),
+    run: (repoRoot) => reportLoop(repoRoot),
+  }),
+  defineTool({
+    name: "loop_run",
+    title: "Run Loop",
+    description: "Run budgeted loop iterations through a provider command and generate trace-driven improvement candidates.",
+    inputSchema: objectSchema({
+      iterations: { type: "number", description: "Maximum automated iterations to run." },
+      agentCommand: { type: "string", description: "Provider command to execute instead of the default adapter." },
+      agentArgs: { type: "array", items: { type: "string" }, description: "Arguments passed to agentCommand." },
+      agentAdapter: { type: "string", enum: ["codex", "claude", "custom"], description: "Parser adapter for agentCommand output." },
+      timeoutMs: { type: "number", description: "Per-iteration provider timeout in milliseconds." },
+      requiredCommands: { type: "array", items: { type: "string" }, description: "Verification commands to run after each provider iteration." },
+      verificationTimeoutMs: { type: "number", description: "Per-command verification timeout in milliseconds." },
+      writeCandidates: { type: "boolean", description: "Write pending candidates under .threadroot/improvements/pending/." },
+    }),
+    outputSchema: outputObjectSchema({ session: { type: "object" }, iterations: { type: "array" }, stoppedReason: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    args: z.object({
+      iterations: z.number().int().positive().max(100).optional(),
+      agentCommand: z.string().optional(),
+      agentArgs: z.array(z.string()).optional(),
+      agentAdapter: z.enum(["codex", "claude", "custom"]).optional(),
+      timeoutMs: z.number().int().positive().optional(),
+      requiredCommands: z.array(z.string()).optional(),
+      verificationTimeoutMs: z.number().int().positive().optional(),
+      writeCandidates: z.boolean().optional(),
+    }),
+    run: (repoRoot, args) => runLoop(repoRoot, args),
+  }),
+  defineTool({
+    name: "loop_finish",
+    title: "Finish Loop",
+    description: "Finish the active loop session.",
+    inputSchema: objectSchema({
+      status: { type: "string", enum: ["finished", "cancelled"], description: "Final loop status." },
+    }),
+    outputSchema: outputObjectSchema({ sessionId: { type: "string" }, status: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    args: z.object({ status: z.enum(["finished", "cancelled"]).default("finished") }),
+    run: (repoRoot, args) => finishLoop(repoRoot, args.status),
+  }),
+  defineTool({
+    name: "providers_status",
+    title: "Provider Status",
+    description: "Return provider-specific automation, MCP setup, event capture, compression, and local CLI availability.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ providers: { type: "array" } }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({}),
+    run: async (repoRoot) => ({ providers: await providerStatuses(repoRoot) }),
   }),
   defineTool({
     name: "repo_map",
@@ -512,6 +746,19 @@ const toolRegistry: ToolSpec[] = [
     },
   }),
   defineTool({
+    name: "connections_discover",
+    title: "Discover Connection Candidates",
+    description:
+      "Discover locally available CLI connection templates with risk, healthcheck, allow/deny policy, and creation commands. Does not create manifests.",
+    inputSchema: objectSchema({
+      includeMissing: { type: "boolean", description: "Include known templates whose CLI command is not on PATH." },
+    }),
+    outputSchema: outputObjectSchema({ candidates: { type: "array" }, summary: { type: "object" } }),
+    args: z.object({ includeMissing: z.boolean().optional() }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    run: (repoRoot, args) => discoverConnectionCandidates(repoRoot, { includeMissing: args.includeMissing }),
+  }),
+  defineTool({
     name: "connections_check",
     title: "Check Connections",
     description: "Check local CLI connections and their configured healthchecks.",
@@ -726,6 +973,33 @@ const resourceRegistry: ResourceSpec[] = [
     read: latestRun,
   },
   {
+    uri: "threadroot://trace/latest",
+    name: "Latest Trace",
+    title: "Latest Trace",
+    mimeType: "application/json",
+    description: "Most recent local trace receipt for an agent run.",
+    annotations: { audience: ["assistant"], priority: 0.9 },
+    read: async (repoRoot) => (await latestTrace(repoRoot)) ?? { note: "No trace has been recorded yet." },
+  },
+  {
+    uri: "threadroot://loop/current",
+    name: "Current Loop",
+    title: "Current Loop",
+    mimeType: "application/json",
+    description: "Current active loop session, if one exists.",
+    annotations: { audience: ["assistant"], priority: 0.9 },
+    read: async (repoRoot) => (await currentLoopSession(repoRoot)) ?? { note: "No loop session is active." },
+  },
+  {
+    uri: "threadroot://providers",
+    name: "Provider Status",
+    title: "Provider Status",
+    mimeType: "application/json",
+    description: "Provider automation, MCP setup, event capture, compression, and local CLI availability.",
+    annotations: { audience: ["assistant"], priority: 0.8 },
+    read: async (repoRoot) => ({ providers: await providerStatuses(repoRoot) }),
+  },
+  {
     uri: "threadroot://skills",
     name: "Skills",
     title: "Installed Skills",
@@ -859,6 +1133,24 @@ const prompts: PromptSpec[] = [
       ],
     }),
   },
+  {
+    name: "threadroot_loop",
+    title: "Start Threadroot Loop",
+    description: "Start a budgeted local loop session and request the next evidence-backed prompt.",
+    arguments: [{ name: "goal", description: "The loop goal.", required: true }],
+    get: (args) => ({
+      description: "Threadroot loop workflow",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Start a Threadroot loop for this goal: ${args.goal ?? "<goal>"}. Use loop_start, loop_next, trace events, eval_traces, and improve_latest for guarded local trace-derived promotions, with verification-gated loop_run when automation is appropriate. Work in focused iterations, run local checks, and never promote memory, tools, connections, or higher-risk changes without policy/user approval.`,
+          },
+        },
+      ],
+    }),
+  },
 ];
 
 export async function runMcpServer(repoRoot: string): Promise<void> {
@@ -893,7 +1185,7 @@ export async function handleMessage(
         serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
         instructions:
-          "Threadroot exposes the repository's local agent harness. Call `task_packet` before broad coding work; it refreshes stale map/index state before routing. Keep budgets small, use `repo_search`/`repo_read` or threadroot://repo/{path} only for targeted follow-up, inspect `threadroot://index` and `threadroot://task/latest` as lazy resources, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs.",
+          "Threadroot exposes the repository's local agent harness. Call `task_packet` before broad coding work; it refreshes stale map/index state before routing. Keep budgets small, use `repo_search`/`repo_read` or threadroot://repo/{path} only for targeted follow-up, inspect `threadroot://index` and `threadroot://task/latest` as lazy resources, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs. For loop work, use `providers_status`, `loop_start`, `loop_next`, trace events, `eval_traces`, and `improve_latest` for guarded local trace-derived routing/eval/skill lessons; do not promote memory, tools, connections, or higher-risk changes without policy/user approval.",
       });
     }
 
@@ -1049,6 +1341,38 @@ function shortToolText(name: string, structured: Record<string, unknown>): strin
     return `Threadroot context refresh: map ${structured.mapStatus}, index ${structured.indexStatus}, refreshed ${refreshed}, duration ${structured.durationMs}ms.`;
   }
 
+  if (name === "providers_status") {
+    const providers = Array.isArray(structured.providers) ? structured.providers : [];
+    const lines = providers.slice(0, 8).map((provider) => {
+      const entry = provider as {
+        id?: unknown;
+        available?: unknown;
+        automation?: { status?: unknown };
+        mcp?: { access?: { mode?: unknown; checkCommand?: unknown } };
+      };
+      const mcpAccess =
+        typeof entry.mcp?.access?.checkCommand === "string"
+          ? `check: ${entry.mcp.access.checkCommand}`
+          : `mcp access: ${entry.mcp?.access?.mode ?? "unknown"}`;
+      return `${entry.id ?? "provider"}: ${entry.available === true ? "cli available" : "cli missing or mcp-only"} (${entry.automation?.status ?? "unknown"}, ${mcpAccess})`;
+    });
+    return [`Threadroot provider status:`, ...lines, "Full setup notes are in structuredContent and threadroot://providers."].join("\n");
+  }
+
+  if (name === "connections_discover") {
+    const candidates = Array.isArray(structured.candidates) ? structured.candidates : [];
+    const summary = structured.summary as Record<string, unknown> | undefined;
+    const lines = candidates.slice(0, 8).map((candidate) => {
+      const entry = candidate as { name?: unknown; status?: unknown; provider?: unknown; risk?: unknown; createCommand?: unknown };
+      return `${entry.name ?? "connection"}: ${entry.status ?? "unknown"} (${entry.provider ?? "provider"}, ${entry.risk ?? "risk"})${typeof entry.createCommand === "string" ? ` - ${entry.createCommand}` : ""}`;
+    });
+    return [
+      `Connection discovery: ${summary?.available ?? "?"} available, ${summary?.configured ?? "?"} configured, ${summary?.missing ?? "?"} missing.`,
+      ...lines,
+      "Full templates, allow/deny policy, and rationale are in structuredContent.",
+    ].join("\n");
+  }
+
   if (name === "repo_read") {
     return String(structured.content ?? "");
   }
@@ -1061,8 +1385,11 @@ function shortToolText(name: string, structured: Record<string, unknown>): strin
   return text.length > 3_000 ? `${text.slice(0, 3_000).trimEnd()}\n[truncated; inspect structuredContent for full result]` : text;
 }
 
-function resourceLinksForTool(name: string, structured: Record<string, unknown>): Array<Record<string, unknown>> {
+function resourceLinksForTool(name: string, structured: Record<string, unknown>, args: unknown): Array<Record<string, unknown>> {
   if (name !== "task_packet") {
+    return [];
+  }
+  if (!args || typeof args !== "object" || (args as { includeResourceLinks?: unknown }).includeResourceLinks !== true) {
     return [];
   }
   const packet = structured as { nextReads?: string[]; recommendedSkills?: Array<{ name: string }> };
@@ -1132,7 +1459,10 @@ async function callTool(
   const result = await tool.run(repoRoot, parsed.data);
   const structuredContent = normalizeStructuredContent(result);
   return {
-    content: [{ type: "text", text: shortToolText(tool.name, structuredContent) }, ...resourceLinksForTool(tool.name, structuredContent)],
+    content: [
+      { type: "text", text: shortToolText(tool.name, structuredContent) },
+      ...resourceLinksForTool(tool.name, structuredContent, parsed.data),
+    ],
     structuredContent,
   };
 }

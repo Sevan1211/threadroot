@@ -13,8 +13,8 @@ Please report security issues privately before opening a public issue. Until a d
 ## Security model
 
 - Threadroot does not store cloud secrets.
-- `.threadroot/` is local-only in `0.2.0` and should not be committed to git.
-- Repo indexes, run logs, web cache, provider receipts, embeddings config, local memory, and import reports under `.threadroot/` are local state.
+- `.threadroot/` is local-only in `0.2.1` and should not be committed to git.
+- Repo indexes, run logs, web cache, provider receipts, built-in local embedding vectors, trace-derived lessons, embeddings config, local memory, and import reports under `.threadroot/` are local state.
 - Provider files are not created visibly by default. Explicit project-file exposure should be reviewed like any other agent instruction/config change.
 - Connections wrap locally authenticated CLIs such as `gh`, `aws`, `az`, or Snowflake CLI.
 - Tools are explicit YAML manifests and run locally with the user's permissions.
@@ -22,7 +22,7 @@ Please report security issues privately before opening a public issue. Until a d
 - External installed tools are blocked until allow-listed.
 - `threadroot run <tool> --brief` stores full stdout/stderr locally and returns compact summaries to agents.
 - `threadroot task` may surface snippets, symbols, memory, and command suggestions; inspect debug-ranking output when context selection looks wrong.
-- Optional embeddings are disabled by default and should not be configured with cloud providers unless the user accepts code/content upload and cost implications.
+- Built-in local hashing embeddings require no keys, make no network calls, and stay in the repo-local index. External embedding providers should not be configured unless the user accepts code/content upload and cost implications.
 - `threadroot web fetch` treats public pages as untrusted external context and caches provenance under `.threadroot/cache/web/`.
 - `threadroot doctor` reports drift, unsafe tool trust, tracked/unignored `.threadroot` state, index degraded/stale state, connection health, and MCP connection hints.
 

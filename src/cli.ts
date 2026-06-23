@@ -13,12 +13,26 @@ import {
   runEmbeddingsStatus,
   type EmbeddingsConfigureOptions,
 } from "./commands/embeddings.js";
-import { runEvalContext, type EvalCliOptions } from "./commands/eval.js";
+import { runEvalContext, runEvalTraces, type EvalCliOptions, type TraceEvalCliOptions } from "./commands/eval.js";
 import { runIndex, runIndexStatus, type IndexCliOptions } from "./commands/indexer.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runImport, type ImportCliOptions } from "./commands/import.js";
+import { runImproveApply, runImproveLatest, type ImproveApplyOptions, type ImproveLatestOptions } from "./commands/improve.js";
+import {
+  runLoopFinish,
+  runLoopNext,
+  runLoopReport,
+  runLoopRun,
+  runLoopStart,
+  type LoopFinishOptions,
+  type LoopNextOptions,
+  type LoopReportOptions,
+  type LoopRunOptions,
+  type LoopStartOptions,
+} from "./commands/loop.js";
 import { runMap, type MapCliOptions } from "./commands/map.js";
 import { runMcp, runMcpCheck, type McpCheckOptions } from "./commands/mcp.js";
+import { runProvidersStatus, type ProvidersOptions } from "./commands/providers.js";
 import {
   runMemoryAppend,
   runMemoryGc,
@@ -46,6 +60,16 @@ import {
 import { runStatus } from "./commands/status.js";
 import { runTask, type TaskCliOptions } from "./commands/task.js";
 import {
+  runTraceEvent,
+  runTraceFinish,
+  runTraceLatest,
+  runTraceStart,
+  type TraceEventOptions,
+  type TraceFinishOptions,
+  type TraceLatestOptions,
+  type TraceStartOptions,
+} from "./commands/trace.js";
+import {
   runToolRun,
   runToolsAdd,
   runToolsCheck,
@@ -60,8 +84,10 @@ import { runWebFetch, runWebStatus, type WebFetchCliOptions, type WebStatusCliOp
 import {
   runConnectionsAdd,
   runConnectionsCheck,
+  runConnectionsDiscover,
   runConnectionsList,
   type ConnectionAddOptions,
+  type ConnectionsDiscoverOptions,
 } from "./commands/connections.js";
 import { THREADROOT_VERSION } from "./core/version.js";
 
@@ -115,6 +141,12 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .action((options) => runStatus(repoRoot, options));
 
   program
+    .command("providers")
+    .description("Show provider automation, MCP, and local CLI availability for Threadroot loops.")
+    .option("--json", "Print machine-readable JSON.")
+    .action((options: ProvidersOptions) => runProvidersStatus(repoRoot, options));
+
+  program
     .command("doctor")
     .description("Check harness validity, compiled output health, MCP hints, and tool trust.")
     .option("--json", "Print machine-readable JSON.")
@@ -166,8 +198,54 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--max-average-tokens <tokens>", "Exit non-zero when average packet tokens exceed this value.")
     .description("Run built-in gold-context retrieval evals.")
     .action((options: EvalCliOptions) => runEvalContext(repoRoot, options));
+  evalCommand
+    .command("traces")
+    .option("--latest", "Evaluate only the latest trace.")
+    .option("--json", "Print machine-readable JSON.")
+    .option("--min-recall <score>", "Exit non-zero when real-run Recall@5 is below this score.")
+    .option("--min-mrr <score>", "Exit non-zero when real-run MRR is below this score.")
+    .option("--max-failed-tool-runs <count>", "Exit non-zero when failed tool runs exceed this count.")
+    .description("Evaluate real trace receipts: needed-file recall, tool failures, and loop evidence.")
+    .action((options: TraceEvalCliOptions) => runEvalTraces(repoRoot, options));
 
-  const embeddings = program.command("embeddings").description("Configure optional embedding retrieval adapters.");
+  const trace = program.command("trace").description("Record local trace receipts for agent runs.");
+  trace
+    .command("start")
+    .argument("<task>", "Task or goal this trace records.")
+    .option("--agent <agent>", "Agent/provider label, such as codex or claude.")
+    .option("--budget <tokens>", "Preferred task packet budget.")
+    .option("--max-files <count>", "Maximum ranked non-test files in the starting packet.")
+    .option("--force-index", "Refresh the repo index before compiling the starting packet.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Start an active trace and capture the starting task packet.")
+    .action((task: string, options: TraceStartOptions) => runTraceStart(repoRoot, task, options));
+  trace
+    .command("event")
+    .argument("<type>", "Event type: read_file, edit_file, run_tool, tool_blocked, command, eval, improvement, or note.")
+    .option("--path <path>", "Repo-relative file path for read/edit events.")
+    .option("--tool <tool>", "Harness tool name for tool events.")
+    .option("--command <command>", "Command label for command/tool events.")
+    .option("--exit-code <code>", "Command exit code, or null.")
+    .option("--ok", "Mark the event as successful.")
+    .option("--duration-ms <ms>", "Event duration in milliseconds.")
+    .option("--message <message>", "Event note or summary.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Append an event to the active trace.")
+    .action((type: Parameters<typeof runTraceEvent>[1], options: TraceEventOptions) => runTraceEvent(repoRoot, type, options));
+  trace
+    .command("finish")
+    .option("--status <status>", "Final status: passed, failed, partial, blocked, or cancelled.")
+    .option("--summary <summary>", "Short outcome summary.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Finish the active trace.")
+    .action((options: TraceFinishOptions) => runTraceFinish(repoRoot, options));
+  trace
+    .command("latest")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show the latest trace receipt.")
+    .action((options: TraceLatestOptions) => runTraceLatest(repoRoot, options));
+
+  const embeddings = program.command("embeddings").description("Inspect built-in local vectors and configure optional external embedding adapters.");
   embeddings
     .command("configure")
     .option("--provider <provider>", "Embedding provider name.")
@@ -181,22 +259,82 @@ export function createProgram(repoRoot = process.cwd()): Command {
   embeddings
     .command("status")
     .option("--json", "Print machine-readable JSON.")
-    .description("Show optional embedding adapter status.")
+    .description("Show built-in local vector status and optional external embedding adapter config.")
     .action((options) => runEmbeddingsStatus(repoRoot, options));
   embeddings
     .command("refresh")
     .option("--json", "Print machine-readable JSON.")
-    .description("Refresh optional embeddings when an explicit adapter is available.")
+    .description("Refresh built-in local index vectors; external provider calls remain explicit.")
     .action((options) => runEmbeddingsRefresh(repoRoot, options));
 
   program
     .command("import")
     .option("--dry-run", "Detect provider files without writing an import report.")
-    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.2.0.")
+    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in this release.")
     .option("--move-provider-files", "Reserved for future explicit moves; currently errors rather than moving files.")
     .option("--json", "Print machine-readable JSON.")
     .description("Detect existing provider files and write a non-destructive .threadroot import report.")
     .action((options: ImportCliOptions) => runImport(repoRoot, options));
+
+  const improve = program.command("improve").description("Generate and apply guarded local trace-driven improvements.");
+  improve
+    .command("latest")
+    .option("--write-candidates", "Write pending candidates under .threadroot/improvements/pending/. Default when auto-apply is on.")
+    .option("--no-auto-apply", "Do not apply guarded local trace-derived routing, eval, and skill lessons.")
+    .option("--dry-run", "Report safe local lessons that would be applied without writing artifacts.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Analyze the latest trace and apply auto-safe local routing, eval, and skill lessons.")
+    .action((options: ImproveLatestOptions) => runImproveLatest(repoRoot, options));
+  improve
+    .command("apply")
+    .option("--auto-safe", "Compatibility flag; guarded auto-safe promotion is on by default.")
+    .option("--no-auto-safe", "Disable guarded local trace-derived promotion and only report skipped candidates.")
+    .option("--dry-run", "Report what would be applied without writing artifacts.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Apply safe trace-derived improvement candidates into local routing, eval, and skill artifacts.")
+    .action((options: ImproveApplyOptions) => runImproveApply(repoRoot, options));
+
+  const loop = program.command("loop").description("Run local Threadroot loop sessions for budgeted agent improvement.");
+  loop
+    .command("start")
+    .argument("<goal>", "Loop goal.")
+    .option("--agent <agent>", "Agent/provider label, such as codex or claude.")
+    .option("--time <duration>", "Time budget, such as 30m or 1h.")
+    .option("--max-iterations <count>", "Maximum iteration prompts.")
+    .option("--risk <risk>", "Risk budget: low, medium, or high.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Start a manual/assisted loop session.")
+    .action((goal: string, options: LoopStartOptions) => runLoopStart(repoRoot, goal, options));
+  loop
+    .command("next")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Generate the next loop prompt and start its trace.")
+    .action((options: LoopNextOptions) => runLoopNext(repoRoot, options));
+  loop
+    .command("report")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show loop status, latest trace eval, and improvement candidates.")
+    .action((options: LoopReportOptions) => runLoopReport(repoRoot, options));
+  loop
+    .command("run")
+    .option("--iterations <count>", "Maximum automated iterations to run.")
+    .option("--agent-command <command>", "Provider command to execute instead of the default adapter.")
+    .option("--agent-arg <arg...>", "Arguments passed to --agent-command.")
+    .option("--agent-adapter <adapter>", "Parser adapter for --agent-command output: codex, claude, or custom.")
+    .option("--timeout <ms>", "Per-iteration provider timeout in milliseconds.")
+    .option("--require <command...>", "Verification command(s) Threadroot must run after each provider iteration.")
+    .option("--verify-timeout <ms>", "Per-command verification timeout in milliseconds.")
+    .option("--no-write-candidates", "Analyze improvements without writing pending candidate files.")
+    .option("--no-auto-apply", "Do not apply auto-safe local trace-derived improvements after writing candidates.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run budgeted loop iterations through a provider command.")
+    .action((options: LoopRunOptions) => runLoopRun(repoRoot, options));
+  loop
+    .command("finish")
+    .option("--status <status>", "Final status: finished or cancelled.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Finish the active loop session.")
+    .action((options: LoopFinishOptions) => runLoopFinish(repoRoot, options));
 
   program
     .command("remember")
@@ -283,6 +421,12 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--json", "Print machine-readable JSON.")
     .description("Run configured connection healthchecks.")
     .action((options) => runConnectionsCheck(repoRoot, options));
+  connections
+    .command("discover")
+    .option("--include-missing", "Include known connection templates whose CLI command is not on PATH.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Discover locally available CLI connection templates without creating manifests.")
+    .action((options: ConnectionsDiscoverOptions) => runConnectionsDiscover(repoRoot, options));
   connections
     .command("add")
     .argument("<name>", "Connection name (lowercase, hyphenated).")

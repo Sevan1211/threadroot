@@ -58,6 +58,12 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
       console.log(`imported ${report.rules.length} cursor rule(s)`);
     }
     console.log(`compiled ${report.compiled.length} vendor file(s).`);
+    if (report.nextSteps.length > 0) {
+      console.log("next:");
+      for (const step of report.nextSteps) {
+        console.log(`- ${step.command} (${step.reason})`);
+      }
+    }
   } catch (error) {
     if (error instanceof InitError) {
       console.error(error.message);

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import path from "node:path";
 
 import { projectHarnessDir, userHarnessDir } from "../harness/index.js";
@@ -50,31 +50,71 @@ function cap(text: string): string {
   return `${text.slice(0, MAX_OUTPUT_CHARS)}\n…[output truncated]`;
 }
 
+function terminateProcess(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (process.platform === "win32" && child.pid) {
+    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" }).on("error", () => {
+      child.kill(signal);
+    });
+    return;
+  }
+  child.kill(signal);
+}
+
 function runProcess(plan: SpawnPlan, opts: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal }): Promise<ToolRunResult> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
-    const child = spawn(plan.file, plan.args, {
+    const spawnOptions: SpawnOptions = {
       cwd: opts.cwd,
       env: opts.env,
-      shell: plan.shell,
       stdio: ["ignore", "pipe", "pipe"],
-    });
+    };
+    let child: ChildProcess;
+    if (plan.shell) {
+      child = spawn(plan.file, { ...spawnOptions, shell: true });
+    } else {
+      child = spawn(plan.file, plan.args, { ...spawnOptions, shell: false });
+    }
 
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
+    let forceResolveTimer: NodeJS.Timeout | undefined;
+
+    const onAbort = () => {
+      terminateProcess(child, "SIGTERM");
+    };
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+
+    const complete = (code: number | null, signal: NodeJS.Signals | null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      if (forceResolveTimer) {
+        clearTimeout(forceResolveTimer);
+      }
+      opts.signal?.removeEventListener("abort", onAbort);
+      resolve({
+        ok: !timedOut && code === 0,
+        exitCode: code,
+        signal,
+        stdout: cap(stdout),
+        stderr: cap(stderr),
+        durationMs: Date.now() - started,
+        timedOut,
+        command: plan.label,
+      });
+    };
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS).unref();
+      terminateProcess(child, "SIGTERM");
+      setTimeout(() => terminateProcess(child, "SIGKILL"), KILL_GRACE_MS).unref();
+      forceResolveTimer = setTimeout(() => complete(null, "SIGKILL"), KILL_GRACE_MS + 500);
+      forceResolveTimer.unref();
     }, opts.timeoutMs);
-
-    const onAbort = () => {
-      child.kill("SIGTERM");
-    };
-    opts.signal?.addEventListener("abort", onAbort, { once: true });
 
     child.stdout?.on("data", (chunk: Buffer) => {
       if (stdout.length < MAX_OUTPUT_CHARS) {
@@ -93,27 +133,15 @@ function runProcess(plan: SpawnPlan, opts: { cwd: string; env: NodeJS.ProcessEnv
       }
       settled = true;
       clearTimeout(timer);
+      if (forceResolveTimer) {
+        clearTimeout(forceResolveTimer);
+      }
       opts.signal?.removeEventListener("abort", onAbort);
       reject(new ToolExecutionError(`Failed to start \`${plan.label}\`: ${error.message}`));
     });
 
     child.on("close", (code, signal) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      opts.signal?.removeEventListener("abort", onAbort);
-      resolve({
-        ok: !timedOut && code === 0,
-        exitCode: code,
-        signal,
-        stdout: cap(stdout),
-        stderr: cap(stderr),
-        durationMs: Date.now() - started,
-        timedOut,
-        command: plan.label,
-      });
+      complete(code, signal);
     });
   });
 }

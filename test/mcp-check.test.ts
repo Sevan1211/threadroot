@@ -26,23 +26,35 @@ afterEach(async () => {
 });
 
 async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS], version = THREADROOT_VERSION): Promise<string> {
-  const filePath = path.join(home, "fake-mcp.sh");
+  const filePath = path.join(home, "fake-mcp.mjs");
   const toolJson = JSON.stringify(tools.map((name) => ({ name, description: name, inputSchema: { type: "object" } })));
   const serverInfo = JSON.stringify({ name: "fake-threadroot", version });
   await writeFile(
     filePath,
     [
-      "#!/usr/bin/env bash",
-      "set -euo pipefail",
-      `tools='${toolJson}'`,
-      "while IFS= read -r line; do",
-      "  if [[ \"$line\" == *'\"method\":\"initialize\"'* ]]; then",
-      `    printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":${serverInfo},"capabilities":{"tools":{}}}}'`,
-      "  elif [[ \"$line\" == *'\"method\":\"tools/list\"'* ]]; then",
-      "    printf '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":%s}}\\n' \"$tools\"",
-      "  fi",
-      "done",
-      "",
+      "import readline from 'node:readline';",
+      `const tools = ${toolJson};`,
+      `const serverInfo = ${serverInfo};`,
+      "const rl = readline.createInterface({ input: process.stdin });",
+      "rl.on('line', (line) => {",
+      "  const message = JSON.parse(line);",
+      "  if (message.method === 'initialize') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { serverInfo, capabilities: { tools: {} } } }) + '\\n');",
+      "  }",
+      "  if (message.method === 'tools/list') {",
+      "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { tools } }) + '\\n');",
+      "  }",
+      "  if (message.method === 'tools/call' && message.params?.name === 'task_packet') {",
+      "    process.stdout.write(JSON.stringify({",
+      "      jsonrpc: '2.0',",
+      "      id: message.id,",
+      "      result: {",
+      "        content: [{ type: 'text', text: 'task packet smoke ok' }],",
+      "        structuredContent: { task: message.params.arguments?.task ?? 'smoke', files: [], tests: [], nextReads: [], tokenEstimate: 0, index: { exists: true } },",
+      "      },",
+      "    }) + '\\n');",
+      "  }",
+      "});",
     ].join("\n"),
     "utf8",
   );
@@ -88,12 +100,12 @@ describe("checkCodexMcp", () => {
 
   it("verifies configured stdio server tools", async () => {
     const server = await writeFakeMcpServer();
-    await writeCodexMcpConfig({ command: "bash", args: [server] });
+    await writeCodexMcpConfig({ command: process.execPath, args: [server] });
 
     const config = await readFile(path.join(home, ".codex/config.toml"), "utf8");
-    expect(config).toContain(`command = "bash"`);
-    expect(config).toContain(server);
-    expect(await readCodexThreadrootMcpEntry(home)).toEqual({ command: "bash", args: [server] });
+    expect(config).toContain(`command = "${process.execPath.replace(/\\/g, "\\\\")}"`);
+    expect(config).toContain(server.replace(/\\/g, "\\\\"));
+    expect(await readCodexThreadrootMcpEntry(home)).toEqual({ command: process.execPath, args: [server] });
 
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("ok");
@@ -102,7 +114,7 @@ describe("checkCodexMcp", () => {
 
   it("errors when required Threadroot tools are missing", async () => {
     const server = await writeFakeMcpServer(["status"]);
-    await writeCodexMcpConfig({ command: "bash", args: [server] });
+    await writeCodexMcpConfig({ command: process.execPath, args: [server] });
 
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("error");
@@ -111,7 +123,7 @@ describe("checkCodexMcp", () => {
 
   it("warns when the configured MCP server is an older Threadroot version", async () => {
     const server = await writeFakeMcpServer([...REQUIRED_MCP_TOOLS], "0.0.1");
-    await writeCodexMcpConfig({ command: "bash", args: [server] });
+    await writeCodexMcpConfig({ command: process.execPath, args: [server] });
 
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("warning");

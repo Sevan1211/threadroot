@@ -131,6 +131,10 @@ export async function runToolRun(repoRoot: string, name: string, options: ToolRu
     }
     console.log(brief.summary);
     console.log(`raw output: ${brief.rawOutputPath}`);
+    console.log(`compact output: ${brief.compactOutputPath}`);
+    console.log(
+      `compression: saved ~${brief.compression.estimatedTokensSaved} token(s), ratio ${brief.compression.compressionRatio}`,
+    );
     if (brief.failures.length > 0) {
       console.log("failures:");
       for (const failure of brief.failures) {

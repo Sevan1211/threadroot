@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { EffectiveHarness, LoadedTool } from "../src/core/harness/index.js";
 import { connectionManifestSchema, harnessManifestSchema, toolManifestSchema } from "../src/core/harness/index.js";
-import { createRunBrief } from "../src/core/run-brief.js";
+import { compressRunOutput, createRunBrief } from "../src/core/run-brief.js";
 import {
   ToolCreateError,
   ToolExecutionError,
@@ -146,28 +146,47 @@ describe("authorize", () => {
 });
 
 describe("execute", () => {
+  const nodeCommand = (source: string): string => `${JSON.stringify(process.execPath)} -e ${JSON.stringify(source)}`;
+
   it("runs a shell command and captures output + exit code", async () => {
-    const ok = await executeShell("echo hello", { cwd: dir });
+    const ok = await executeShell(nodeCommand("console.log('hello')"), { cwd: dir });
     expect(ok.ok).toBe(true);
     expect(ok.stdout.trim()).toBe("hello");
 
-    const fail = await executeShell("exit 3", { cwd: dir });
+    const fail = await executeShell(nodeCommand("process.exit(3)"), { cwd: dir });
     expect(fail.ok).toBe(false);
     expect(fail.exitCode).toBe(3);
   });
 
   it("creates compact run briefs with raw output stored locally", async () => {
-    const result = await executeShell("printf 'FAIL test/auth.test.ts:12 expected login\\n' >&2; exit 1", { cwd: dir });
+    const result = await executeShell(
+      nodeCommand("console.error('FAIL test/auth.test.ts:12 expected login'); process.exit(1)"),
+      { cwd: dir },
+    );
     const brief = await createRunBrief(dir, result);
 
     expect(brief.ok).toBe(false);
     expect(brief.rawOutputPath).toContain(".threadroot/cache/runs/");
+    expect(brief.compactOutputPath).toContain(".threadroot/cache/runs/");
     expect(brief.failures[0]).toMatchObject({ path: "test/auth.test.ts", line: 12 });
     expect(brief.suggestedNextReads).toContain("test/auth.test.ts");
   });
 
+  it("compresses repetitive output while preserving failure signals", () => {
+    const output = [
+      ...Array.from({ length: 80 }, () => "WARN retrying same thing"),
+      "FAIL test/auth.test.ts:12 expected login",
+    ].join("\n");
+    const compact = compressRunOutput(output);
+
+    expect(compact.text).toContain("test/auth.test.ts:12");
+    expect(compact.text).toContain("x80 WARN retrying same thing");
+    expect(compact.compression.estimatedTokensSaved).toBeGreaterThan(0);
+    expect(compact.compression.pruners).toEqual(expect.arrayContaining(["repeated-lines", "failure-signals"]));
+  });
+
   it("injects input env vars", async () => {
-    const result = await executeShell('echo "$TR_INPUT_NAME"', {
+    const result = await executeShell(nodeCommand("console.log(process.env.TR_INPUT_NAME)"), {
       cwd: dir,
       env: inputEnv({ name: "world" }),
     });
@@ -175,16 +194,19 @@ describe("execute", () => {
   });
 
   it("times out long-running commands", async () => {
-    const result = await executeShell("sleep 5", { cwd: dir, timeoutMs: 100 });
+    const result = await executeShell(nodeCommand("setTimeout(() => {}, 1000)"), {
+      cwd: path.dirname(dir),
+      timeoutMs: 100,
+    });
     expect(result.timedOut).toBe(true);
     expect(result.ok).toBe(false);
   });
 
   it("runs a harness script and rejects path traversal", async () => {
     await mkdir(path.join(dir, ".threadroot", "tools"), { recursive: true });
-    await writeFile(path.join(dir, ".threadroot", "tools", "hi.sh"), "#!/usr/bin/env bash\necho scripted\n");
+    await writeFile(path.join(dir, ".threadroot", "tools", "hi.mjs"), "console.log('scripted');\n");
 
-    const result = await executeScript(dir, ".threadroot/tools/hi.sh", { cwd: dir });
+    const result = await executeScript(dir, ".threadroot/tools/hi.mjs", { cwd: dir });
     expect(result.stdout.trim()).toBe("scripted");
 
     await expect(executeScript(dir, "../evil.sh", { cwd: dir })).rejects.toThrow(ToolExecutionError);
