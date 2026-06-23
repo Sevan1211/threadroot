@@ -8,7 +8,7 @@ Threadroot is a local repo intelligence runtime for coding agents. It keeps task
 .threadroot/
 ```
 
-For `0.1.8`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
+For `0.1.9`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
 
 ## Why
 
@@ -227,7 +227,7 @@ The npm package ships only runtime output and public docs. It must not ship `.th
 
 ## Security
 
-- `.threadroot/` is local-only in `0.1.8`; do not commit it.
+- `.threadroot/` is local-only in `0.1.9`; do not commit it.
 - `.threadroot/cache/index/`, `.threadroot/cache/runs/`, web cache, local memory, provider receipts, and embeddings config are local state.
 - Provider-native files are opt-in adapter outputs, not the default source.
 - Third-party skills are scanned and locked, not blindly trusted.

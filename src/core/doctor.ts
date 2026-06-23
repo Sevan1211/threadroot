@@ -152,7 +152,7 @@ async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
       finding(
         "warning",
         "threadroot_not_ignored",
-        "`.threadroot/` is not ignored by git. For 0.1.8, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
+        "`.threadroot/` is not ignored by git. For 0.1.9, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
         ".threadroot/",
       ),
     );

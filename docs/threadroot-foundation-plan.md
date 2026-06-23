@@ -1,4 +1,4 @@
-# Threadroot 0.1.8 Foundation Status
+# Threadroot 0.1.9 Foundation Status
 
 This document is the current release contract for Threadroot as a local repo intelligence runtime. Older bootstrap/setup/expose compatibility paths were removed before public launch; the product surface is now intentionally small.
 
@@ -124,7 +124,7 @@ Seed skills:
 
 ## Local-First Boundary
 
-`.threadroot/` is local-only in `0.1.8` and should not be committed.
+`.threadroot/` is local-only in `0.1.9` and should not be committed.
 
 Never commit:
 

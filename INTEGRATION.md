@@ -7,7 +7,7 @@ This document is the handoff surface for the future website/cloud repo. The OSS 
 Threadroot OSS is the local repo intelligence runtime for coding agents:
 
 - `.threadroot/` is the only default project artifact.
-- `.threadroot/` is local-only in `0.1.8` and should not be committed to git.
+- `.threadroot/` is local-only in `0.1.9` and should not be committed to git.
 - The CLI initializes, validates, indexes repo context, routes task packets, imports existing provider files non-destructively, scans skills, evaluates context quality, and serves MCP.
 - MCP exposes the same local harness to agent clients.
 - Skills, tools, connections, memory, web fetch, and policy execute locally.
@@ -39,7 +39,7 @@ Ask only for high-signal details:
 
 ## Prompt-to-CLI Mapping
 
-Prefer the 0.1.8 public path:
+Prefer the 0.1.9 public path:
 
 ```bash
 threadroot init --profile <profile> --json
@@ -219,7 +219,7 @@ Embeddings are optional and disabled by default. Do not ask for API keys during 
 
 ## Web
 
-Threadroot-native web support in `0.1.8` is known-URL fetch:
+Threadroot-native web support in `0.1.9` is known-URL fetch:
 
 ```bash
 threadroot web status --json

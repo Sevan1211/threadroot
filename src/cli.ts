@@ -179,7 +179,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .command("import")
     .option("--dry-run", "Detect provider files without writing an import report.")
-    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.1.8.")
+    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.1.9.")
     .option("--move-provider-files", "Reserved for future explicit moves; currently errors rather than moving files.")
     .option("--json", "Print machine-readable JSON.")
     .description("Detect existing provider files and write a non-destructive .threadroot import report.")

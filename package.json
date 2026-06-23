@@ -1,6 +1,6 @@
 {
   "name": "threadroot",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
   "license": "MIT",
   "type": "module",
