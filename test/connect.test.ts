@@ -65,4 +65,20 @@ describe("connectProviders", () => {
     await expect(exists(".cursor/mcp.json")).resolves.toBe(true);
     await expect(exists(".vscode/mcp.json")).resolves.toBe(true);
   });
+
+  it("refreshes the global agent skill only when explicitly requested", async () => {
+    const dry = await connectProviders(repo, { agents: "codex", home: repo });
+    expect(dry.agents[0]?.skillPath).toBeUndefined();
+    await expect(exists(".agents/skills/threadroot/SKILL.md")).resolves.toBe(false);
+
+    const report = await connectProviders(repo, { agents: "codex", home: repo, refreshSkill: true });
+    expect(report.agents[0]?.skillPath).toBe(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"));
+    const skill = await readFile(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"), "utf8");
+    expect(skill).toContain("threadroot task \"<task>\" --json");
+    expect(skill).toContain("threadroot refresh --json");
+    expect(skill).toContain("MCP `task_packet`");
+    expect(skill).not.toContain("threadroot start");
+    expect(skill).not.toContain("threadroot bootstrap");
+    expect(skill).not.toContain("threadroot expose");
+  });
 });

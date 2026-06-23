@@ -49,6 +49,7 @@ threadroot task "<task>"
 threadroot init
 threadroot connect <agent>
 threadroot task "<task>"
+threadroot refresh
 threadroot index --status
 threadroot eval context
 threadroot map --write
@@ -76,9 +77,9 @@ threadroot web status
 ## How Agents Should Use It
 
 - Start with \`threadroot task "<task>"\` or MCP \`task_packet\` before broad codebase exploration.
+- Trust \`task\` to refresh stale repo-map/index state before routing; use \`threadroot refresh\` or MCP \`refresh_context\` for explicit preflight.
 - Use \`threadroot task "<task>" --debug-ranking\` when the packet looks wrong or low-signal.
-- Use \`threadroot index\` when the repo index is missing, stale, or degraded.
-- Use \`threadroot map --write\` when the repo map is missing or stale.
+- Use \`threadroot index\` only when you need a manual rebuild or status check.
 - Use \`threadroot skills find "<query>"\` when installed skills do not fit the task.
 - Use \`threadroot skills ingest <source> --skill <name>\` so third-party skills are scanned, locked, and stored under \`.threadroot/skills/\`.
 - Use \`threadroot memory gc\` when memory starts repeating itself or growing too large.

@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildRepoIndex, indexStatus, readRepoIndex, scoreIndexCandidates } from "../src/core/repo-index.js";
+import { repoMapStatus } from "../src/core/repo-map.js";
 import { assembleTaskPacket } from "../src/core/task-packet.js";
 import { initHarness } from "../src/core/init/index.js";
 
@@ -65,6 +66,21 @@ describe("repo index", () => {
     expect(packet.debugRanking?.candidates.some((candidate) => candidate.path === "src/billing.ts")).toBe(true);
   });
 
+  it("refreshes stale repo map and index before task routing", async () => {
+    await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
+    await initHarness(repo, { import: false, home: repo });
+    await write("src/fresh.ts", "export function freshRoute() { return 'fresh'; }\n");
+
+    expect((await repoMapStatus(repo)).status).toBe("stale");
+
+    const packet = await assembleTaskPacket(repo, "fix freshRoute routing", { debugRanking: true });
+
+    expect(packet.files.map((file) => file.path)).toContain("src/fresh.ts");
+    expect(packet.freshness?.refreshed).toEqual(expect.arrayContaining(["repo-map", "index"]));
+    expect((await repoMapStatus(repo)).status).toBe("current");
+    expect(["current", "degraded"]).toContain((await indexStatus(repo)).status);
+  });
+
   it("does not route deleted git-index files into task packets", async () => {
     await execFileAsync("git", ["init"], { cwd: repo });
     await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
@@ -80,5 +96,24 @@ describe("repo index", () => {
     expect(paths).toContain("src/live.ts");
     expect(paths).not.toContain("src/deleted.ts");
     expect(packet.debugRanking?.candidates.some((candidate) => candidate.path === "src/deleted.ts")).toBe(false);
+  });
+
+  it("serializes concurrent index refreshes", async () => {
+    await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
+    await write("src/a.ts", "export function alphaRoute() { return 'a'; }\n");
+    await write("src/b.ts", "export function betaRoute() { return 'b'; }\n");
+    await initHarness(repo, { import: false, home: repo });
+
+    const results = await Promise.all([
+      buildRepoIndex(repo, { force: true, home: repo }),
+      buildRepoIndex(repo, { force: true, home: repo }),
+      buildRepoIndex(repo, { force: true, home: repo }),
+    ]);
+
+    expect(results.every((result) => result.written)).toBe(true);
+    expect(["current", "degraded"]).toContain((await indexStatus(repo)).status);
+    expect((await readRepoIndex(repo))?.symbols.map((symbol) => symbol.name)).toEqual(
+      expect.arrayContaining(["alphaRoute", "betaRoute"]),
+    );
   });
 });

@@ -82,7 +82,7 @@ export const DEFAULT_CONTEXT_EVALS: ContextEvalCase[] = [
   { id: "snyk-scan", task: "integrate optional Snyk agent scan", expectedFiles: ["src/core/snyk-agent-scan.ts", "src/core/skills-install.ts", "test/skills-install.test.ts"] },
   { id: "install-source", task: "parse install source refs", expectedFiles: ["src/core/install/source.ts", "test/harness-schema.test.ts"] },
   { id: "install-fetch", task: "fetch GitHub skill sources", expectedFiles: ["src/core/install/fetch.ts", "src/core/skills-install.ts", "test/skills-install.test.ts"] },
-  { id: "lockfile", task: "write lock file provenance", expectedFiles: ["src/core/install/lock.ts", ".threadroot/lock.json"] },
+  { id: "lockfile", task: "write lock file provenance", expectedFiles: ["src/core/install/lock.ts", "test/skills-install.test.ts"] },
   { id: "json-output", task: "print JSON command output", expectedFiles: ["src/commands/json.ts", "test/cli-smoke.test.ts"] },
   { id: "version", task: "bump Threadroot version", expectedFiles: ["src/core/version.ts", "package.json"] },
   { id: "index", task: "build repo intelligence index", expectedFiles: ["src/core/repo-index.ts", "src/commands/indexer.ts"] },
@@ -154,7 +154,7 @@ export async function runContextEvals(repoRoot: string, cases = DEFAULT_CONTEXT_
       continue;
     }
     const packet = await assembleTaskPacket(repoRoot, entry.task, { maxFiles: 12 });
-    const topFiles = [...packet.files.map((file) => file.path), ...packet.tests.map((file) => file.path)];
+    const topFiles = [...packet.files, ...packet.tests].sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).map((file) => file.path);
     const expected = [...entry.expectedFiles, ...(entry.expectedTests ?? [])];
     const commands = packet.commands.map((command) => command.name);
     const skills = packet.recommendedSkills.map((skill) => skill.name);

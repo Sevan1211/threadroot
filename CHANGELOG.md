@@ -8,6 +8,35 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 - No unreleased changes yet.
 
+## 0.2.0 - Agent-first MCP and public launch polish
+
+### Added
+
+- `threadroot connect <agent> --refresh-skill` to explicitly install or refresh the global Threadroot agent skill with the current `task_packet`/`repo_read` workflow.
+- `threadroot refresh [--force]` and MCP `refresh_context` to refresh stale repo-map/index state through the same path used by task packets.
+- `threadroot eval context` regression gates: `--min-recall`, `--min-precision`, `--min-ndcg`, and `--max-average-tokens`.
+- MCP 2025-06-18 initialization, prompt support, resource templates, tool annotations, output schemas, compact tool summaries, and task-packet resource links.
+- MCP resource templates for `threadroot://repo/{path}`, `threadroot://skill/{name}`, and `threadroot://memory/{type}`.
+- MCP version-skew detection so `threadroot mcp check` warns when the configured server is an older global install than the local CLI.
+
+### Changed
+
+- Task packets now enforce a default compact budget, trimming snippets, memory, repo-map excerpts, long reasons, debug-ranking details, and lower-ranked files before flooding the model.
+- Task packets now refresh stale repo-map and index state before routing, then report a compact freshness summary.
+- Context evals now combine ranked files and tests by score instead of appending tests after all source files.
+- Routing hints were tightened for MCP resources/prompts, init, status, package smoke, and GitHub skill-source fetch tasks.
+- Routing hints now prioritize owning tests alongside command/module surfaces for MCP, repo-map, doctor, provider connect/import, tool policy, automation, adapter, docs, and eval tasks.
+- `better-sqlite3` is now an optional peer accelerator instead of a default optional dependency, avoiding npm's deprecated `prebuild-install` warning during normal install.
+- README, integration, security, and release-contract docs now describe the 0.2.0 agent-first flow.
+
+### Removed
+
+- Removed the stale `docs/` foundation-plan folder from the public repo surface.
+
+### Measured
+
+- Local-source context evals improved to roughly Recall@5 0.993, Precision@5 0.524, MRR 0.989, nDCG@5 0.953, with average packet size around 3,264 estimated tokens.
+
 ## 0.1.9 - Repo intelligence runtime
 
 ### Added

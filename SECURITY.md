@@ -13,7 +13,7 @@ Please report security issues privately before opening a public issue. Until a d
 ## Security model
 
 - Threadroot does not store cloud secrets.
-- `.threadroot/` is local-only in `0.1.9` and should not be committed to git.
+- `.threadroot/` is local-only in `0.2.0` and should not be committed to git.
 - Repo indexes, run logs, web cache, provider receipts, embeddings config, local memory, and import reports under `.threadroot/` are local state.
 - Provider files are not created visibly by default. Explicit project-file exposure should be reviewed like any other agent instruction/config change.
 - Connections wrap locally authenticated CLIs such as `gh`, `aws`, `az`, or Snowflake CLI.

@@ -8,6 +8,7 @@ export type ConnectCliOptions = JsonCliOptions & {
   undo?: boolean;
   status?: boolean;
   projectFiles?: boolean;
+  refreshSkill?: boolean;
 };
 
 function modeFromOptions(options: ConnectCliOptions): ConnectMode {
@@ -27,6 +28,7 @@ export async function runConnect(
     agents: options.all ? "all" : agent,
     mode: modeFromOptions(options),
     projectFiles: options.projectFiles,
+    refreshSkill: options.refreshSkill,
   });
 
   if (options.json) {
@@ -38,6 +40,9 @@ export async function runConnect(
   for (const result of report.agents) {
     console.log(`\n${result.agent}: ${result.status}`);
     console.log(`receipt: ${result.receiptPath}`);
+    if (result.skillPath) {
+      console.log(`skill: ${result.skillPath}`);
+    }
     if (result.projectFiles.length > 0) {
       console.log("project files:");
       for (const file of result.projectFiles) {

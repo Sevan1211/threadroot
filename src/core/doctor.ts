@@ -99,7 +99,7 @@ async function repoMapHints(repoRoot: string): Promise<DoctorFinding[]> {
     finding(
       "warning",
       status.status === "missing" ? "repo_map_missing" : "repo_map_stale",
-      `Repo map is ${status.status}. Run \`threadroot map --write\` so agents can navigate the codebase without loading everything.`,
+      `Repo map is ${status.status}. Run \`threadroot refresh\` so agents can navigate with fresh map and index state.`,
       status.path,
     ),
   ];
@@ -152,7 +152,7 @@ async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
       finding(
         "warning",
         "threadroot_not_ignored",
-        "`.threadroot/` is not ignored by git. For 0.1.9, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
+        "`.threadroot/` is not ignored by git. For 0.2.0, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
         ".threadroot/",
       ),
     );
@@ -266,7 +266,7 @@ async function staleInstructionHints(repoRoot: string, home?: string): Promise<D
       finding(
         "warning",
         "stale_global_threadroot_skill",
-        `Installed Threadroot agent skill contains stale command references: ${stale.map((entry) => entry.label).join(", ")}. Reinstall or refresh the skill before judging provider integration.`,
+        `Installed Threadroot agent skill contains stale command references: ${stale.map((entry) => entry.label).join(", ")}. Run \`threadroot connect codex --refresh-skill\` and restart the agent session before judging provider integration.`,
         globalSkillPath,
       ),
     );

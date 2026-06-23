@@ -8,14 +8,14 @@ Threadroot is a local repo intelligence runtime for coding agents. It keeps task
 .threadroot/
 ```
 
-For `0.1.9`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
+For `0.2.0`, `.threadroot/` is local-only and should not be committed to git. The OSS CLI works without a cloud account or API key.
 
 ## Why
 
 AI coding setups usually sprawl across provider instruction files, MCP configs, prompts, notes, shell snippets, and stale docs. Threadroot gives agents a smaller, fresher first packet:
 
 - `threadroot task` packets with ranked files, symbol outlines, snippets, tests, commands, skills, warnings, and token estimates
-- a local repo intelligence index using SQLite/FTS5 through optional `better-sqlite3` when available, with a deterministic fallback
+- a local repo intelligence index with a deterministic fallback and optional SQLite/FTS5 acceleration when `better-sqlite3` is installed
 - built-in context evals for recall, precision, MRR, nDCG, token count, and irrelevant-file rate
 - progressive-disclosure skills under `.threadroot/skills/`
 - explicit local tools and connections with risk/confirmation metadata
@@ -29,7 +29,7 @@ In a new or existing repo:
 
 ```bash
 npm exec --package=threadroot -- threadroot init
-npm exec --package=threadroot -- threadroot connect codex
+npm exec --package=threadroot -- threadroot connect codex --refresh-skill
 npm exec --package=threadroot -- threadroot task "start this project"
 ```
 
@@ -37,13 +37,13 @@ Or after install:
 
 ```bash
 threadroot init
-threadroot connect codex
+threadroot connect codex --refresh-skill
 threadroot task "start this project"
 ```
 
 Use `threadroot connect <agent>` for `codex`, `claude`, `cursor`, `vscode`, `copilot`, `gemini`, `windsurf`, `opencode`, `antigravity`, or `all`.
 
-Default connect writes only a non-secret receipt under `.threadroot/providers/<agent>/` and prints the provider-specific setup command or instructions. It does not create visible provider files such as `AGENTS.md`, `CLAUDE.md`, `.vscode/`, `.cursor/`, `.mcp.json`, or `.github/copilot-instructions.md`.
+Default connect writes only a non-secret receipt under `.threadroot/providers/<agent>/` and prints the provider-specific setup command or instructions. `--refresh-skill` explicitly installs/updates the global Threadroot agent skill for that provider so agents learn the current `task_packet`/`repo_read` workflow. Connect does not create visible provider files such as `AGENTS.md`, `CLAUDE.md`, `.vscode/`, `.cursor/`, `.mcp.json`, or `.github/copilot-instructions.md`.
 
 Visible provider project files are opt-in:
 
@@ -60,7 +60,7 @@ threadroot eval context
 threadroot doctor
 ```
 
-`task` is the canonical first command. It refreshes or reads the local repo intelligence index, then returns a compact first-read packet so the agent does not flood the prompt or wander the repo.
+`task` is the canonical first command. It refreshes stale repo-map/index state, then returns a compact first-read packet so the agent does not flood the prompt or wander the repo.
 
 ```bash
 threadroot task "fix flaky billing retry test" --json
@@ -68,18 +68,29 @@ threadroot task "fix flaky billing retry test" --json
 
 The result includes ranked files, symbol outlines, snippets, tests, likely commands, recommended skills, relevant memory, freshness/trust/permission warnings, next reads, omitted sections, debug-ranking details when requested, and an approximate token estimate.
 
-`threadroot eval context` runs built-in gold-context cases that apply to the current repo and skips non-applicable built-ins instead of reporting misleading scores.
+`threadroot eval context` runs built-in gold-context cases that apply to the current repo and skips non-applicable built-ins instead of reporting misleading scores. Use `--min-recall`, `--min-precision`, `--min-ndcg`, and `--max-average-tokens` as release gates for routing quality and token cost.
 
 ## Repo Intelligence
 
 ```bash
 threadroot index
 threadroot index --status --json
+threadroot refresh --json
 threadroot task "fix auth bug" --debug-ranking
 threadroot eval context
+threadroot eval context --min-recall 0.95 --min-ndcg 0.90 --max-average-tokens 3600
 ```
 
-The index lives under `.threadroot/cache/index/`. Threadroot tries optional `better-sqlite3` first for a fast local SQLite/FTS5 backend, then falls back to Node's `node:sqlite` on supported runtimes, then to a deterministic JSON index. When native SQLite is unavailable, `doctor` reports degraded precision instead of failing the harness.
+The repo map lives under `.threadroot/memory/repo-map.md` and the index lives under `.threadroot/cache/index/`. `threadroot task` refreshes stale map/index state automatically; `threadroot refresh` exists for explicit preflight, CI, hooks, and agent sessions that want to prove context freshness before routing.
+
+Threadroot tries `better-sqlite3` when it is installed as an optional peer accelerator, then falls back to Node's `node:sqlite` on supported runtimes, then to a deterministic JSON index. When native SQLite is unavailable, `doctor` reports degraded precision instead of failing the harness.
+
+Optional native acceleration:
+
+```bash
+npm install -g better-sqlite3
+threadroot index --force
+```
 
 The shipped extractor is language-aware for TypeScript, JavaScript, Python, Go, Rust, JSON, YAML, Markdown, and broad text fallbacks. Tree-sitter grammar adapters remain a future native path.
 
@@ -124,10 +135,11 @@ In a git repo, init prefers `.git/info/exclude` so `.threadroot/` stays out of c
 
 ```bash
 threadroot init [--no-import] [--profile <profile>] [--gitignore]
-threadroot connect [agent|all] [--check] [--status] [--undo] [--project-files] [--json]
+threadroot connect [agent|all] [--check] [--status] [--undo] [--project-files] [--refresh-skill] [--json]
 threadroot task "<task>" [--budget <tokens>] [--max-files <count>] [--debug-ranking] [--json]
+threadroot refresh [--force] [--json]
 threadroot index [--status] [--force] [--json]
-threadroot eval context [--json]
+threadroot eval context [--json] [--min-recall <score>] [--min-precision <score>] [--min-ndcg <score>] [--max-average-tokens <tokens>]
 threadroot embeddings status|configure|refresh [--json]
 threadroot import [--dry-run] [--consolidate] [--json]
 threadroot map --write|--check [--json]
@@ -206,7 +218,7 @@ Check Codex MCP config:
 threadroot mcp check
 ```
 
-MCP exposes lazy tools including `task_packet`, `index_status`, `trace_context`, `eval_context`, repo map/search/read, skills, tools, connections, memory, web status/fetch, status, and doctor. It also exposes resources such as `threadroot://repo-map`, `threadroot://task/latest`, `threadroot://runs/latest`, `threadroot://skills`, `threadroot://memory`, and `threadroot://index`.
+MCP exposes lazy tools including `task_packet`, `index_status`, `refresh_context`, `trace_context`, `eval_context`, repo map/search/read, skills, tools, connections, memory, web status/fetch, status, and doctor. Tool responses include structured content, compact text summaries, trust annotations, and resource links where useful. MCP also exposes resources such as `threadroot://repo-map`, `threadroot://task/latest`, `threadroot://runs/latest`, `threadroot://skills`, `threadroot://memory`, and `threadroot://index`, plus templates such as `threadroot://repo/{path}`, `threadroot://skill/{name}`, and `threadroot://memory/{type}`.
 
 ## Development
 
@@ -227,7 +239,7 @@ The npm package ships only runtime output and public docs. It must not ship `.th
 
 ## Security
 
-- `.threadroot/` is local-only in `0.1.9`; do not commit it.
+- `.threadroot/` is local-only in `0.2.0`; do not commit it.
 - `.threadroot/cache/index/`, `.threadroot/cache/runs/`, web cache, local memory, provider receipts, and embeddings config are local state.
 - Provider-native files are opt-in adapter outputs, not the default source.
 - Third-party skills are scanned and locked, not blindly trusted.

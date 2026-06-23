@@ -99,7 +99,7 @@ const TASK_STOPWORDS = new Set([
 ]);
 
 const LOW_SIGNAL_PATH_TERMS = new Set(["core", "docs", "file", "files", "src", "test", "tests"]);
-const DOC_TASK_TERMS = new Set(["changelog", "doc", "docs", "documentation", "readme", "release", "security"]);
+const DOC_TASK_TERMS = new Set(["changelog", "doc", "docs", "documentation", "explain", "integration", "readme", "release", "security"]);
 const IMPLEMENTATION_TASK_RE = /\b(add|build|change|debug|fix|implement|improve|refactor|repair|route|test|wire)\b/i;
 
 const THREADROOT_VALUE_TERMS = new Set([
@@ -134,7 +134,7 @@ const THREADROOT_VALUE_HINTS: Array<{ path: string; score: number; reason: strin
   { path: "test/mcp-server.test.ts", score: 8, reason: "Threadroot context-routing tests" },
   { path: "test/cli-smoke.test.ts", score: 7, reason: "Threadroot first-run workflow tests" },
   { path: "README.md", score: 5, reason: "Threadroot product promise" },
-  { path: "docs/threadroot-foundation-plan.md", score: 4, reason: "Threadroot product plan" },
+  { path: "CHANGELOG.md", score: 4, reason: "Threadroot release surface" },
 ];
 
 const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; paths: Array<{ path: string; score: number }>; reason: string }> = [
@@ -143,18 +143,48 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     any: ["resource", "resources", "task_packet", "tool", "tools", "handshake"],
     reason: "MCP implementation surface",
     paths: [
-      { path: "src/mcp/server.ts", score: 28 },
-      { path: "test/mcp-server.test.ts", score: 22 },
-      { path: "src/core/mcp-check.ts", score: 16 },
-      { path: "test/mcp-check.test.ts", score: 12 },
+      { path: "src/mcp/server.ts", score: 36 },
+      { path: "test/mcp-server.test.ts", score: 30 },
+      { path: "src/core/mcp-check.ts", score: 12 },
+      { path: "test/mcp-check.test.ts", score: 10 },
+    ],
+  },
+  {
+    all: ["mcp"],
+    any: ["resource", "resources", "latest", "index", "prompt", "prompts", "template", "templates"],
+    reason: "MCP resources and prompts surface",
+    paths: [
+      { path: "src/mcp/server.ts", score: 36 },
+      { path: "test/mcp-server.test.ts", score: 24 },
+      { path: "src/core/task-packet.ts", score: 18 },
+      { path: "src/core/mcp-check.ts", score: 12 },
+    ],
+  },
+  {
+    all: ["mcp", "handshake"],
+    reason: "MCP handshake check surface",
+    paths: [
+      { path: "src/core/mcp-check.ts", score: 50 },
+      { path: "test/mcp-check.test.ts", score: 42 },
+      { path: "src/mcp/server.ts", score: 18 },
     ],
   },
   {
     all: ["integration"],
     reason: "integration documentation surface",
     paths: [
-      { path: "INTEGRATION.md", score: 34 },
-      { path: "README.md", score: 18 },
+      { path: "INTEGRATION.md", score: 44 },
+      { path: "README.md", score: 28 },
+    ],
+  },
+  {
+    all: ["release"],
+    any: ["doc", "docs", "documentation", "update"],
+    reason: "release documentation surface",
+    paths: [
+      { path: "RELEASE.md", score: 40 },
+      { path: "CHANGELOG.md", score: 32 },
+      { path: "README.md", score: 26 },
     ],
   },
   {
@@ -174,6 +204,38 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
       { path: "src/commands/task.ts", score: 20 },
       { path: "src/core/working-set.ts", score: 18 },
       { path: "src/core/repo-index.ts", score: 14 },
+      { path: "test/working-set.test.ts", score: 24 },
+    ],
+  },
+  {
+    all: ["task", "command"],
+    reason: "task command surface",
+    paths: [
+      { path: "src/cli.ts", score: 72 },
+      { path: "src/commands/task.ts", score: 64 },
+      { path: "src/core/task-packet.ts", score: 60 },
+      { path: "test/cli-smoke.test.ts", score: 56 },
+    ],
+  },
+  {
+    all: ["repo", "map"],
+    reason: "repo map surface",
+    paths: [
+      { path: "src/core/repo-map.ts", score: 38 },
+      { path: "src/commands/map.ts", score: 34 },
+      { path: "test/repo-map.test.ts", score: 30 },
+      { path: "src/core/freshness.ts", score: 18 },
+    ],
+  },
+  {
+    all: ["doctor", "index"],
+    any: ["degraded", "report", "mode"],
+    reason: "doctor index health surface",
+    paths: [
+      { path: "src/core/doctor.ts", score: 38 },
+      { path: "src/commands/doctor.ts", score: 34 },
+      { path: "test/doctor.test.ts", score: 30 },
+      { path: "src/core/repo-index.ts", score: 18 },
     ],
   },
   {
@@ -194,8 +256,29 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
       { path: "src/core/skills.ts", score: 20 },
       { path: "src/core/skills-install.ts", score: 18 },
       { path: "src/core/skills-scan.ts", score: 14 },
+      { path: "src/core/skills-find.ts", score: 28 },
       { path: "test/skills.test.ts", score: 12 },
       { path: "test/skills-install.test.ts", score: 12 },
+    ],
+  },
+  {
+    any: ["trigger", "triggers", "routing", "trust"],
+    all: ["skill"],
+    reason: "skill trigger routing surface",
+    paths: [
+      { path: "src/core/harness/context.ts", score: 34 },
+      { path: "src/core/skills.ts", score: 30 },
+      { path: "test/skills.test.ts", score: 24 },
+      { path: "src/commands/skills.ts", score: 12 },
+    ],
+  },
+  {
+    all: ["install", "source"],
+    reason: "install source parsing surface",
+    paths: [
+      { path: "src/core/install/source.ts", score: 76 },
+      { path: "src/core/harness/schema.ts", score: 42 },
+      { path: "test/harness-schema.test.ts", score: 64 },
     ],
   },
   {
@@ -218,12 +301,22 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     ],
   },
   {
+    all: ["import"],
+    any: ["provider", "files", "non", "destructive"],
+    reason: "provider import surface",
+    paths: [
+      { path: "src/core/init/import.ts", score: 68 },
+      { path: "src/commands/import.ts", score: 64 },
+      { path: "test/init.test.ts", score: 76 },
+    ],
+  },
+  {
     all: ["claude"],
     reason: "Claude adapter surface",
     paths: [
       { path: "src/core/compile/adapters/claude.ts", score: 30 },
       { path: "src/core/compile/adapters/shared.ts", score: 16 },
-      { path: "test/compile.test.ts", score: 14 },
+      { path: "test/compile.test.ts", score: 72 },
     ],
   },
   {
@@ -232,7 +325,7 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     paths: [
       { path: "src/core/compile/adapters/cursor.ts", score: 30 },
       { path: "src/core/compile/adapters/shared.ts", score: 16 },
-      { path: "test/compile.test.ts", score: 14 },
+      { path: "test/compile.test.ts", score: 72 },
     ],
   },
   {
@@ -240,26 +333,45 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     reason: "Copilot adapter surface",
     paths: [
       { path: "src/core/compile/adapters/copilot.ts", score: 30 },
-      { path: "test/compile.test.ts", score: 14 },
+      { path: "test/compile.test.ts", score: 34 },
     ],
   },
   {
     all: ["package"],
-    any: ["publish", "contents", "smoke", "npm"],
+    any: ["publish", "contents", "smoke", "npm", "pack"],
     reason: "package release surface",
     paths: [
-      { path: "scripts/package-smoke.mjs", score: 30 },
-      { path: "package.json", score: 20 },
-      { path: "test/cli-smoke.test.ts", score: 12 },
+      { path: "scripts/package-smoke.mjs", score: 72 },
+      { path: "package.json", score: 58 },
+      { path: "test/cli-smoke.test.ts", score: 70 },
+      { path: "RELEASE.md", score: 12 },
+    ],
+  },
+  {
+    all: ["version"],
+    reason: "version release surface",
+    paths: [
+      { path: "src/core/version.ts", score: 78 },
+      { path: "package.json", score: 72 },
+      { path: "test/mcp-check.test.ts", score: 12 },
+    ],
+  },
+  {
+    any: ["gitignore", "ignored"],
+    reason: "git ignore safety surface",
+    paths: [
+      { path: "src/core/gitignore.ts", score: 36 },
+      { path: "test/doctor.test.ts", score: 24 },
+      { path: "test/init.test.ts", score: 12 },
     ],
   },
   {
     all: ["frontmatter"],
     reason: "frontmatter parsing surface",
     paths: [
-      { path: "src/core/harness/frontmatter.ts", score: 30 },
-      { path: "src/core/harness/schema.ts", score: 18 },
-      { path: "test/harness-schema.test.ts", score: 14 },
+      { path: "src/core/harness/frontmatter.ts", score: 76 },
+      { path: "src/core/harness/schema.ts", score: 60 },
+      { path: "test/harness-schema.test.ts", score: 72 },
     ],
   },
   {
@@ -267,18 +379,38 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     any: ["output", "print", "command"],
     reason: "JSON command output surface",
     paths: [
-      { path: "src/commands/json.ts", score: 30 },
-      { path: "test/cli-smoke.test.ts", score: 14 },
+      { path: "src/commands/json.ts", score: 74 },
+      { path: "test/cli-smoke.test.ts", score: 72 },
       { path: "src/cli.ts", score: 10 },
+    ],
+  },
+  {
+    all: ["harness", "load"],
+    reason: "harness loading surface",
+    paths: [
+      { path: "src/core/harness/load.ts", score: 36 },
+      { path: "src/core/harness/index.ts", score: 48 },
+      { path: "test/harness-store.test.ts", score: 44 },
+      { path: "src/core/harness/context.ts", score: 12 },
     ],
   },
   {
     any: ["init", "initialize", "harness", "local-only"],
     reason: "init harness surface",
     paths: [
-      { path: "src/core/init/index.ts", score: 28 },
-      { path: "src/commands/init.ts", score: 22 },
-      { path: "test/init.test.ts", score: 14 },
+      { path: "src/core/init/index.ts", score: 74 },
+      { path: "src/commands/init.ts", score: 70 },
+      { path: "test/init.test.ts", score: 64 },
+    ],
+  },
+  {
+    all: ["status"],
+    any: ["count", "counts", "harness", "show"],
+    reason: "status command surface",
+    paths: [
+      { path: "src/core/status.ts", score: 36 },
+      { path: "src/commands/status.ts", score: 30 },
+      { path: "test/harness-surface.test.ts", score: 18 },
     ],
   },
   {
@@ -286,9 +418,29 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     any: ["fetch", "url", "provenance"],
     reason: "web fetch surface",
     paths: [
-      { path: "src/core/web.ts", score: 30 },
-      { path: "src/commands/web.ts", score: 20 },
-      { path: "test/web.test.ts", score: 14 },
+      { path: "src/core/web.ts", score: 82 },
+      { path: "src/commands/web.ts", score: 70 },
+      { path: "test/web.test.ts", score: 58 },
+    ],
+  },
+  {
+    all: ["url", "provenance"],
+    any: ["fetch", "public"],
+    reason: "known URL web fetch surface",
+    paths: [
+      { path: "src/core/web.ts", score: 86 },
+      { path: "src/commands/web.ts", score: 76 },
+      { path: "test/web.test.ts", score: 60 },
+    ],
+  },
+  {
+    all: ["connect", "codex"],
+    reason: "provider connect surface",
+    paths: [
+      { path: "src/core/connect.ts", score: 42 },
+      { path: "src/commands/connect.ts", score: 38 },
+      { path: "test/connect.test.ts", score: 34 },
+      { path: "src/core/agent-providers.ts", score: 18 },
     ],
   },
   {
@@ -300,6 +452,74 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
       { path: "src/core/tools/execute.ts", score: 22 },
       { path: "src/core/run-brief.ts", score: 22 },
       { path: "test/tools.test.ts", score: 14 },
+    ],
+  },
+  {
+    all: ["connection", "policy"],
+    any: ["allow", "deny", "enforce"],
+    reason: "tool connection policy surface",
+    paths: [
+      { path: "src/core/tools/connection-policy.ts", score: 38 },
+      { path: "src/core/tools/authorize.ts", score: 58 },
+      { path: "test/tools.test.ts", score: 48 },
+      { path: "test/connections.test.ts", score: 12 },
+    ],
+  },
+  {
+    any: ["eval", "evaluate"],
+    all: ["context"],
+    reason: "context eval surface",
+    paths: [
+      { path: "src/core/context-evals.ts", score: 78 },
+      { path: "src/commands/eval.ts", score: 72 },
+      { path: "test/working-set.test.ts", score: 12 },
+    ],
+  },
+  {
+    all: ["automation"],
+    reason: "automation approval surface",
+    paths: [
+      { path: "src/core/automation.ts", score: 42 },
+      { path: "src/commands/automation.ts", score: 38 },
+      { path: "test/hardening.test.ts", score: 34 },
+    ],
+  },
+  {
+    all: ["snyk", "scan"],
+    reason: "Snyk skill scan surface",
+    paths: [
+      { path: "src/core/snyk-agent-scan.ts", score: 42 },
+      { path: "src/core/skills-install.ts", score: 36 },
+      { path: "test/skills-install.test.ts", score: 34 },
+    ],
+  },
+  {
+    all: ["github", "skill"],
+    any: ["fetch", "source", "sources", "install", "ingest"],
+    reason: "GitHub skill source fetch surface",
+    paths: [
+      { path: "src/core/install/fetch.ts", score: 82 },
+      { path: "src/core/install/source.ts", score: 50 },
+      { path: "src/core/skills-install.ts", score: 48 },
+      { path: "test/skills-install.test.ts", score: 42 },
+    ],
+  },
+  {
+    all: ["managed", "blocks"],
+    reason: "managed block safety surface",
+    paths: [
+      { path: "src/core/managed-block.ts", score: 68 },
+      { path: "src/core/compile/managed.ts", score: 64 },
+      { path: "test/hardening.test.ts", score: 60 },
+    ],
+  },
+  {
+    all: ["lock"],
+    any: ["file", "provenance"],
+    reason: "lockfile provenance surface",
+    paths: [
+      { path: "src/core/install/lock.ts", score: 70 },
+      { path: "test/skills-install.test.ts", score: 48 },
     ],
   },
 ];
@@ -537,6 +757,60 @@ function addTaskIntentAdjustments(candidates: Map<string, WorkingSetFile>, task:
   }
 }
 
+function pathSignalTerms(filePath: string): Set<string> {
+  const normalized = filePath.toLowerCase().replace(/\.(test|spec)\.[^.]+$/u, "").replace(/\.[^.]+$/u, "");
+  const rawParts = normalized.split(/[^a-z0-9]+/u).filter(Boolean);
+  const parts = rawParts.filter((part) => !["src", "test", "tests", "core", "commands", "lib"].includes(part));
+  const base = path.basename(normalized);
+  const parent = path.basename(path.dirname(normalized));
+  if (base === "index" && parent && !["src", "core"].includes(parent)) {
+    parts.push(parent);
+  }
+  return new Set(parts.filter((part) => part.length > 1));
+}
+
+function addTestCompanions(candidates: Map<string, WorkingSetFile>, files: string[], taskTerms: string[]): void {
+  if (isDocumentationTask(taskTerms)) {
+    return;
+  }
+  const testFiles = files.filter(isTestPath);
+  if (testFiles.length === 0) {
+    return;
+  }
+
+  const companionScores = new Map<string, { score: number; source: string }>();
+  const sources = [...candidates.values()]
+    .filter((candidate) => !isTestPath(candidate.path) && candidate.path.startsWith("src/") && candidate.score >= 18)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 24);
+
+  for (const source of sources) {
+    const sourceTerms = pathSignalTerms(source.path);
+    if (sourceTerms.size === 0) {
+      continue;
+    }
+    for (const testPath of testFiles) {
+      const testTerms = pathSignalTerms(testPath);
+      const overlap = [...testTerms].filter((term) => sourceTerms.has(term));
+      if (overlap.length === 0) {
+        continue;
+      }
+      const sourceStem = path.basename(source.path).replace(/\.[^.]+$/u, "").toLowerCase();
+      const testStem = path.basename(testPath).replace(/\.(test|spec)\.[^.]+$/u, "").toLowerCase();
+      const exactStemBonus = sourceStem === testStem ? 10 : 0;
+      const score = Math.min(44, 8 + overlap.length * 8 + exactStemBonus + Math.ceil(source.score / 16));
+      const existing = companionScores.get(testPath);
+      if (!existing || score > existing.score) {
+        companionScores.set(testPath, { score, source: source.path });
+      }
+    }
+  }
+
+  for (const [testPath, companion] of companionScores) {
+    addCandidate(candidates, testPath, companion.score, `test companion for ${companion.source}`);
+  }
+}
+
 function estimateTokens(value: unknown): number {
   return Math.ceil(JSON.stringify(value).length / 4);
 }
@@ -600,6 +874,7 @@ export async function assembleWorkingSet(
     addCandidate(candidates, context.repoMap.path, 1, `repo map is ${context.repoMap.status}`);
   }
   addTaskIntentAdjustments(candidates, task, taskTerms);
+  addTestCompanions(candidates, filesInRepo, taskTerms);
 
   const ranked = [...candidates.values()]
     .filter((entry) => fileSet.has(entry.path))
@@ -635,7 +910,7 @@ export async function assembleWorkingSet(
   if (map?.status && map.status !== "current") {
     warnings.push({
       type: "freshness",
-      message: `Repo map is ${map.status}; run threadroot map --write for fresher orientation.`,
+      message: `Repo map is ${map.status}; run threadroot refresh for fresher map and index state.`,
       path: map.path,
     });
   }

@@ -7,7 +7,7 @@ This document is the handoff surface for the future website/cloud repo. The OSS 
 Threadroot OSS is the local repo intelligence runtime for coding agents:
 
 - `.threadroot/` is the only default project artifact.
-- `.threadroot/` is local-only in `0.1.9` and should not be committed to git.
+- `.threadroot/` is local-only in `0.2.0` and should not be committed to git.
 - The CLI initializes, validates, indexes repo context, routes task packets, imports existing provider files non-destructively, scans skills, evaluates context quality, and serves MCP.
 - MCP exposes the same local harness to agent clients.
 - Skills, tools, connections, memory, web fetch, and policy execute locally.
@@ -39,11 +39,11 @@ Ask only for high-signal details:
 
 ## Prompt-to-CLI Mapping
 
-Prefer the 0.1.9 public path:
+Prefer the 0.2.0 public path:
 
 ```bash
 threadroot init --profile <profile> --json
-threadroot connect <agent> --json
+threadroot connect <agent> --refresh-skill --json
 threadroot task "<initial task>" --json
 ```
 
@@ -99,7 +99,7 @@ The website should describe these as adaptive procedures, not a bundled library.
 
 1. Start with `threadroot task "<task>"`.
 2. Read the task packet's first files before broad repo exploration.
-3. Refresh stale codebase navigation with `threadroot map --write`.
+3. Use `threadroot refresh --json` for explicit preflight when a UI, hook, or hosted workflow wants fresh map/index state before asking for a task packet.
 4. Use installed skills only when relevant.
 5. Search with `threadroot skills find "<query>"` when no installed skill fits and a reusable procedure is needed.
 6. Install through `threadroot skills ingest <source> --skill <name>`.
@@ -114,13 +114,13 @@ The website/cloud repo should call these instead of scraping text:
 threadroot init --json
 threadroot connect <agent> --json
 threadroot task "<task>" --json
+threadroot refresh --json
 threadroot index --status --json
 threadroot eval context --json
 threadroot embeddings status --json
 threadroot import --json
 threadroot status --json
 threadroot doctor --json
-threadroot map --write --json
 threadroot map --check --json
 threadroot mcp check --json
 threadroot web status --json
@@ -219,7 +219,7 @@ Embeddings are optional and disabled by default. Do not ask for API keys during 
 
 ## Web
 
-Threadroot-native web support in `0.1.9` is known-URL fetch:
+Threadroot-native web support in `0.2.0` is known-URL fetch:
 
 ```bash
 threadroot web status --json

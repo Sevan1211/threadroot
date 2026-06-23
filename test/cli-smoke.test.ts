@@ -64,9 +64,15 @@ describe("CLI smoke", () => {
     expect(index).toContain("index:");
     expect(index).toContain("objects:");
 
+    const refresh = await run("refresh");
+    expect(refresh).toContain("context: refreshed");
+    expect(refresh).toContain("repo map:");
+    expect(refresh).toContain("index:");
+
     const task = await run("task", "write tests");
     expect(task).toContain("task: write tests");
     expect(task).toContain("index:");
+    expect(task).toContain("freshness:");
 
     const taskJson = JSON.parse(await run("task", "write tests", "--json")) as { task: string; index: { exists: boolean } };
     expect(taskJson.task).toBe("write tests");

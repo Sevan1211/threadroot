@@ -24,8 +24,9 @@ describe("mcp server handleMessage", () => {
   it("responds to initialize with server info", async () => {
     const response = await handleMessage(await tempRepo(), { jsonrpc: "2.0", id: 1, method: "initialize" });
     expect(response?.result).toMatchObject({
-      protocolVersion: "2024-11-05",
+      protocolVersion: "2025-06-18",
       serverInfo: { name: "threadroot" },
+      capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
     });
     expect(JSON.stringify(response?.result)).toContain("Call `task_packet` before broad coding work");
   });
@@ -35,15 +36,18 @@ describe("mcp server handleMessage", () => {
     expect(response).toBeUndefined();
   });
 
-  it("lists only harness-native tools, each with a JSON input schema", async () => {
+  it("lists only harness-native tools with schemas and trust annotations", async () => {
     const response = await handleMessage(await tempRepo(), { jsonrpc: "2.0", id: 2, method: "tools/list" });
-    const { tools } = response?.result as { tools: Array<{ name: string; inputSchema: unknown }> };
+    const { tools } = response?.result as {
+      tools: Array<{ name: string; title?: string; inputSchema: unknown; outputSchema?: unknown; annotations?: { readOnlyHint?: boolean; openWorldHint?: boolean } }>;
+    };
 
     const names = tools.map((tool) => tool.name);
     expect(names).toEqual(
       expect.arrayContaining([
         "task_packet",
         "index_status",
+        "refresh_context",
         "trace_context",
         "eval_context",
         "repo_map",
@@ -76,6 +80,45 @@ describe("mcp server handleMessage", () => {
     for (const tool of tools) {
       expect(tool.inputSchema).toMatchObject({ type: "object" });
     }
+    expect(tools.find((tool) => tool.name === "task_packet")).toMatchObject({
+      title: "Compile Task Packet",
+      outputSchema: { type: "object" },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    });
+    expect(tools.find((tool) => tool.name === "refresh_context")).toMatchObject({
+      title: "Refresh Context",
+      outputSchema: { type: "object" },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    });
+    expect(tools.find((tool) => tool.name === "tools_run")).toMatchObject({
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    });
+    expect(tools.find((tool) => tool.name === "web_fetch")).toMatchObject({
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    });
+  });
+
+  it("exposes resource templates and prompts for agent-first flows", async () => {
+    const repo = await harnessRepo();
+    const templates = await handleMessage(repo, { jsonrpc: "2.0", id: 30, method: "resources/templates/list" });
+    const templateResult = templates?.result as { resourceTemplates: Array<{ uriTemplate: string; annotations?: unknown }> };
+    expect(templateResult.resourceTemplates.map((entry) => entry.uriTemplate)).toEqual(
+      expect.arrayContaining(["threadroot://repo/{path}", "threadroot://skill/{name}", "threadroot://memory/{type}"]),
+    );
+
+    const listedPrompts = await handleMessage(repo, { jsonrpc: "2.0", id: 31, method: "prompts/list" });
+    const promptResult = listedPrompts?.result as { prompts: Array<{ name: string; title: string }> };
+    expect(promptResult.prompts.map((entry) => entry.name)).toContain("threadroot_task");
+
+    const prompt = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 32,
+      method: "prompts/get",
+      params: { name: "threadroot_task", arguments: { task: "fix billing route" } },
+    });
+    const promptGet = prompt?.result as { messages: Array<{ content: { text: string } }> };
+    expect(promptGet.messages[0]?.content.text).toContain("task_packet");
+    expect(promptGet.messages[0]?.content.text).toContain("fix billing route");
   });
 
   it("calls the status tool against a real harness", async () => {
@@ -95,6 +138,16 @@ describe("mcp server handleMessage", () => {
   it("returns repo map status and targeted repo reads", async () => {
     const repo = await harnessRepo();
     await fs.writeFile(path.join(repo, "src-feature.ts"), "export const feature = 'threadroot-map';\n", "utf8");
+
+    const refreshedContext = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 19,
+      method: "tools/call",
+      params: { name: "refresh_context", arguments: {} },
+    });
+    const refreshedContextResult = refreshedContext?.result as { structuredContent: { mapStatus: string; refreshed: string[] } };
+    expect(refreshedContextResult.structuredContent.mapStatus).toBe("current");
+    expect(refreshedContextResult.structuredContent.refreshed).toEqual(expect.arrayContaining(["repo-map", "index"]));
 
     const refreshed = await handleMessage(repo, {
       jsonrpc: "2.0",
@@ -147,10 +200,13 @@ describe("mcp server handleMessage", () => {
     });
     const taskResult = task?.result as {
       structuredContent: { files: Array<{ path: string; symbols: Array<{ name: string }> }>; index: { exists: boolean } };
+      content: Array<{ type: string; uri?: string; text?: string }>;
     };
     expect(taskResult.structuredContent.index.exists).toBe(true);
     expect(taskResult.structuredContent.files.map((file) => file.path)).toContain("src/billing.ts");
     expect(taskResult.structuredContent.files.find((file) => file.path === "src/billing.ts")?.symbols[0]?.name).toBe("retryInvoice");
+    expect(taskResult.content.some((entry) => entry.type === "resource_link" && entry.uri === "threadroot://task/latest")).toBe(true);
+    expect(taskResult.content.some((entry) => entry.type === "resource_link" && entry.uri?.startsWith("threadroot://repo/"))).toBe(true);
 
     const listed = await handleMessage(repo, { jsonrpc: "2.0", id: 242, method: "resources/list" });
     const listedResult = listed?.result as { resources: Array<{ uri: string }> };
@@ -166,6 +222,16 @@ describe("mcp server handleMessage", () => {
     });
     const readResult = read?.result as { contents: Array<{ text: string }> };
     expect(readResult.contents[0]?.text).toContain("retryInvoice");
+
+    const repoResource = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 244,
+      method: "resources/read",
+      params: { uri: "threadroot://repo/src%2Fbilling.ts" },
+    });
+    const repoResourceResult = repoResource?.result as { contents: Array<{ text: string; mimeType: string }> };
+    expect(repoResourceResult.contents[0]?.mimeType).toBe("text/plain");
+    expect(repoResourceResult.contents[0]?.text).toContain("retryInvoice");
   });
 
   it("reports web capability status through MCP", async () => {

@@ -254,7 +254,7 @@ function renderRepoMap(scan: RepoScan): string {
     "",
     "## Agent Notes",
     "",
-    "- Start with `threadroot task \"<task>\"` for indexed task context.",
+    "- Start with `threadroot task \"<task>\"` for indexed task context; it refreshes stale map/index state before routing.",
     "- Use this map to pick likely files, then search/read only what is relevant.",
     "- Use MCP `task_packet`, `repo_search`, and `repo_read` when available; otherwise use CLI task packets, `rg`, and targeted file reads.",
     "- Do not load generated, dependency, build, cache, or secret files unless the user explicitly asks.",

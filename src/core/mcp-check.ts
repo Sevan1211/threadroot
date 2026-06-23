@@ -10,6 +10,7 @@ import { THREADROOT_VERSION } from "./version.js";
 export const REQUIRED_MCP_TOOLS = [
   "task_packet",
   "index_status",
+  "refresh_context",
   "trace_context",
   "eval_context",
   "repo_map",
@@ -41,6 +42,7 @@ export type McpCheckReport = {
   configPath: string;
   entry?: McpServerEntry;
   serverInfo?: unknown;
+  serverVersion?: string;
   tools: string[];
   messages: string[];
 };
@@ -176,6 +178,7 @@ export async function checkCodexMcp(input: {
   try {
     const handshake = await runMcpHandshake(entry, input.repoRoot, input.timeoutMs ?? 4000);
     const toolNames = handshake.tools;
+    const serverVersion = versionFromServerInfo(handshake.serverInfo);
     const missing = REQUIRED_MCP_TOOLS.filter((tool) => !toolNames.includes(tool));
     if (missing.length > 0) {
       return {
@@ -183,8 +186,23 @@ export async function checkCodexMcp(input: {
         configPath,
         entry,
         serverInfo: handshake.serverInfo,
+        serverVersion,
         tools: toolNames,
         messages: [`MCP server is missing required tool(s): ${missing.join(", ")}`],
+      };
+    }
+
+    if (serverVersion && serverVersion !== THREADROOT_VERSION) {
+      return {
+        status: "warning",
+        configPath,
+        entry,
+        serverInfo: handshake.serverInfo,
+        serverVersion,
+        tools: toolNames,
+        messages: [
+          `MCP server version ${serverVersion} differs from local Threadroot ${THREADROOT_VERSION}. Update/reinstall the global Threadroot package, rerun \`threadroot connect codex\` if the command path changes, and restart the agent session before judging routing quality.`,
+        ],
       };
     }
 
@@ -193,6 +211,7 @@ export async function checkCodexMcp(input: {
       configPath,
       entry,
       serverInfo: handshake.serverInfo,
+      serverVersion,
       tools: toolNames,
       messages: ["MCP server initialized and returned the expected Threadroot tools."],
     };
@@ -205,6 +224,14 @@ export async function checkCodexMcp(input: {
       messages: [`MCP handshake failed: ${error instanceof Error ? error.message : String(error)}`],
     };
   }
+}
+
+function versionFromServerInfo(serverInfo: unknown): string | undefined {
+  if (!serverInfo || typeof serverInfo !== "object") {
+    return undefined;
+  }
+  const value = (serverInfo as { version?: unknown }).version;
+  return typeof value === "string" ? value : undefined;
 }
 
 function runMcpHandshake(
@@ -303,7 +330,7 @@ function runMcpHandshake(
         id: 1,
         method: "initialize",
         params: {
-          protocolVersion: "2024-11-05",
+          protocolVersion: "2025-06-18",
           capabilities: {},
           clientInfo: { name: "threadroot-check", version: THREADROOT_VERSION },
         },
@@ -330,7 +357,7 @@ async function runOneShotMcpHandshake(
           id: 1,
           method: "initialize",
           params: {
-            protocolVersion: "2024-11-05",
+            protocolVersion: "2025-06-18",
             capabilities: {},
             clientInfo: { name: "threadroot-check", version: THREADROOT_VERSION },
           },

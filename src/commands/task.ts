@@ -33,6 +33,10 @@ export async function runTask(repoRoot: string, task: string, options: TaskCliOp
   console.log(`task: ${packet.task}`);
   console.log(`token estimate: ${packet.tokenEstimate}`);
   console.log(`index: ${packet.index.status} (${packet.index.path})`);
+  if (packet.freshness) {
+    const refreshed = packet.freshness.refreshed.length > 0 ? packet.freshness.refreshed.join(", ") : "nothing";
+    console.log(`freshness: map ${packet.freshness.mapStatus}, index ${packet.freshness.indexStatus}, refreshed ${refreshed}`);
+  }
   if (packet.indexBuild) {
     console.log(`index refreshed: ${packet.indexBuild.durationMs}ms`);
   }

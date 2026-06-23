@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -19,10 +19,13 @@ const INDEX_VERSION = 1;
 const INDEX_DIR = ".threadroot/cache/index";
 const SQLITE_INDEX = `${INDEX_DIR}/threadroot.sqlite`;
 const FALLBACK_INDEX = `${INDEX_DIR}/threadroot.json`;
+const INDEX_LOCK = `${INDEX_DIR}/threadroot.lock`;
 const BETTER_SQLITE_SPECIFIER = "better-sqlite3";
 const NODE_SQLITE_SPECIFIER = "node:sqlite";
 const MAX_TEXT_BYTES = 256_000;
 const MAX_CHUNK_CHARS = 2_400;
+const INDEX_LOCK_TIMEOUT_MS = 10_000;
+const INDEX_LOCK_STALE_MS = 30_000;
 
 export type RepoIndexBackend = "sqlite" | "json-fallback";
 
@@ -236,6 +239,45 @@ function indexPath(repoRoot: string): string {
 
 function fallbackPath(repoRoot: string): string {
   return toRepoPath(repoRoot, FALLBACK_INDEX);
+}
+
+function lockPath(repoRoot: string): string {
+  return toRepoPath(repoRoot, INDEX_LOCK);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function acquireIndexLock(repoRoot: string): Promise<() => Promise<void>> {
+  const absolute = lockPath(repoRoot);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  const started = Date.now();
+
+  while (true) {
+    try {
+      const handle = await open(absolute, "wx");
+      await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+      await handle.close();
+      return async () => {
+        await rm(absolute, { force: true }).catch(() => undefined);
+      };
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") {
+        throw error;
+      }
+      const info = await stat(absolute).catch(() => undefined);
+      if (info && Date.now() - info.mtimeMs > INDEX_LOCK_STALE_MS) {
+        await rm(absolute, { force: true }).catch(() => undefined);
+        continue;
+      }
+      if (Date.now() - started > INDEX_LOCK_TIMEOUT_MS) {
+        throw new Error("Timed out waiting for Threadroot index lock. Another index refresh may still be running.");
+      }
+      await sleep(75);
+    }
+  }
 }
 
 function languageFor(filePath: string): string {
@@ -973,32 +1015,37 @@ async function currentTreeHash(repoRoot: string): Promise<string> {
 
 export async function buildRepoIndex(repoRoot: string, options: RepoIndexBuildOptions = {}): Promise<RepoIndexBuildResult> {
   const started = Date.now();
-  await mkdir(path.dirname(indexPath(repoRoot)), { recursive: true });
-  const sqlite = await sqliteModule();
-  if (sqlite) {
-    const snapshot = await assembleSnapshot(repoRoot, "sqlite", options.home, sqlite.driver);
-    const db = new sqlite.DatabaseSync(indexPath(repoRoot));
-    try {
-      setupSqlite(db);
-      resetSqlite(db);
-      writeSqlite(db, snapshot);
-    } finally {
-      db.close();
+  const release = await acquireIndexLock(repoRoot);
+  try {
+    await mkdir(path.dirname(indexPath(repoRoot)), { recursive: true });
+    const sqlite = await sqliteModule();
+    if (sqlite) {
+      const snapshot = await assembleSnapshot(repoRoot, "sqlite", options.home, sqlite.driver);
+      const db = new sqlite.DatabaseSync(indexPath(repoRoot));
+      try {
+        setupSqlite(db);
+        resetSqlite(db);
+        writeSqlite(db, snapshot);
+      } finally {
+        db.close();
+      }
+      return {
+        ...(await indexStatus(repoRoot)),
+        written: true,
+        durationMs: Date.now() - started,
+      };
     }
+
+    const snapshot = await assembleSnapshot(repoRoot, "json-fallback", options.home);
+    await writeFallback(snapshot, repoRoot);
     return {
       ...(await indexStatus(repoRoot)),
       written: true,
       durationMs: Date.now() - started,
     };
+  } finally {
+    await release();
   }
-
-  const snapshot = await assembleSnapshot(repoRoot, "json-fallback", options.home);
-  await writeFallback(snapshot, repoRoot);
-  return {
-    ...(await indexStatus(repoRoot)),
-    written: true,
-    durationMs: Date.now() - started,
-  };
 }
 
 export async function readRepoIndex(repoRoot: string): Promise<RepoIndexSnapshot | undefined> {

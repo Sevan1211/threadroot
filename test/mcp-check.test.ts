@@ -25,9 +25,10 @@ afterEach(async () => {
   await rm(repo, { recursive: true, force: true });
 });
 
-async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS]): Promise<string> {
+async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS], version = THREADROOT_VERSION): Promise<string> {
   const filePath = path.join(home, "fake-mcp.sh");
   const toolJson = JSON.stringify(tools.map((name) => ({ name, description: name, inputSchema: { type: "object" } })));
+  const serverInfo = JSON.stringify({ name: "fake-threadroot", version });
   await writeFile(
     filePath,
     [
@@ -36,7 +37,7 @@ async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS]): Promise<stri
       `tools='${toolJson}'`,
       "while IFS= read -r line; do",
       "  if [[ \"$line\" == *'\"method\":\"initialize\"'* ]]; then",
-      "    printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"serverInfo\":{\"name\":\"fake-threadroot\"},\"capabilities\":{\"tools\":{}}}}'",
+      `    printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"serverInfo":${serverInfo},"capabilities":{"tools":{}}}}'`,
       "  elif [[ \"$line\" == *'\"method\":\"tools/list\"'* ]]; then",
       "    printf '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":%s}}\\n' \"$tools\"",
       "  fi",
@@ -106,5 +107,15 @@ describe("checkCodexMcp", () => {
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("error");
     expect(report.messages[0]).toContain("missing required tool");
+  });
+
+  it("warns when the configured MCP server is an older Threadroot version", async () => {
+    const server = await writeFakeMcpServer([...REQUIRED_MCP_TOOLS], "0.0.1");
+    await writeCodexMcpConfig({ command: "bash", args: [server] });
+
+    const report = await checkCodexMcp({ repoRoot: repo, home });
+    expect(report.status).toBe("warning");
+    expect(report.serverVersion).toBe("0.0.1");
+    expect(report.messages[0]).toContain("differs from local Threadroot");
   });
 });

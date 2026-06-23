@@ -27,6 +27,7 @@ import {
   type MemoryGcCliOptions,
   type RememberOptions,
 } from "./commands/memory.js";
+import { runRefresh, type RefreshCliOptions } from "./commands/refresh.js";
 import {
   runSkillsFind,
   runSkillsIngest,
@@ -102,6 +103,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--status", "Show provider receipt status.")
     .option("--undo", "Remove Threadroot's local provider receipt.")
     .option("--project-files", "Allow visible project provider files when a provider requires them.")
+    .option("--refresh-skill", "Install or refresh the global Threadroot agent skill for this provider.")
     .option("--json", "Print machine-readable JSON.")
     .description("Connect a coding agent to Threadroot without visible provider project files by default.")
     .action((agent: string | undefined, options: ConnectCliOptions) => runConnect(repoRoot, agent, options));
@@ -129,6 +131,13 @@ export function createProgram(repoRoot = process.cwd()): Command {
     );
 
   program
+    .command("refresh")
+    .description("Refresh the repo map and local intelligence index when stale.")
+    .option("--force", "Refresh the repo map and index even when they appear current.")
+    .option("--json", "Print machine-readable JSON.")
+    .action((options: RefreshCliOptions) => runRefresh(repoRoot, options));
+
+  program
     .command("map")
     .description("Generate or check the compact repo map used for codebase-aware agent context.")
     .option("--write", "Write .threadroot/memory/repo-map.md.")
@@ -151,6 +160,10 @@ export function createProgram(repoRoot = process.cwd()): Command {
   evalCommand
     .command("context")
     .option("--json", "Print machine-readable JSON.")
+    .option("--min-recall <score>", "Exit non-zero when Recall@5 is below this score.")
+    .option("--min-precision <score>", "Exit non-zero when Precision@5 is below this score.")
+    .option("--min-ndcg <score>", "Exit non-zero when nDCG@5 is below this score.")
+    .option("--max-average-tokens <tokens>", "Exit non-zero when average packet tokens exceed this value.")
     .description("Run built-in gold-context retrieval evals.")
     .action((options: EvalCliOptions) => runEvalContext(repoRoot, options));
 
@@ -179,7 +192,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   program
     .command("import")
     .option("--dry-run", "Detect provider files without writing an import report.")
-    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.1.9.")
+    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.2.0.")
     .option("--move-provider-files", "Reserved for future explicit moves; currently errors rather than moving files.")
     .option("--json", "Print machine-readable JSON.")
     .description("Detect existing provider files and write a non-destructive .threadroot import report.")
