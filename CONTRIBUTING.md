@@ -1,6 +1,16 @@
 # Contributing
 
-Threadroot is a local-first AI agent harness compiler. Contributions should make the repo more trustworthy, easier to install, or more useful to coding agents without adding hosted/cloud assumptions to the OSS core.
+Threadroot is open source, but the product direction is intentionally tight while the core CLI, trust model, and agent workflow settle.
+
+## Project Policy
+
+- Issues: open.
+- Bug reports: open.
+- Feature requests: open.
+- Pull requests: welcome, but not guaranteed to be accepted.
+- The maintainer decides final product direction, scope, and release timing.
+
+High-signal reports are most useful when they include the repo shape, agent/provider, command output, expected behavior, and actual behavior. Feature requests are most useful when they describe a painful agent workflow rather than a broad platform idea.
 
 ## Development
 
@@ -12,7 +22,7 @@ pnpm test
 pnpm build
 ```
 
-Before opening a PR, run:
+Before opening a PR, run the release gate when possible:
 
 ```bash
 pnpm release:check
@@ -38,7 +48,7 @@ Good skills use compact `SKILL.md` instructions, linked references only when nee
 
 ## Release changes
 
-Release-facing changes should update:
+Release-facing changes may need updates to:
 
 - `README.md` for user-facing behavior.
 - `RELEASE.md` for publish process changes.

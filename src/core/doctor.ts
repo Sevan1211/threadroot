@@ -12,7 +12,7 @@ import { codexGlobalAgentsStatus, globalThreadrootSkillStatus } from "./setup.js
 import { checkToolHealth } from "./tools/index.js";
 import { checkCodexMcp } from "./mcp-check.js";
 import { repoMapStatus } from "./repo-map.js";
-import { threadrootWholeDirectoryIgnored } from "./gitignore.js";
+import { threadrootIgnoredByGit, threadrootTrackedFiles } from "./gitignore.js";
 
 export type DoctorSeverity = "error" | "warning" | "info";
 
@@ -83,7 +83,7 @@ async function mcpConfigHints(repoRoot: string, home?: string): Promise<DoctorFi
     finding(
       "info",
       "mcp_config_missing",
-      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot mcp setup --write` only when this repo should expose MCP tools to local agents.",
+      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot connect <agent>` for user/local provider setup or `threadroot mcp setup --write` only when visible project MCP files are intentional.",
     ),
   ];
 }
@@ -96,7 +96,7 @@ async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
       finding(
         "info",
         "global_setup_missing",
-        "Codex global Threadroot setup was not detected. Run `threadroot bootstrap --yes --agent codex` for one-time machine setup.",
+        "Codex global Threadroot setup was not detected. Run `threadroot connect codex` for the 0.1.8 setup path.",
       ),
     );
   } else if (skillStatus === "stale") {
@@ -123,7 +123,7 @@ async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
       finding(
         "warning",
         "codex_global_agents_stale",
-        "Codex global AGENTS.md Threadroot block is stale. Run `threadroot setup --global --agent codex --force` and reload Codex.",
+        "Codex global AGENTS.md Threadroot block is stale. Run `threadroot connect codex`, or refresh legacy global setup with `threadroot setup --global --agent codex --force` if you still use it.",
       ),
     );
   }
@@ -146,17 +146,60 @@ async function repoMapHints(repoRoot: string): Promise<DoctorFinding[]> {
 }
 
 async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
-  if (!(await threadrootWholeDirectoryIgnored(repoRoot))) {
-    return [];
+  const findings: DoctorFinding[] = [];
+  const tracked = await threadrootTrackedFiles(repoRoot);
+  if (tracked.length > 0) {
+    findings.push(
+      finding(
+        "error",
+        "threadroot_tracked_in_git",
+        `Do not commit .threadroot/ for this release. Untrack ${tracked.length} file(s) and keep the harness local-only.`,
+        ".threadroot/",
+      ),
+    );
   }
-  return [
-    finding(
-      "warning",
-      "threadroot_whole_dir_ignored",
-      "The whole `.threadroot/` directory is ignored. Track canonical harness files and ignore only local/cache/runtime state for cross-agent portability.",
-      ".gitignore",
-    ),
+
+  const ignored = await threadrootIgnoredByGit(repoRoot);
+  if (ignored === false) {
+    findings.push(
+      finding(
+        "warning",
+        "threadroot_not_ignored",
+        "`.threadroot/` is not ignored by git. For 0.1.8, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
+        ".threadroot/",
+      ),
+    );
+  }
+
+  return findings;
+}
+
+async function visibleProviderFileHints(repoRoot: string): Promise<DoctorFinding[]> {
+  const visibleProviderPaths = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".codex",
+    ".claude",
+    ".agents",
+    ".cursor",
+    ".vscode",
+    ".github/copilot-instructions.md",
+    ".mcp.json",
   ];
+  const findings: DoctorFinding[] = [];
+  for (const relativePath of visibleProviderPaths) {
+    if (await exists(path.join(repoRoot, relativePath))) {
+      findings.push(
+        finding(
+          "info",
+          "visible_provider_file_detected",
+          `Visible provider file or folder detected. Threadroot will not modify it unless explicitly asked: ${relativePath}`,
+          relativePath,
+        ),
+      );
+    }
+  }
+  return findings;
 }
 
 /**
@@ -257,10 +300,11 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
     }
     const check = await checkConnection(repoRoot, connection);
     if (check.status === "error") {
+      const severity = connection.manifest.risk === "high" ? "error" : "warning";
       findings.push(
         finding(
-          "error",
-          "connection_check_failed",
+          severity,
+          severity === "error" ? "connection_check_failed" : "optional_connection_unhealthy",
           `Connection \`${connection.name}\`: ${check.message}`,
           connection.sourcePath,
         ),
@@ -384,6 +428,7 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
 
   findings.push(...(await repoMapHints(repoRoot)));
   findings.push(...(await gitignoreHints(repoRoot)));
+  findings.push(...(await visibleProviderFileHints(repoRoot)));
   findings.push(...(await globalSetupHints(options.home)));
   findings.push(...(await mcpConfigHints(repoRoot, options.home)));
   return summarize(findings);

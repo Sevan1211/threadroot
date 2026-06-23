@@ -7,11 +7,13 @@ import {
 } from "./commands/automation.js";
 import { runBootstrap, type BootstrapCliOptions } from "./commands/bootstrap.js";
 import { runCompileCommand, type CompileCliOptions } from "./commands/compile.js";
+import { runConnect, type ConnectCliOptions } from "./commands/connect.js";
 import { runContext } from "./commands/context.js";
 import { runDiff } from "./commands/diff.js";
 import { runDoctor } from "./commands/doctor.js";
 import { runExpose, type ExposeCliOptions } from "./commands/expose.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
+import { runImport, type ImportCliOptions } from "./commands/import.js";
 import { runInstall, type InstallCliOptions } from "./commands/install.js";
 import { runMap, type MapCliOptions } from "./commands/map.js";
 import { runMcp, runMcpCheck, runMcpSetup, type McpCheckOptions, type McpSetupOptions } from "./commands/mcp.js";
@@ -22,18 +24,21 @@ import {
   runSkillsFind,
   runSkillsInspect,
   runSkillsList,
+  runSkillsMatch,
   runSkillsScan,
   runSkillsTrust,
   runSkillsValidate,
   type SkillsAddOptions,
   type SkillsExposeOptions,
   type SkillsFindOptions,
+  type SkillsMatchOptions,
   type SkillsTrustOptions,
   type SkillsValidateOptions,
 } from "./commands/skills.js";
 import { runSetup, type SetupCliOptions } from "./commands/setup.js";
 import { runStart, type StartCliOptions } from "./commands/start.js";
 import { runStatus } from "./commands/status.js";
+import { runWorkingSet, type WorkingSetCliOptions } from "./commands/working-set.js";
 import {
   runToolRun,
   runToolsAdd,
@@ -45,6 +50,7 @@ import {
   type ToolCreateOptions,
   type ToolRunOptions,
 } from "./commands/tools.js";
+import { runWebFetch, runWebStatus, type WebFetchCliOptions, type WebStatusCliOptions } from "./commands/web.js";
 import {
   runConnectionsAdd,
   runConnectionsCheck,
@@ -57,7 +63,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Adaptive AI agent capability harness: skills, tools, connections, memory, and MCP in .threadroot.")
+    .description("Local context router for coding agents: working sets, skills, tools, memory, web fetch, and MCP in .threadroot.")
     .version(THREADROOT_VERSION);
 
   program
@@ -88,8 +94,10 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .command("init")
     .description("Scaffold a local-only Threadroot harness and import existing vendor files once.")
     .option("--force", "Re-initialize over an existing harness.")
+    .option("--yes", "Compatibility flag; init is non-interactive by default.")
     .option("--no-import", "Skip importing existing vendor files (blank-slate init).")
     .option("--profile <profile>", "Override the detected project profile.")
+    .option("--gitignore", "Write a visible root .gitignore entry instead of private .git/info/exclude.")
     .option("--adapters <list>", "Comma-separated adapters: agents,claude,copilot,cursor.")
     .option("--expose <list>", "Comma-separated provider skill shims to write: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
     .action((options: InitCliOptions) => runInit(repoRoot, options));
@@ -115,6 +123,19 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
     .description("Set up Threadroot once per machine for supported coding agents.")
     .action((options: SetupCliOptions) => runSetup(repoRoot, options));
+
+  program
+    .command("connect")
+    .argument("[agent]", "Provider to connect: codex,claude,cursor,vscode,copilot,gemini,windsurf,opencode,antigravity,all.")
+    .option("--all", "Connect all supported providers.")
+    .option("--dry-run", "Show the provider setup plan without writing the .threadroot provider receipt.")
+    .option("--check", "Check whether Threadroot has a local provider receipt.")
+    .option("--status", "Show provider receipt status.")
+    .option("--undo", "Remove Threadroot's local provider receipt.")
+    .option("--project-files", "Allow visible project provider files when a provider requires them.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Connect a coding agent to Threadroot without visible provider project files by default.")
+    .action((agent: string | undefined, options: ConnectCliOptions) => runConnect(repoRoot, agent, options));
 
   program
     .command("status")
@@ -147,6 +168,16 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .action((task: string, options) => runContext(repoRoot, task, options));
 
   program
+    .command("working-set")
+    .alias("working_set")
+    .argument("<task>", "Task to rank files, commands, skills, and memory for.")
+    .description("Return the compact task-specific working set agents should read first.")
+    .option("--budget <tokens>", "Preferred token budget for the returned working set.")
+    .option("--max-files <count>", "Maximum ranked non-test files to return.")
+    .option("--json", "Print machine-readable JSON.")
+    .action((task: string, options: WorkingSetCliOptions) => runWorkingSet(repoRoot, task, options));
+
+  program
     .command("map")
     .description("Generate or check the compact repo map used for codebase-aware agent context.")
     .option("--write", "Write .threadroot/memory/repo-map.md.")
@@ -172,6 +203,15 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--user", "Install into the user harness (~/.threadroot) instead of the project.")
     .description("Install a harness object from a local path or git source.")
     .action((source: string, options: InstallCliOptions) => runInstall(repoRoot, source, options));
+
+  program
+    .command("import")
+    .option("--dry-run", "Detect provider files without writing an import report.")
+    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in 0.1.8.")
+    .option("--move-provider-files", "Reserved for future explicit moves; currently errors rather than moving files.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Detect existing provider files and write a non-destructive .threadroot import report.")
+    .action((options: ImportCliOptions) => runImport(repoRoot, options));
 
   program
     .command("remember")
@@ -284,6 +324,21 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Return project automation to ask-before-create mode.")
     .action((options: AutomationCliOptions) => runAutomationReset(repoRoot, options));
 
+  const web = program.command("web").description("Fetch known public web URLs with local cache and provenance.");
+  web
+    .command("status")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show Threadroot web capability status.")
+    .action((options: WebStatusCliOptions) => runWebStatus(repoRoot, options));
+  web
+    .command("fetch")
+    .argument("<url>", "Public http(s) URL to fetch.")
+    .option("--max-tokens <tokens>", "Maximum approximate tokens of extracted content to return.")
+    .option("--refresh", "Ignore cached content and fetch again.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Fetch a known public URL, extract text, and cache provenance under .threadroot/cache/web/.")
+    .action((url: string, options: WebFetchCliOptions) => runWebFetch(repoRoot, url, options));
+
   const skills = program.command("skills").description("Inspect and validate harness skills.");
   skills
     .command("find")
@@ -291,6 +346,12 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--json", "Print machine-readable JSON.")
     .description("Find task-specific Agent Skills and return Threadroot install commands.")
     .action((query: string, options: SkillsFindOptions) => runSkillsFind(repoRoot, query, options));
+  skills
+    .command("match")
+    .argument("<task>", "Task to match against installed skill metadata.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Recommend installed skills by metadata without loading full skill bodies.")
+    .action((task: string, options: SkillsMatchOptions) => runSkillsMatch(repoRoot, task, options));
   skills
     .command("add")
     .argument("<source>", "Skill source: owner/repo, skills:owner/repo/skill, skills.sh URL, GitHub URL, or local path.")

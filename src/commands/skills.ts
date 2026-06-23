@@ -1,4 +1,5 @@
 import { HarnessError, resolveHarness } from "../core/harness/index.js";
+import { assembleContext } from "../core/harness/context.js";
 import { toRepoPath } from "../core/paths.js";
 import { findSkills } from "../core/skills-find.js";
 import { addSkill, exposeSkills, trustSkill, type SkillAddOptions } from "../core/skills-install.js";
@@ -14,6 +15,7 @@ export type SkillsListOptions = JsonCliOptions;
 export type SkillsInspectOptions = JsonCliOptions;
 export type SkillsScanOptions = JsonCliOptions;
 export type SkillsFindOptions = JsonCliOptions;
+export type SkillsMatchOptions = JsonCliOptions;
 export type SkillsAddOptions = JsonCliOptions & {
   user?: boolean;
   path?: string;
@@ -76,6 +78,47 @@ export async function runSkillsFind(_repoRoot: string, query: string, options: S
       console.log(`  ${candidate.summary}`);
     }
     console.log(`  install: ${candidate.installCommand}`);
+  }
+}
+
+export async function runSkillsMatch(repoRoot: string, task: string, options: SkillsMatchOptions = {}): Promise<void> {
+  try {
+    const context = await assembleContext(repoRoot, task, { limit: 8, fallbackSkills: false });
+    const matches = context.skills.map((skill) => ({
+      name: skill.name,
+      score: skill.score,
+      confidence: skill.score >= 3 ? "high" : skill.score >= 1 ? "medium" : "low",
+      risk: skill.risk,
+      reviewed: skill.reviewed,
+      reason: skill.score > 0 ? "skill metadata matches task terms" : "fallback project skill",
+      load: skill.score > 0 && skill.reviewed,
+      when: skill.when,
+      sourcePath: skill.sourcePath,
+    }));
+    if (options.json) {
+      printJson({ task, matches });
+      return;
+    }
+    console.log(`skill matches: ${task}`);
+    if (matches.length === 0) {
+      console.log("No local skill metadata matched. Use `threadroot skills find <query>` only if a reusable procedure is needed.");
+      return;
+    }
+    for (const match of matches) {
+      console.log(`- ${match.name} (${match.confidence}, ${match.risk}) - ${match.reason}`);
+      console.log(`  load: ${match.load ? `threadroot skills inspect ${match.sourcePath}` : "not recommended yet"}`);
+    }
+  } catch (error) {
+    if (error instanceof HarnessError) {
+      if (options.json) {
+        printJson({ task, matches: [], ok: false, error: "harness_missing", message: "No harness found. Run `threadroot init` first." });
+      } else {
+        console.log("No harness found. Run `threadroot init` first.");
+      }
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
   }
 }
 

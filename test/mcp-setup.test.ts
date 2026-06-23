@@ -24,7 +24,8 @@ describe("mcp setup guide", () => {
 
     expect(output).toContain("Threadroot MCP setup");
     expect(output).toContain('"threadroot"');
-    expect(output).toContain("threadroot bootstrap --yes");
+    expect(output).toContain("threadroot init");
+    expect(output).toContain("threadroot connect <agent>");
     expect(output).toContain("threadroot start");
     expect(output).toContain("Success: Threadroot is ready");
     for (const contract of removedContracts) {
@@ -34,14 +35,16 @@ describe("mcp setup guide", () => {
 
   it("uses real commands in the agent prompt", () => {
     const prompt = agentLaunchPrompt("/tmp/demo");
-    expect(prompt).toContain("threadroot bootstrap --yes");
+    expect(prompt).toContain("threadroot init");
+    expect(prompt).toContain("threadroot connect <agent>");
+    expect(prompt).toContain("threadroot working-set");
     expect(prompt).toContain("threadroot map --write");
     expect(prompt).toContain("threadroot skills find");
     expect(prompt).toContain("threadroot skills add <source>");
     expect(prompt).toContain("threadroot automation status");
     expect(prompt).toContain("threadroot skills expose");
     expect(prompt).toContain("threadroot expose <agent>");
-    expect(prompt).toContain("threadroot mcp setup --write");
+    expect(prompt).toContain("threadroot connect <agent> --project-files");
     expect(prompt).toContain("ask before running");
     for (const contract of removedContracts) {
       expect(prompt).not.toContain(contract);

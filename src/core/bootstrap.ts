@@ -167,7 +167,7 @@ export async function startSession(repoRoot: string, options: StartOptions = {})
     return {
       task,
       status,
-      notes: ["No harness found. Run `threadroot bootstrap --yes` first."],
+      notes: ["No harness found. Run `threadroot init` first."],
     };
   }
 

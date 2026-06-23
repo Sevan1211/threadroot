@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -10,6 +12,7 @@ import { REQUIRED_MCP_TOOLS } from "../src/core/mcp-check.js";
 import { setupGlobal } from "../src/core/setup.js";
 
 let repo: string;
+const execFileAsync = promisify(execFile);
 
 beforeEach(async () => {
   repo = await mkdtemp(path.join(tmpdir(), "tr-doctor-"));
@@ -63,6 +66,27 @@ describe("doctor", () => {
     expect(report.summary.warnings).toBe(0);
     expect(codes(report)).not.toContain("compiled_output_missing");
     expect(codes(report)).toContain("global_setup_missing");
+  });
+
+  it("treats ignored .threadroot as healthy but flags unignored and tracked harness state", async () => {
+    await execFileAsync("git", ["init"], { cwd: repo });
+    await initHarness(repo, { import: false, home: repo });
+
+    const ignored = await doctor(repo, { home: repo });
+    expect(ignored.ok).toBe(true);
+    expect(codes(ignored)).not.toContain("threadroot_whole_dir_ignored");
+    expect(codes(ignored)).not.toContain("threadroot_not_ignored");
+
+    await unlink(path.join(repo, ".git/info/exclude"));
+    const unignored = await doctor(repo, { home: repo });
+    expect(unignored.ok).toBe(true);
+    expect(codes(unignored)).toContain("threadroot_not_ignored");
+
+    await writeFile(path.join(repo, ".git/info/exclude"), ".threadroot/\n", "utf8");
+    await execFileAsync("git", ["add", "-f", ".threadroot/harness.yaml"], { cwd: repo });
+    const tracked = await doctor(repo, { home: repo });
+    expect(tracked.ok).toBe(false);
+    expect(codes(tracked)).toContain("threadroot_tracked_in_git");
   });
 
   it("reports a missing harness as an error", async () => {

@@ -1,7 +1,7 @@
 {
   "name": "threadroot",
-  "version": "0.1.7",
-  "description": "Adaptive AI agent capability harness: skills, tools, connections, memory, and MCP in one local-first .threadroot directory.",
+  "version": "0.1.8",
+  "description": "Local context router for coding agents: working sets, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

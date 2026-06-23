@@ -18,13 +18,12 @@ import { walkRepo } from "../scan/walk.js";
 import { stringify as stringifyYaml } from "yaml";
 import type { ProfileId } from "../../types.js";
 import { exposeProject } from "../expose.js";
-import { ensureThreadrootGitignore } from "../gitignore.js";
+import { ensureThreadrootGitignore, ensureThreadrootGitignoreFile, type GitignorePolicyResult } from "../gitignore.js";
 import { writeRepoMap } from "../repo-map.js";
 import { PROJECT_MEMORY_TEMPLATE, writeSeedSkills } from "./builtins.js";
 import { type ImportReport, importVendorFiles } from "./import.js";
 
 const DEFAULT_ADAPTERS: AdapterId[] = [];
-const AGENTS_FILE = "AGENTS.md";
 
 export class InitError extends Error {
   constructor(message: string) {
@@ -46,6 +45,8 @@ export type InitOptions = {
   adapters?: AdapterId[];
   /** Write thin provider project skill shims after init. */
   expose?: string;
+  /** Write a visible root .gitignore entry instead of private .git/info/exclude. */
+  gitignore?: boolean;
   home?: string;
 };
 
@@ -58,6 +59,8 @@ export type InitReport = {
   memory: string[];
   rules: string[];
   import?: ImportReport;
+  importFiles: string[];
+  ignore: GitignorePolicyResult;
   compiled: string[];
   exposed: string[];
 };
@@ -144,6 +147,31 @@ async function writeImportedRules(repoRoot: string, report: ImportReport): Promi
   return written;
 }
 
+async function writeImportReport(repoRoot: string, report: ImportReport): Promise<string[]> {
+  if (
+    !report.canonicalSource &&
+    report.foldedFrom.length === 0 &&
+    report.skippedDuplicates.length === 0 &&
+    report.importedRules.length === 0
+  ) {
+    return [];
+  }
+
+  const dir = path.join(projectHarnessDir(repoRoot), "imports");
+  await mkdir(dir, { recursive: true });
+  const reportPath = path.join(dir, "report.json");
+  await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  const written = [reportPath];
+
+  if (report.canonicalBody.trim()) {
+    const canonicalPath = path.join(dir, "canonical.md");
+    await writeFile(canonicalPath, `${report.canonicalBody.trim()}\n`, "utf8");
+    written.push(canonicalPath);
+  }
+
+  return written;
+}
+
 async function writeStarterTools(repoRoot: string, profile: ProfileId, force: boolean): Promise<string[]> {
   const candidates = await detectToolCandidates(repoRoot, profile);
   const names: string[] = [];
@@ -191,7 +219,9 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   const tools = await writeStarterTools(repoRoot, profile, options.force ?? false);
   const skills = await writeSeedSkills(repoRoot);
   const memory = await writeProjectMemory(repoRoot);
-  await ensureThreadrootGitignore(repoRoot);
+  const ignore = options.gitignore
+    ? await ensureThreadrootGitignoreFile(repoRoot)
+    : await ensureThreadrootGitignore(repoRoot);
   const repoMap = await writeRepoMap(repoRoot);
   if (!memory.includes(path.join(repoRoot, repoMap.path))) {
     memory.push(path.join(repoRoot, repoMap.path));
@@ -208,12 +238,11 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   await writeManifest(repoRoot, manifest);
 
   let report: ImportReport | undefined;
+  let importFiles: string[] = [];
   let rules: string[] = [];
   if (options.import !== false) {
     report = await importVendorFiles(repoRoot, { include: options.importFiles });
-    if (report.canonicalBody.trim()) {
-      await writeFile(path.join(repoRoot, AGENTS_FILE), `${report.canonicalBody.trim()}\n`, "utf8");
-    }
+    importFiles = await writeImportReport(repoRoot, report);
     rules = await writeImportedRules(repoRoot, report);
   }
 
@@ -224,5 +253,18 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
         .map((entry) => entry.path)
     : [];
 
-  return { name, profile, adapters, skills, tools, memory, rules, import: report, compiled: written, exposed };
+  return {
+    name,
+    profile,
+    adapters,
+    skills,
+    tools,
+    memory,
+    rules,
+    import: report,
+    importFiles,
+    ignore,
+    compiled: written,
+    exposed,
+  };
 }

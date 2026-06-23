@@ -27,7 +27,7 @@ describe("mcp server handleMessage", () => {
       protocolVersion: "2024-11-05",
       serverInfo: { name: "threadroot" },
     });
-    expect(JSON.stringify(response?.result)).toContain("Call `context` before broad coding work");
+    expect(JSON.stringify(response?.result)).toContain("Call `working_set` before broad coding work");
   });
 
   it("returns no response for notifications/initialized", async () => {
@@ -43,6 +43,7 @@ describe("mcp server handleMessage", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "context",
+        "working_set",
         "repo_map",
         "repo_search",
         "repo_read",
@@ -59,6 +60,8 @@ describe("mcp server handleMessage", () => {
         "connections_create",
         "memory_read",
         "memory_append",
+        "web_status",
+        "web_fetch",
         "status",
         "doctor",
       ]),
@@ -125,6 +128,36 @@ describe("mcp server handleMessage", () => {
     const repoMapReadResult = repoMapRead?.result as { structuredContent: { content: string; path: string } };
     expect(repoMapReadResult.structuredContent).toMatchObject({ path: ".threadroot/memory/repo-map.md" });
     expect(repoMapReadResult.structuredContent.content).toContain("# Repo Map");
+  });
+
+  it("returns a task-specific working set without loading skill bodies", async () => {
+    const repo = await harnessRepo();
+    await fs.writeFile(path.join(repo, "src-auth.ts"), "export function login() { return 'auth'; }\n", "utf8");
+
+    const response = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 24,
+      method: "tools/call",
+      params: { name: "working_set", arguments: { task: "fix auth login", maxFiles: 5 } },
+    });
+    const result = response?.result as {
+      structuredContent: { files: Array<{ path: string }>; recommendedSkills: Array<{ name: string }>; tokenEstimate: number };
+    };
+    expect(result.structuredContent.files.map((file) => file.path)).toContain("src-auth.ts");
+    expect(result.structuredContent.tokenEstimate).toBeGreaterThan(0);
+    expect(JSON.stringify(result.structuredContent.recommendedSkills)).not.toContain("# ");
+  });
+
+  it("reports web capability status through MCP", async () => {
+    const response = await handleMessage(await tempRepo(), {
+      jsonrpc: "2.0",
+      id: 25,
+      method: "tools/call",
+      params: { name: "web_status", arguments: {} },
+    });
+    const result = response?.result as { structuredContent: { fetchAvailable: boolean; searchAvailable: boolean } };
+    expect(result.structuredContent.fetchAvailable).toBe(true);
+    expect(result.structuredContent.searchAvailable).toBe(false);
   });
 
   it("does not let MCP self-confirm risky tool execution", async () => {

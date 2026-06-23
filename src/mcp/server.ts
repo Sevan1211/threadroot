@@ -25,6 +25,8 @@ import { findSkills } from "../core/skills-find.js";
 import { scanSkillPath } from "../core/skills-scan.js";
 import { THREADROOT_VERSION } from "../core/version.js";
 import { readRepoFile, repoMapStatus, searchRepo, writeRepoMap } from "../core/repo-map.js";
+import { assembleWorkingSet } from "../core/working-set.js";
+import { webFetch, webStatus } from "../core/web.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -74,6 +76,25 @@ const toolRegistry: ToolSpec[] = [
       }
       return assembleContext(repoRoot, args.task, { harness });
     },
+  }),
+  defineTool({
+    name: "working_set",
+    description:
+      "Return the compact task-specific working set: ranked files, tests, commands, skills, memory, warnings, and token estimate.",
+    inputSchema: objectSchema(
+      {
+        task: { type: "string", description: "The coding task to assemble a working set for." },
+        budgetTokens: { type: "number", description: "Preferred token budget for the response." },
+        maxFiles: { type: "number", description: "Maximum ranked non-test files to return." },
+      },
+      ["task"],
+    ),
+    args: z.object({
+      task: z.string().min(1),
+      budgetTokens: z.number().int().positive().max(100_000).optional(),
+      maxFiles: z.number().int().positive().max(100).optional(),
+    }),
+    run: async (repoRoot, args) => assembleWorkingSet(repoRoot, args.task, args),
   }),
   defineTool({
     name: "repo_map",
@@ -463,6 +484,32 @@ const toolRegistry: ToolSpec[] = [
     run: (repoRoot, args) => appendMemory(repoRoot, args.type, args.note),
   }),
   defineTool({
+    name: "web_status",
+    description: "Return Threadroot web capability status. Native general search is provider/delegated only for now.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: () => webStatus(),
+  }),
+  defineTool({
+    name: "web_fetch",
+    description:
+      "Fetch a known public http(s) URL, extract text, cache provenance locally, and warn that web content is untrusted.",
+    inputSchema: objectSchema(
+      {
+        url: { type: "string", description: "Public http(s) URL to fetch." },
+        maxTokens: { type: "number", description: "Maximum approximate tokens of extracted content to return." },
+        refresh: { type: "boolean", description: "Ignore cached content and fetch again." },
+      },
+      ["url"],
+    ),
+    args: z.object({
+      url: z.string().url(),
+      maxTokens: z.number().int().positive().max(100_000).optional(),
+      refresh: z.boolean().optional(),
+    }),
+    run: (repoRoot, args) => webFetch(repoRoot, args.url, { maxTokens: args.maxTokens, refresh: args.refresh }),
+  }),
+  defineTool({
     name: "status",
     description: "Return harness state: manifest, object counts, and drift between canonical and compiled outputs.",
     inputSchema: objectSchema({}),
@@ -512,7 +559,7 @@ export async function handleMessage(
         serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
         capabilities: { tools: {} },
         instructions:
-          "Threadroot exposes the repository's AI agent harness. Call `context` before broad coding work, use `repo_map`/`repo_search`/`repo_read` for targeted codebase awareness, run `doctor` for health and trust checks, inspect skills/tools before risky actions, and use `memory_append` for durable handoffs.",
+          "Threadroot exposes the repository's local agent harness. Call `working_set` before broad coding work, use `repo_search`/`repo_read` only for targeted follow-up, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs.",
       });
     }
 

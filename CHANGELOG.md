@@ -4,6 +4,33 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## 0.1.8 - Local context router foundation
+
+### Added
+
+- `threadroot connect <agent>` as the new provider bridge for Codex, Claude, Cursor, VS Code/Copilot, Gemini, Windsurf, OpenCode, Antigravity, or all supported providers. By default it writes only a non-secret receipt under `.threadroot/providers/` and prints provider setup commands/instructions.
+- `threadroot working-set "<task>"` and MCP `working_set` for ranked files, tests, commands, recommended skills, memory, warnings, next reads, omitted sections, and token estimates.
+- `threadroot skills match "<task>"` for metadata-only local skill recommendations without loading full skill bodies.
+- `threadroot import` for non-destructive detection/classification of existing provider files with reports under `.threadroot/imports/`.
+- `threadroot web status`, `threadroot web fetch <url>`, MCP `web_status`, and MCP `web_fetch` for known public URL fetch with local cache and provenance.
+- Provider connection receipts under `.threadroot/providers/<agent>/connection.json`.
+- Doctor checks for tracked `.threadroot/` files and unignored local harness state.
+
+### Changed
+
+- The public first-run path is now `threadroot init`, `threadroot connect <agent>`, then `threadroot start "<task>"`.
+- `init` keeps `.threadroot/` local-only by default and prefers `.git/info/exclude` in git repos instead of editing root `.gitignore`.
+- `.threadroot/` being ignored is now healthy for `0.1.8`; tracked `.threadroot/` files are an error.
+- Init writes provider import reports under `.threadroot/imports/` instead of creating a top-level `AGENTS.md` from imported prose by default.
+- Repo-map freshness is content-aware for normal text files, not just path-shape-aware.
+- Low-risk connection healthcheck failures are warnings instead of hard errors, so optional local identity integrations do not break first-run trust.
+- Generated Threadroot skills, Codex global setup text, MCP setup prompts, README, integration docs, and security docs now teach the local-only context-router flow.
+
+### Compatibility
+
+- Legacy `bootstrap`, `setup`, `mcp setup`, `compile`, and `expose` commands remain available, but docs no longer lead with them.
+- Visible provider project files require explicit opt-in through `--project-files`, `expose`, or skill exposure commands.
+
 ## 0.1.7 - Stable self-use harness
 
 ### Added

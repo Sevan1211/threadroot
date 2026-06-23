@@ -43,9 +43,14 @@ async function run(...args: string[]): Promise<string> {
 
 describe("CLI smoke", () => {
   it("walks the core first-run command flow", async () => {
-    const bootstrap = await run("bootstrap", "--yes", "--no-global", "--no-import", "--task", "write tests");
-    expect(bootstrap).toContain("Threadroot bootstrap: complete");
-    expect(bootstrap).toContain("project init: created local-only .threadroot/");
+    const init = await run("init", "--yes", "--no-import");
+    expect(init).toContain("Initialized harness `demo`");
+    expect(init).toContain("adapters: none (local-only)");
+
+    const connect = await run("connect", "codex");
+    expect(connect).toContain("Threadroot connect: write");
+    expect(connect).toContain("codex: written");
+    expect(connect).toContain("codex mcp add threadroot");
 
     const status = await run("status");
     expect(status).toContain("harness: demo");
@@ -62,11 +67,26 @@ describe("CLI smoke", () => {
     const contextJson = JSON.parse(await run("context", "write tests", "--json")) as { task: string };
     expect(contextJson.task).toBe("write tests");
 
+    const workingSet = await run("working-set", "write tests");
+    expect(workingSet).toContain("working set: write tests");
+    expect(workingSet).toContain("token estimate:");
+
+    const workingSetJson = JSON.parse(await run("working-set", "write tests", "--json")) as { task: string; tokenEstimate: number };
+    expect(workingSetJson.task).toBe("write tests");
+    expect(workingSetJson.tokenEstimate).toBeGreaterThan(0);
+
     const map = await run("map", "--check");
     expect(map).toContain("repo map: current");
 
+    const web = await run("web", "status");
+    expect(web).toContain("web fetch: available");
+    expect(web).toContain("web search: provider/delegated only");
+
     const skills = await run("skills", "validate");
     expect(skills).toContain("Skills valid.");
+
+    const matchedSkills = await run("skills", "match", "write tests");
+    expect(matchedSkills).toContain("skill matches: write tests");
 
     const skillsJson = JSON.parse(await run("skills", "list", "--json")) as { skills: Array<{ name: string }> };
     expect(skillsJson.skills.map((skill) => skill.name)).toContain("find-skills");

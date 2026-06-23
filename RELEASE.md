@@ -3,8 +3,8 @@
 Threadroot publishes as a local-first CLI package. The npm package intentionally ships only:
 
 - `dist/`
-- `skills/`
-- package metadata and README/license files
+- package metadata
+- README, license, security, changelog, and integration docs
 
 ## Before publishing
 
@@ -42,11 +42,12 @@ npm audit signatures
 TMP_REPO="$(mktemp -d /tmp/threadroot-publish-smoke.XXXXXX)"
 cd "$TMP_REPO"
 npm exec threadroot -- --version
-npm exec threadroot -- init --no-import --profile node-cli --adapters agents
+npm exec threadroot -- init --no-import --profile node-cli
+npm exec threadroot -- connect codex --dry-run
 npm exec threadroot -- doctor
 ```
 
-Expected doctor result after a minimal smoke may include an MCP config warning. It should not report harness errors.
+Expected doctor result after a minimal smoke may include setup hints. It should not report harness errors.
 
 ## CI release gate
 

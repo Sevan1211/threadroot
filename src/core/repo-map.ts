@@ -79,14 +79,25 @@ async function scanRepo(repoRoot: string): Promise<RepoScan> {
   const files = (await gitFiles(repoRoot)) ?? (await walkRepo(repoRoot));
   const packageJson = await readJson(repoRoot, "package.json");
   const profile = inferProfile(files, packageJson);
-  return { files, packageJson, profile, treeHash: hashFiles(files) };
+  return { files, packageJson, profile, treeHash: await hashFiles(repoRoot, files) };
 }
 
-function hashFiles(files: string[]): string {
+async function hashFiles(repoRoot: string, files: string[]): Promise<string> {
   const hash = createHash("sha256");
-  hash.update("threadroot-repo-map-v1\n");
+  hash.update("threadroot-repo-map-v2\n");
   for (const file of files) {
     hash.update(file);
+    try {
+      const info = await stat(path.join(repoRoot, file));
+      hash.update(`\0${info.size}\0`);
+      if (info.isFile() && info.size <= MAX_TEXT_FILE_BYTES) {
+        hash.update(await readFile(path.join(repoRoot, file)));
+      } else {
+        hash.update(String(Math.trunc(info.mtimeMs)));
+      }
+    } catch {
+      hash.update("\0missing\0");
+    }
     hash.update("\n");
   }
   return hash.digest("hex");

@@ -74,13 +74,12 @@ try {
 
   const bin = path.join(packageDir, "dist", "index.js");
   await run(bin, ["--version"], { cwd: projectDir });
-  await run(bin, ["bootstrap", "--yes", "--agent", "codex", "--mcp", "--no-import", "--profile", "node-cli"], {
-    cwd: projectDir,
-    env: { HOME: homeDir },
-  });
-  await run(bin, ["mcp", "check"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["connect", "codex"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["working-set", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["web", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/threadroot"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });

@@ -4,10 +4,12 @@ import { profileIdSchema } from "../types.js";
 
 export type InitCliOptions = {
   force?: boolean;
+  yes?: boolean;
   import?: boolean;
   profile?: string;
   adapters?: string;
   expose?: string;
+  gitignore?: boolean;
 };
 
 function parseAdapters(value: string | undefined): AdapterId[] | undefined {
@@ -28,6 +30,7 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
     profile: options.profile ? profileIdSchema.parse(options.profile) : undefined,
     adapters: parseAdapters(options.adapters),
     expose: options.expose,
+    gitignore: options.gitignore,
   };
 
   try {
@@ -35,14 +38,22 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
     console.log(`Initialized harness \`${report.name}\` (profile: ${report.profile}).`);
     console.log(`adapters: ${report.adapters.length > 0 ? report.adapters.join(", ") : "none (local-only)"}`);
     console.log(`skills: ${report.skills.length}, tools: ${report.tools.length}, memory: ${report.memory.length}`);
+    if (report.ignore.status === "skipped") {
+      console.log("ignore: skipped (not a git repo); keep .threadroot/ out of commits if you add git later");
+    } else {
+      console.log(`ignore: ${report.ignore.path} (${report.ignore.status})`);
+    }
 
     if (report.import?.canonicalSource) {
-      console.log(`imported canonical prose from ${report.import.canonicalSource}`);
+      console.log(`detected provider prose from ${report.import.canonicalSource}`);
       if (report.import.foldedFrom.length > 0) {
-        console.log(`  folded novel sections from: ${report.import.foldedFrom.join(", ")}`);
+        console.log(`  found novel sections in: ${report.import.foldedFrom.join(", ")}`);
       }
       if (report.import.skippedDuplicates.length > 0) {
         console.log(`  skipped duplicates: ${report.import.skippedDuplicates.join(", ")}`);
+      }
+      if (report.importFiles.length > 0) {
+        console.log(`  import report: ${report.importFiles.map((file) => file.replace(`${repoRoot}/`, "")).join(", ")}`);
       }
     }
     if (report.rules.length > 0) {

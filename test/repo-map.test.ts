@@ -50,6 +50,17 @@ describe("repo map", () => {
     expect(status.status).toBe("stale");
   });
 
+  it("detects stale maps after content-only changes", async () => {
+    await write("package.json", JSON.stringify({ name: "demo" }));
+    await write("src/existing.ts", "export const value = 'old';\n");
+    await writeRepoMap(repo);
+
+    await write("src/existing.ts", "export const value = 'new';\n");
+
+    const status = await repoMapStatus(repo);
+    expect(status.status).toBe("stale");
+  });
+
   it("supports safe targeted search and reads", async () => {
     await write("src/feature.ts", "export function threadrootFeature() { return 'map'; }\n");
     await writeRepoMap(repo);

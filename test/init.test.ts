@@ -29,6 +29,7 @@ async function write(rel: string, content: string): Promise<void> {
 
 describe("initHarness", () => {
   it("scaffolds built-ins, detects the profile, and stays local-only by default", async () => {
+    await mkdir(path.join(repo, ".git", "info"), { recursive: true });
     await write("package.json", JSON.stringify({ name: "demo-app", bin: { demo: "cli.js" }, scripts: { test: "vitest", build: "tsup" } }));
 
     const report = await initHarness(repo, { import: false });
@@ -69,7 +70,8 @@ describe("initHarness", () => {
     await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(report.compiled).toEqual([]);
     await expect(readFile(path.join(repo, ".threadroot/memory/repo-map.md"), "utf8")).resolves.toContain("# Repo Map");
-    await expect(readFile(path.join(repo, ".gitignore"), "utf8")).resolves.toContain(".threadroot/cache/");
+    await expect(readFile(path.join(repo, ".gitignore"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path.join(repo, ".git/info/exclude"), "utf8")).resolves.toContain(".threadroot/");
   });
 
   it("refuses to clobber an existing harness without force", async () => {
@@ -86,6 +88,16 @@ describe("initHarness", () => {
     const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
     expect(agents).toContain("Always run the tests before committing.");
     expect(agents).not.toContain("<!-- threadroot:begin");
+    await expect(readFile(path.join(repo, ".threadroot/imports/report.json"), "utf8")).resolves.toContain("AGENTS.md");
+  });
+
+  it("does not create AGENTS.md when importing other provider files", async () => {
+    await write("CLAUDE.md", "# Claude\n\nUse pnpm for package commands.\n");
+
+    await initHarness(repo, {});
+
+    await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path.join(repo, ".threadroot/imports/canonical.md"), "utf8")).resolves.toContain("Use pnpm");
   });
 
   it("can expose provider project skills on init or after init", async () => {

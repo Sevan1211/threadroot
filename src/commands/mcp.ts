@@ -38,7 +38,9 @@ function parseProjectMcpAgents(value: string | undefined): ProjectMcpAgent[] | u
     if (key === "codex") {
       continue;
     }
-    throw new Error(`Unsupported project MCP agent: ${raw}. Supported: claude, cursor, copilot, vscode, all. Codex uses global setup.`);
+    throw new Error(
+      `Unsupported project MCP agent: ${raw}. Supported: claude, cursor, copilot, vscode, all. Use \`threadroot connect codex\` for Codex user/local setup.`,
+    );
   }
   return agents.length > 0 ? [...new Set(agents)] : undefined;
 }

@@ -9,6 +9,7 @@ import { THREADROOT_VERSION } from "./version.js";
 
 export const REQUIRED_MCP_TOOLS = [
   "context",
+  "working_set",
   "repo_map",
   "repo_search",
   "repo_read",
@@ -25,6 +26,8 @@ export const REQUIRED_MCP_TOOLS = [
   "connections_create",
   "memory_read",
   "memory_append",
+  "web_status",
+  "web_fetch",
   "status",
   "doctor",
 ] as const;

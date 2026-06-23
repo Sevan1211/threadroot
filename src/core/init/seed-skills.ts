@@ -26,9 +26,9 @@ tags:
 
 # Threadroot
 
-Threadroot is the local, version-controlled harness for this project. It keeps agent-facing skills, tools, connections, rules, memory, repo maps, and provenance under \`.threadroot/\`.
+Threadroot is the local context and capability router for this project. It keeps agent-facing skills, tools, connections, rules, memory, repo maps, provider receipts, imports, and provenance under \`.threadroot/\`.
 
-Use Threadroot to get the right context and capability for the current task without loading the entire repository or every skill into the model.
+Use Threadroot to get the right task-specific working set without loading the entire repository or every skill into the model. For this release, \`.threadroot/\` is local-only and should not be committed to git.
 
 ## Start Here
 
@@ -46,8 +46,10 @@ threadroot start "<task>"
 ## Core Commands
 
 \`\`\`bash
-threadroot bootstrap --yes --mcp
+threadroot init
 threadroot start "<task>"
+threadroot working-set "<task>"
+threadroot connect <agent>
 threadroot context "<task>"
 threadroot map --write
 threadroot map --check
@@ -65,13 +67,13 @@ threadroot connections check
 threadroot automation status
 threadroot automation approve
 threadroot remember "<note>"
-threadroot mcp setup --write
 threadroot mcp check
+threadroot web status
 \`\`\`
 
 ## How Agents Should Use It
 
-- Start with \`threadroot start "<task>"\` before broad codebase exploration.
+- Start with \`threadroot start "<task>"\` and \`threadroot working-set "<task>"\` before broad codebase exploration.
 - Use \`threadroot map --write\` when the repo map is missing or stale.
 - Use \`threadroot skills find "<query>"\` when installed skills do not fit the task.
 - Use \`create-skill\` when no good external skill exists.
@@ -81,8 +83,8 @@ threadroot mcp check
 
 ## Boundaries
 
-- \`.threadroot/\` is canonical. Provider folders are generated adapters.
-- Do not create provider-specific project files unless the user asks.
+- \`.threadroot/\` is local-only in this release. Do not commit it to git.
+- Do not create provider-specific project files unless the user explicitly asks for project files.
 - Do not store secrets in Threadroot.
 - Do not execute high-risk tools, destructive cloud commands, or credential-related workflows without explicit user approval.
 - Keep context compact. Load only the files, skills, and memory needed for the current task.

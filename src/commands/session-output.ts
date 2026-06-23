@@ -83,14 +83,19 @@ function printContext(context: HarnessContext | undefined): void {
 
 function printCommandMap(): void {
   console.log("agent command map:");
+  console.log("- `threadroot init` - create the local-only .threadroot harness");
+  console.log("- `threadroot connect <agent>` - connect a provider without visible project files by default");
   console.log('- `threadroot start "<task>"` - begin a focused agent session');
-  console.log('- `threadroot context "<task>"` - get relevant skills, tools, rules, and memory');
+  console.log('- `threadroot working-set "<task>"` - get ranked files, tests, commands, skills, warnings, and token estimate');
+  console.log('- `threadroot context "<task>"` - get legacy harness context: skills, tools, rules, and memory');
+  console.log("- `threadroot import --dry-run|--json` - inspect existing provider files non-destructively");
   console.log("- `threadroot map --write|--check` - maintain compact codebase navigation context");
   console.log("- `threadroot doctor` - check harness health and trust issues");
   console.log('- `threadroot skills find "<query>"` - discover task-specific skills without leaving `.threadroot/`');
   console.log("- `threadroot skills add|list|inspect|scan|trust|expose` - install and inspect skill capabilities");
   console.log("- `threadroot tools detect|create|list|check` and `threadroot run <tool>` - use explicit local tools");
   console.log("- `threadroot connections add|list|check` - wrap locally authenticated CLIs without storing secrets");
+  console.log("- `threadroot web status|fetch <url>` - inspect web capability or fetch a known public URL");
   console.log("- `threadroot automation status|approve|reset` - control safe agent-created capabilities for this project");
   console.log("- `threadroot remember \"<note>\"` - save durable handoff/project memory");
 }
@@ -143,7 +148,7 @@ export function printBootstrapReport(report: BootstrapReport): void {
     console.log(`note: ${note}`);
   }
   if (report.mode === "write") {
-    console.log('Success: Threadroot is ready. Run `threadroot start "<task>"` for future sessions.');
+    console.log('Success: Threadroot is ready. Run `threadroot start "<task>"` and `threadroot working-set "<task>"` for future sessions.');
   }
 }
 
