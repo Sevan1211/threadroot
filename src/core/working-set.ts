@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 
 import { assembleContext, type HarnessContext } from "./harness/context.js";
 import { repoMapStatus, searchRepo, type RepoSearchMatch } from "./repo-map.js";
+import { walkRepo } from "./scan/walk.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,13 +60,85 @@ export type WorkingSetOptions = {
   home?: string;
 };
 
+const TASK_STOPWORDS = new Set([
+  "about",
+  "actually",
+  "after",
+  "again",
+  "also",
+  "because",
+  "before",
+  "being",
+  "better",
+  "could",
+  "does",
+  "doing",
+  "done",
+  "fix",
+  "from",
+  "have",
+  "into",
+  "just",
+  "make",
+  "more",
+  "need",
+  "needs",
+  "only",
+  "really",
+  "should",
+  "than",
+  "that",
+  "this",
+  "what",
+  "when",
+  "where",
+  "with",
+  "would",
+]);
+
+const LOW_SIGNAL_PATH_TERMS = new Set(["core", "docs", "file", "files", "src", "test", "tests"]);
+
+const THREADROOT_VALUE_TERMS = new Set([
+  "accuracy",
+  "agent",
+  "agents",
+  "context",
+  "cost",
+  "mcp",
+  "output",
+  "outputs",
+  "performance",
+  "product",
+  "router",
+  "skill",
+  "skills",
+  "token",
+  "tokens",
+  "useful",
+  "valuable",
+  "working",
+  "working-set",
+]);
+
+const THREADROOT_VALUE_HINTS: Array<{ path: string; score: number; reason: string }> = [
+  { path: "src/core/working-set.ts", score: 18, reason: "Threadroot context-routing surface" },
+  { path: "src/commands/working-set.ts", score: 14, reason: "Threadroot context-routing surface" },
+  { path: "src/mcp/server.ts", score: 12, reason: "Threadroot MCP context surface" },
+  { path: "src/core/harness/context.ts", score: 10, reason: "Threadroot context assembly surface" },
+  { path: "test/mcp-server.test.ts", score: 8, reason: "Threadroot context-routing tests" },
+  { path: "test/cli-smoke.test.ts", score: 7, reason: "Threadroot first-run workflow tests" },
+  { path: "README.md", score: 5, reason: "Threadroot product promise" },
+  { path: "docs/threadroot-foundation-plan.md", score: 4, reason: "Threadroot product plan" },
+];
+
 function terms(task: string): string[] {
   return [
     ...new Set(
       task
         .toLowerCase()
         .split(/[^a-z0-9_./-]+/)
-        .filter((term) => term.length > 2),
+        .filter((term) => term.length > 2)
+        .filter((term) => !TASK_STOPWORDS.has(term)),
     ),
   ];
 }
@@ -114,13 +187,30 @@ async function changedFiles(repoRoot: string): Promise<string[]> {
   }
 }
 
-async function searchMatches(repoRoot: string, task: string): Promise<RepoSearchMatch[]> {
-  const direct = await searchRepo(repoRoot, task, 40);
+async function repoFiles(repoRoot: string): Promise<string[]> {
+  try {
+    const { stdout } = await execFileAsync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+      cwd: repoRoot,
+      maxBuffer: 5 * 1024 * 1024,
+    });
+    const files = stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((file) => !file.startsWith(".threadroot/"));
+    return files.length > 0 ? files.sort() : [];
+  } catch {
+    return (await walkRepo(repoRoot)).filter((file) => !file.startsWith(".threadroot/")).sort();
+  }
+}
+
+async function searchMatches(repoRoot: string, taskTerms: string[]): Promise<RepoSearchMatch[]> {
+  const direct = await searchRepo(repoRoot, taskTerms.join(" "), 40);
   if (direct.length > 0) {
     return direct;
   }
 
-  const byTerm = await Promise.all(terms(task).slice(0, 6).map((term) => searchRepo(repoRoot, term, 8)));
+  const byTerm = await Promise.all(taskTerms.slice(0, 6).map((term) => searchRepo(repoRoot, term, 8)));
   const seen = new Set<string>();
   const matches: RepoSearchMatch[] = [];
   for (const match of byTerm.flat()) {
@@ -135,6 +225,76 @@ async function searchMatches(repoRoot: string, task: string): Promise<RepoSearch
     }
   }
   return matches;
+}
+
+function sourcePathBoost(filePath: string): number {
+  if (filePath.startsWith("src/")) {
+    return 2;
+  }
+  if (filePath.startsWith("test/") || filePath.startsWith("tests/")) {
+    return 1;
+  }
+  if (filePath === "README.md" || filePath.startsWith("docs/")) {
+    return 1;
+  }
+  return 0;
+}
+
+function isLowSignalDotfile(filePath: string, taskTerms: string[]): boolean {
+  if (!filePath.startsWith(".") || filePath.startsWith(".github/")) {
+    return false;
+  }
+  const lower = filePath.toLowerCase();
+  return !taskTerms.some((term) => lower.includes(term));
+}
+
+function textMatchScore(match: RepoSearchMatch, taskTerms: string[]): number {
+  let score = 3 + sourcePathBoost(match.path);
+  if (isLowSignalDotfile(match.path, taskTerms)) {
+    score -= 2;
+  }
+  return Math.max(1, score);
+}
+
+function pathMatchScore(filePath: string, taskTerms: string[]): number {
+  const lower = filePath.toLowerCase();
+  const base = path.basename(lower);
+  let score = 0;
+  for (const term of taskTerms) {
+    if (LOW_SIGNAL_PATH_TERMS.has(term)) {
+      continue;
+    }
+    if (base.includes(term)) {
+      score += term.length >= 5 ? 7 : 3;
+    } else if (lower.includes(term)) {
+      score += term.length >= 5 ? 4 : 1;
+    }
+  }
+  return score + (score > 0 ? sourcePathBoost(filePath) : 0);
+}
+
+function addPathMatches(candidates: Map<string, WorkingSetFile>, files: string[], taskTerms: string[]): void {
+  for (const file of files) {
+    const score = pathMatchScore(file, taskTerms);
+    if (score > 0) {
+      addCandidate(candidates, file, score, "path matches task terms");
+    }
+  }
+}
+
+function isThreadrootValueTask(taskTerms: string[]): boolean {
+  return taskTerms.includes("threadroot") && taskTerms.some((term) => THREADROOT_VALUE_TERMS.has(term));
+}
+
+function addThreadrootValueHints(candidates: Map<string, WorkingSetFile>, files: Set<string>, taskTerms: string[]): void {
+  if (!isThreadrootValueTask(taskTerms)) {
+    return;
+  }
+  for (const hint of THREADROOT_VALUE_HINTS) {
+    if (files.has(hint.path)) {
+      addCandidate(candidates, hint.path, hint.score, hint.reason);
+    }
+  }
 }
 
 function estimateTokens(value: unknown): number {
@@ -166,9 +326,12 @@ export async function assembleWorkingSet(
   const map = await repoMapStatus(repoRoot).catch(() => undefined);
   const candidates = new Map<string, WorkingSetFile>();
 
-  const [matches, changed] = await Promise.all([searchMatches(repoRoot, task), changedFiles(repoRoot)]);
+  const [matches, changed, filesInRepo] = await Promise.all([searchMatches(repoRoot, taskTerms), changedFiles(repoRoot), repoFiles(repoRoot)]);
+  const fileSet = new Set(filesInRepo);
+  addPathMatches(candidates, filesInRepo, taskTerms);
+  addThreadrootValueHints(candidates, fileSet, taskTerms);
   for (const match of matches) {
-    addCandidate(candidates, match.path, 3, "text match for task terms", match.line);
+    addCandidate(candidates, match.path, textMatchScore(match, taskTerms), "text match for task terms", match.line);
   }
   for (const file of changed) {
     addCandidate(candidates, file, 4, "changed in current worktree");
