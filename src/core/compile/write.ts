@@ -32,7 +32,7 @@ export type CompileRunResult = {
 
 /**
  * Resolve the harness, compile it to vendor files, and write them to disk.
- * The one-way canonical -> vendor step shared by `tr init` and `tr compile`.
+ * The one-way canonical -> provider-output step used by init/connect flows.
  */
 export async function runCompile(repoRoot: string, options: CompileRunOptions = {}): Promise<CompileRunResult> {
   const resolved = options.harness ?? (await resolveHarness(repoRoot, { home: options.home }));

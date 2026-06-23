@@ -4,12 +4,36 @@ All notable changes to Threadroot will be documented here.
 
 Threadroot follows semantic versioning after the first public release. While `0.x`, minor versions may include breaking changes as the harness format settles.
 
+## Unreleased - Release hardening
+
+### Added
+
+- `threadroot task "<task>"` as the canonical front door for indexed task packets with ranked files, symbols, snippets, tests, commands, skills, memory, warnings, index status, token estimates, and optional debug-ranking evidence.
+- `threadroot index [--status] [--force]` for a local repo intelligence index. It uses SQLite/FTS5 through optional `better-sqlite3` when available, falls back to Node's native SQLite on supported runtimes, and then falls back to a deterministic JSON index.
+- Language-aware symbol/import/chunk extraction for TypeScript, JavaScript, Python, Go, Rust, JSON, YAML, Markdown, and broad text fallbacks. Tree-sitter grammar adapters remain a future native path and are reported honestly as unavailable today.
+- `threadroot eval context` with built-in gold-context evals and metrics for Recall@5, Precision@5, MRR, nDCG@5, irrelevant top-5 files, command hit rate, skill hit rate, and average token count.
+- `threadroot run <tool> --brief` to store full command output under `.threadroot/cache/runs/` while returning compact run summaries, parsed failure locations, and suggested next reads.
+- `threadroot embeddings configure|status|refresh` as an explicit, disabled-by-default embedding adapter surface. No provider calls or uploads happen automatically.
+- MCP `task_packet`, `index_status`, `trace_context`, and `eval_context` tools.
+- MCP resources for `threadroot://repo-map`, `threadroot://task/latest`, `threadroot://runs/latest`, `threadroot://skills`, `threadroot://memory`, `threadroot://index`, `threadroot://index/snapshot`, and `threadroot://embeddings`.
+
+### Changed
+
+- `task` now benefits from the local index when one exists, while retaining the previous scanner/search fallback.
+- `doctor` reports missing index as a hint and stale/degraded index as a context-quality warning.
+- README, integration, and security docs now position Threadroot as a local repo intelligence runtime rather than only a harness folder.
+
+### Removed
+
+- Removed legacy public command surfaces: `bootstrap`, `setup`, `mcp setup`, `compile`, `diff`, `expose`, `start`, `working-set`, `context`, and `skills expose`.
+- Removed provider skill-shim exposure from `skills add`; installed skills stay canonical under `.threadroot/skills/`.
+
 ## 0.1.8 - Local context router foundation
 
 ### Added
 
 - `threadroot connect <agent>` as the new provider bridge for Codex, Claude, Cursor, VS Code/Copilot, Gemini, Windsurf, OpenCode, Antigravity, or all supported providers. By default it writes only a non-secret receipt under `.threadroot/providers/` and prints provider setup commands/instructions.
-- `threadroot working-set "<task>"` and MCP `working_set` for ranked files, tests, commands, recommended skills, memory, warnings, next reads, omitted sections, and token estimates.
+- `threadroot task "<task>"` for ranked files, tests, commands, recommended skills, memory, warnings, next reads, omitted sections, and token estimates.
 - `threadroot skills match "<task>"` for metadata-only local skill recommendations without loading full skill bodies.
 - `threadroot import` for non-destructive detection/classification of existing provider files with reports under `.threadroot/imports/`.
 - `threadroot web status`, `threadroot web fetch <url>`, MCP `web_status`, and MCP `web_fetch` for known public URL fetch with local cache and provenance.
@@ -18,18 +42,18 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 ### Changed
 
-- The public first-run path is now `threadroot init`, `threadroot connect <agent>`, then `threadroot start "<task>"`.
+- The public first-run path is now `threadroot init`, `threadroot connect <agent>`, then `threadroot task "<task>"`.
 - `init` keeps `.threadroot/` local-only by default and prefers `.git/info/exclude` in git repos instead of editing root `.gitignore`.
 - `.threadroot/` being ignored is now healthy for `0.1.8`; tracked `.threadroot/` files are an error.
 - Init writes provider import reports under `.threadroot/imports/` instead of creating a top-level `AGENTS.md` from imported prose by default.
 - Repo-map freshness is content-aware for normal text files, not just path-shape-aware.
 - Low-risk connection healthcheck failures are warnings instead of hard errors, so optional local identity integrations do not break first-run trust.
-- Generated Threadroot skills, Codex global setup text, MCP setup prompts, README, integration docs, and security docs now teach the local-only context-router flow.
+- Seed Threadroot skills, README, integration docs, and security docs now teach the local-only task-packet flow.
 
 ### Compatibility
 
-- Legacy `bootstrap`, `setup`, `mcp setup`, `compile`, and `expose` commands remain available, but docs no longer lead with them.
-- Visible provider project files require explicit opt-in through `--project-files`, `expose`, or skill exposure commands.
+- Legacy compatibility commands were removed before public launch so the CLI surface stays small.
+- Visible provider project files require explicit opt-in through `connect --project-files`.
 
 ## 0.1.7 - Stable self-use harness
 

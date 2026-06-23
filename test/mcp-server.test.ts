@@ -27,7 +27,7 @@ describe("mcp server handleMessage", () => {
       protocolVersion: "2024-11-05",
       serverInfo: { name: "threadroot" },
     });
-    expect(JSON.stringify(response?.result)).toContain("Call `working_set` before broad coding work");
+    expect(JSON.stringify(response?.result)).toContain("Call `task_packet` before broad coding work");
   });
 
   it("returns no response for notifications/initialized", async () => {
@@ -42,8 +42,10 @@ describe("mcp server handleMessage", () => {
     const names = tools.map((tool) => tool.name);
     expect(names).toEqual(
       expect.arrayContaining([
-        "context",
-        "working_set",
+        "task_packet",
+        "index_status",
+        "trace_context",
+        "eval_context",
         "repo_map",
         "repo_search",
         "repo_read",
@@ -69,6 +71,8 @@ describe("mcp server handleMessage", () => {
     // Legacy tools must be gone.
     expect(names).not.toContain("suggest_context");
     expect(names).not.toContain("session_start");
+    expect(names).not.toContain("context");
+    expect(names).not.toContain("working_set");
     for (const tool of tools) {
       expect(tool.inputSchema).toMatchObject({ type: "object" });
     }
@@ -130,22 +134,38 @@ describe("mcp server handleMessage", () => {
     expect(repoMapReadResult.structuredContent.content).toContain("# Repo Map");
   });
 
-  it("returns a task-specific working set without loading skill bodies", async () => {
+  it("returns indexed task packets and lazy resources", async () => {
     const repo = await harnessRepo();
-    await fs.writeFile(path.join(repo, "src-auth.ts"), "export function login() { return 'auth'; }\n", "utf8");
+    await fs.mkdir(path.join(repo, "src"), { recursive: true });
+    await fs.writeFile(path.join(repo, "src", "billing.ts"), "export function retryInvoice() { return 'billing'; }\n", "utf8");
 
-    const response = await handleMessage(repo, {
+    const task = await handleMessage(repo, {
       jsonrpc: "2.0",
-      id: 24,
+      id: 241,
       method: "tools/call",
-      params: { name: "working_set", arguments: { task: "fix auth login", maxFiles: 5 } },
+      params: { name: "task_packet", arguments: { task: "fix retryInvoice billing", debugRanking: true } },
     });
-    const result = response?.result as {
-      structuredContent: { files: Array<{ path: string }>; recommendedSkills: Array<{ name: string }>; tokenEstimate: number };
+    const taskResult = task?.result as {
+      structuredContent: { files: Array<{ path: string; symbols: Array<{ name: string }> }>; index: { exists: boolean } };
     };
-    expect(result.structuredContent.files.map((file) => file.path)).toContain("src-auth.ts");
-    expect(result.structuredContent.tokenEstimate).toBeGreaterThan(0);
-    expect(JSON.stringify(result.structuredContent.recommendedSkills)).not.toContain("# ");
+    expect(taskResult.structuredContent.index.exists).toBe(true);
+    expect(taskResult.structuredContent.files.map((file) => file.path)).toContain("src/billing.ts");
+    expect(taskResult.structuredContent.files.find((file) => file.path === "src/billing.ts")?.symbols[0]?.name).toBe("retryInvoice");
+
+    const listed = await handleMessage(repo, { jsonrpc: "2.0", id: 242, method: "resources/list" });
+    const listedResult = listed?.result as { resources: Array<{ uri: string }> };
+    expect(listedResult.resources.map((resource) => resource.uri)).toEqual(
+      expect.arrayContaining(["threadroot://task/latest", "threadroot://index"]),
+    );
+
+    const read = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 243,
+      method: "resources/read",
+      params: { uri: "threadroot://task/latest" },
+    });
+    const readResult = read?.result as { contents: Array<{ text: string }> };
+    expect(readResult.contents[0]?.text).toContain("retryInvoice");
   });
 
   it("reports web capability status through MCP", async () => {

@@ -44,10 +44,12 @@ cd "$TMP_REPO"
 npm exec threadroot -- --version
 npm exec threadroot -- init --no-import --profile node-cli
 npm exec threadroot -- connect codex --dry-run
+npm exec threadroot -- task "smoke test repo context" --json
+npm exec threadroot -- index --status --json
 npm exec threadroot -- doctor
 ```
 
-Expected doctor result after a minimal smoke may include setup hints. It should not report harness errors.
+Expected doctor result after a minimal smoke may include optional index or MCP connection hints. It should not report harness errors.
 
 ## CI release gate
 

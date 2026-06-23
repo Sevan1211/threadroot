@@ -1,18 +1,20 @@
-import { stat } from "node:fs/promises";
+import os from "node:os";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { compile, detectDrift } from "./compile/index.js";
 import { HarnessError, resolveHarness } from "./harness/index.js";
-import { projectLockPath, userLockPath } from "./harness/paths.js";
+import { projectHarnessDir, projectLockPath, userHarnessDir, userLockPath } from "./harness/paths.js";
 import { externalSkillNames, externalToolNames, readLockFile } from "./install/lock.js";
 import { validateResolvedSkillsDeep } from "./skills.js";
 import { scanSkillPath } from "./skills-scan.js";
 import { checkConnection } from "./connections/index.js";
-import { codexGlobalAgentsStatus, globalThreadrootSkillStatus } from "./setup.js";
 import { checkToolHealth } from "./tools/index.js";
 import { checkCodexMcp } from "./mcp-check.js";
 import { repoMapStatus } from "./repo-map.js";
+import { indexStatus } from "./repo-index.js";
 import { threadrootIgnoredByGit, threadrootTrackedFiles } from "./gitignore.js";
+import { walkRepo } from "./scan/walk.js";
 
 export type DoctorSeverity = "error" | "warning" | "info";
 
@@ -83,51 +85,9 @@ async function mcpConfigHints(repoRoot: string, home?: string): Promise<DoctorFi
     finding(
       "info",
       "mcp_config_missing",
-      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot connect <agent>` for user/local provider setup or `threadroot mcp setup --write` only when visible project MCP files are intentional.",
+      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot connect <agent>` for user/local provider setup.",
     ),
   ];
-}
-
-async function globalSetupHints(home?: string): Promise<DoctorFinding[]> {
-  const findings: DoctorFinding[] = [];
-  const skillStatus = await globalThreadrootSkillStatus(home, "codex");
-  if (skillStatus === "missing") {
-    findings.push(
-      finding(
-        "info",
-        "global_setup_missing",
-        "Codex global Threadroot setup was not detected. Run `threadroot connect codex` for the 0.1.8 setup path.",
-      ),
-    );
-  } else if (skillStatus === "stale") {
-    findings.push(
-      finding(
-        "warning",
-        "global_threadroot_skill_stale",
-        "Codex global Threadroot skill differs from the current template. Run `threadroot setup --global --agent codex --force` and reload Codex.",
-      ),
-    );
-  } else if (skillStatus === "unmanaged") {
-    findings.push(
-      finding(
-        "warning",
-        "global_threadroot_skill_unmanaged",
-        "Codex global Threadroot skill exists but is not Threadroot-managed. Inspect it or re-run setup with `--force` if you want Threadroot to replace it.",
-      ),
-    );
-  }
-
-  const agentsStatus = await codexGlobalAgentsStatus(home);
-  if (agentsStatus === "stale") {
-    findings.push(
-      finding(
-        "warning",
-        "codex_global_agents_stale",
-        "Codex global AGENTS.md Threadroot block is stale. Run `threadroot connect codex`, or refresh legacy global setup with `threadroot setup --global --agent codex --force` if you still use it.",
-      ),
-    );
-  }
-  return findings;
 }
 
 async function repoMapHints(repoRoot: string): Promise<DoctorFinding[]> {
@@ -140,6 +100,33 @@ async function repoMapHints(repoRoot: string): Promise<DoctorFinding[]> {
       "warning",
       status.status === "missing" ? "repo_map_missing" : "repo_map_stale",
       `Repo map is ${status.status}. Run \`threadroot map --write\` so agents can navigate the codebase without loading everything.`,
+      status.path,
+    ),
+  ];
+}
+
+async function indexHints(repoRoot: string): Promise<DoctorFinding[]> {
+  const status = await indexStatus(repoRoot);
+  if (status.status === "current") {
+    return [];
+  }
+  if (status.status === "missing") {
+    return [
+      finding(
+        "info",
+        "repo_index_missing",
+        "Repo intelligence index has not been built. Run `threadroot index` or `threadroot task \"<task>\"` for higher-precision context routing.",
+        status.path,
+      ),
+    ];
+  }
+  return [
+    finding(
+      status.status === "degraded" ? "warning" : "warning",
+      status.status === "degraded" ? "repo_index_degraded" : "repo_index_stale",
+      status.status === "degraded"
+        ? "Repo intelligence index is running in degraded fallback mode; context routing still works but may be less precise."
+        : "Repo intelligence index is stale. Run `threadroot index` to refresh symbols, chunks, and graph edges.",
       status.path,
     ),
   ];
@@ -198,6 +185,91 @@ async function visibleProviderFileHints(repoRoot: string): Promise<DoctorFinding
         ),
       );
     }
+  }
+  return findings;
+}
+
+const STALE_THREADROOT_REFERENCES = [
+  { pattern: /\bthreadroot\s+bootstrap\b/u, label: "threadroot bootstrap", replacement: "threadroot init" },
+  { pattern: /\bthreadroot\s+setup\b/u, label: "threadroot setup", replacement: "threadroot connect <agent>" },
+  { pattern: /\bthreadroot\s+start\b/u, label: "threadroot start", replacement: "threadroot task \"<task>\"" },
+  { pattern: /\bthreadroot\s+context\b/u, label: "threadroot context", replacement: "threadroot task \"<task>\"" },
+  { pattern: /\bthreadroot\s+working-set\b/u, label: "threadroot working-set", replacement: "threadroot task \"<task>\"" },
+  { pattern: /\bthreadroot\s+expose\b/u, label: "threadroot expose", replacement: "threadroot connect <agent>" },
+  { pattern: /\bthreadroot\s+mcp\s+setup\b/u, label: "threadroot mcp setup", replacement: "threadroot connect <agent>" },
+  { pattern: /\bthreadroot\s+skills\s+expose\b/u, label: "threadroot skills expose", replacement: "threadroot skills inspect" },
+  { pattern: /\btest\/mcp-setup\.test\.ts\b/u, label: "test/mcp-setup.test.ts", replacement: "test/mcp-check.test.ts" },
+];
+
+function staleReferences(raw: string): Array<{ label: string; replacement: string }> {
+  return STALE_THREADROOT_REFERENCES.filter((entry) => entry.pattern.test(raw)).map((entry) => ({
+    label: entry.label,
+    replacement: entry.replacement,
+  }));
+}
+
+async function scanStaleReferencesUnder(
+  root: string,
+  code: string,
+  messagePrefix: string,
+): Promise<DoctorFinding[]> {
+  const findings: DoctorFinding[] = [];
+  const files = await walkRepo(root).catch(() => []);
+  for (const relativePath of files.filter((file) => /\.(md|json|ya?ml)$/iu.test(file))) {
+    const absolute = path.join(root, relativePath);
+    const raw = await readFile(absolute, "utf8").catch(() => "");
+    const stale = staleReferences(raw);
+    if (stale.length === 0) {
+      continue;
+    }
+    const replacements = stale.map((entry) => `${entry.label} -> ${entry.replacement}`).join(", ");
+    findings.push(
+      finding(
+        "warning",
+        code,
+        `${messagePrefix} contains stale Threadroot command references: ${replacements}.`,
+        absolute,
+      ),
+    );
+  }
+  return findings;
+}
+
+async function staleInstructionHints(repoRoot: string, home?: string): Promise<DoctorFinding[]> {
+  const findings: DoctorFinding[] = [];
+  findings.push(
+    ...(await scanStaleReferencesUnder(
+      path.join(projectHarnessDir(repoRoot), "skills"),
+      "stale_skill_command_reference",
+      "Project skill",
+    )),
+  );
+  findings.push(
+    ...(await scanStaleReferencesUnder(
+      path.join(userHarnessDir(home), "skills"),
+      "stale_user_skill_command_reference",
+      "User skill",
+    )),
+  );
+
+  const rootHome = home ?? os.homedir();
+  for (const globalSkillPath of [
+    path.join(rootHome, ".agents", "skills", "threadroot", "SKILL.md"),
+    path.join(rootHome, ".codex", "skills", "threadroot", "SKILL.md"),
+  ]) {
+    const raw = await readFile(globalSkillPath, "utf8").catch(() => "");
+    const stale = staleReferences(raw);
+    if (stale.length === 0) {
+      continue;
+    }
+    findings.push(
+      finding(
+        "warning",
+        "stale_global_threadroot_skill",
+        `Installed Threadroot agent skill contains stale command references: ${stale.map((entry) => entry.label).join(", ")}. Reinstall or refresh the skill before judging provider integration.`,
+        globalSkillPath,
+      ),
+    );
   }
   return findings;
 }
@@ -427,9 +499,10 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
   }
 
   findings.push(...(await repoMapHints(repoRoot)));
+  findings.push(...(await indexHints(repoRoot)));
+  findings.push(...(await staleInstructionHints(repoRoot, options.home)));
   findings.push(...(await gitignoreHints(repoRoot)));
   findings.push(...(await visibleProviderFileHints(repoRoot)));
-  findings.push(...(await globalSetupHints(options.home)));
   findings.push(...(await mcpConfigHints(repoRoot, options.home)));
   return summarize(findings);
 }

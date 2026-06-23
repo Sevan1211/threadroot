@@ -69,14 +69,25 @@ async function gitFiles(repoRoot: string): Promise<string[] | undefined> {
       .map((line) => line.trim())
       .filter(Boolean)
       .filter((file) => !isIgnoredPath(file));
-    return files.length > 0 ? files.sort() : undefined;
+    const existing = await filterExistingFiles(repoRoot, files);
+    return existing.length > 0 ? existing.sort() : undefined;
   } catch {
     return undefined;
   }
 }
 
+async function filterExistingFiles(repoRoot: string, files: string[]): Promise<string[]> {
+  const checks = await Promise.all(
+    files.map(async (file) => {
+      const info = await stat(path.join(repoRoot, file)).catch(() => undefined);
+      return { file, exists: Boolean(info?.isFile()) };
+    }),
+  );
+  return checks.filter((entry) => entry.exists).map((entry) => entry.file);
+}
+
 async function scanRepo(repoRoot: string): Promise<RepoScan> {
-  const files = (await gitFiles(repoRoot)) ?? (await walkRepo(repoRoot));
+  const files = (await gitFiles(repoRoot)) ?? (await filterExistingFiles(repoRoot, await walkRepo(repoRoot)));
   const packageJson = await readJson(repoRoot, "package.json");
   const profile = inferProfile(files, packageJson);
   return { files, packageJson, profile, treeHash: await hashFiles(repoRoot, files) };
@@ -243,9 +254,9 @@ function renderRepoMap(scan: RepoScan): string {
     "",
     "## Agent Notes",
     "",
-    "- Start with `threadroot start \"<task>\"` for task context.",
+    "- Start with `threadroot task \"<task>\"` for indexed task context.",
     "- Use this map to pick likely files, then search/read only what is relevant.",
-    "- Use MCP `repo_search` and `repo_read` when available; otherwise use `rg` and targeted file reads.",
+    "- Use MCP `task_packet`, `repo_search`, and `repo_read` when available; otherwise use CLI task packets, `rg`, and targeted file reads.",
     "- Do not load generated, dependency, build, cache, or secret files unless the user explicitly asks.",
     "",
   ].join("\n");

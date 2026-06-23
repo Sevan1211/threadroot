@@ -4,7 +4,14 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { HarnessError, appendMemory, assembleContext, readMemory, resolveHarness } from "../src/core/harness/index.js";
+import {
+  HarnessError,
+  appendMemory,
+  assembleContext,
+  compactMemory,
+  readMemory,
+  resolveHarness,
+} from "../src/core/harness/index.js";
 import { mcpServerEntry, writeProjectMcpConfigs } from "../src/core/mcp-config.js";
 import { harnessStatus } from "../src/core/status.js";
 
@@ -70,6 +77,36 @@ describe("memory read/append", () => {
     expect(await readMemory(repo, "handoff")).toBeNull();
     await expect(readMemory(repo, "bogus")).rejects.toThrow(HarnessError);
     await expect(appendMemory(repo, "project", "   ")).rejects.toThrow(HarnessError);
+  });
+
+  it("dedupes appends and compacts old bullets with a cache archive", async () => {
+    await appendMemory(repo, "pitfalls", "Do not call the API twice.");
+    await appendMemory(repo, "pitfalls", "Do not call the API twice.");
+    await appendMemory(repo, "pitfalls", "Cache invalidation is hard.");
+    await appendMemory(repo, "pitfalls", "Prefer indexed task packets.");
+
+    const result = await compactMemory(repo, { type: "pitfalls", maxEntries: 2 });
+    const body = await readMemory(repo, "pitfalls");
+
+    expect(result.files[0]).toMatchObject({ changed: true, entriesBefore: 3, entriesAfter: 2, removed: 1 });
+    expect(result.files[0]?.archivePath).toContain(".threadroot");
+    expect(body).not.toContain("Do not call the API twice.");
+    expect(body).toContain("Cache invalidation is hard.");
+    expect(body).toContain("Prefer indexed task packets.");
+  });
+
+  it("does not rewrite structured prose memory during compaction", async () => {
+    await write(
+      ".threadroot/memory/project.md",
+      ["# Project", "", "This paragraph should remain intact.", "- A stable project fact."].join("\n"),
+    );
+
+    const result = await compactMemory(repo, { type: "project", maxEntries: 1 });
+    const body = await readMemory(repo, "project");
+
+    expect(result.files[0]).toMatchObject({ changed: false, entriesBefore: 1, entriesAfter: 1 });
+    expect(body).toContain("This paragraph should remain intact.");
+    expect(body).toContain("- A stable project fact.");
   });
 });
 

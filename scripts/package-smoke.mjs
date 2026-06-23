@@ -77,14 +77,15 @@ try {
   await run(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["connect", "codex"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["start", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["working-set", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["task", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["index", "--status"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["eval", "context"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["embeddings", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["web", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/threadroot"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/find-skills"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["automation", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["automation", "approve"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["expose", "codex"], { cwd: projectDir });
   const externalSkillDir = path.join(projectDir, "external-skill");
   await mkdir(externalSkillDir, { recursive: true });
   await writeFile(
@@ -99,24 +100,22 @@ try {
       "",
       "# package-smoke-skill",
       "",
-      "Validate the packaged skills add workflow.",
+      "Validate the packaged skills ingest workflow.",
       "",
     ].join("\n"),
     "utf8",
   );
-  await run(bin, ["skills", "add", "./external-skill", "--dry-run", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "add", "./external-skill", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "ingest", "./external-skill", "--dry-run", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["skills", "ingest", "./external-skill", "--no-snyk"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["skills", "inspect", ".threadroot/skills/package-smoke-skill"], {
     cwd: projectDir,
     env: { HOME: homeDir },
   });
   await run(bin, ["skills", "trust", "package-smoke-skill"], { cwd: projectDir, env: { HOME: homeDir } });
-  await run(bin, ["skills", "expose", "package-smoke-skill", "--agent", "universal"], {
-    cwd: projectDir,
-    env: { HOME: homeDir },
-  });
+  await run(bin, ["memory", "gc"], { cwd: projectDir, env: { HOME: homeDir } });
   await rm(externalSkillDir, { recursive: true, force: true });
   await run(bin, ["map", "--write"], { cwd: projectDir, env: { HOME: homeDir } });
+  await run(bin, ["index"], { cwd: projectDir, env: { HOME: homeDir } });
   await run(bin, ["doctor"], { cwd: projectDir, env: { HOME: homeDir } });
 } finally {
   if (tarballPath) {

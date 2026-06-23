@@ -1,4 +1,5 @@
 import { HarnessError, resolveHarness } from "../core/harness/index.js";
+import { createRunBrief } from "../core/run-brief.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
 import type { RiskLevel } from "../core/harness/schema.js";
 import type { ProfileId } from "../types.js";
@@ -8,6 +9,7 @@ export type ToolRunOptions = JsonCliOptions & {
   input?: string[];
   yes?: boolean;
   timeout?: string;
+  brief?: boolean;
 };
 
 export type ToolAddOptions = JsonCliOptions & {
@@ -49,9 +51,9 @@ export async function runToolsList(repoRoot: string, options: ToolsListOptions =
   } catch (error) {
     if (error instanceof HarnessError) {
       if (options.json) {
-        printJson({ tools: [], ok: false, error: "harness_missing", message: "No harness found. Run `tr init` first." });
+        printJson({ tools: [], ok: false, error: "harness_missing", message: "No harness found. Run `threadroot init` first." });
       } else {
-        console.log("No harness found. Run `tr init` first.");
+        console.log("No harness found. Run `threadroot init` first.");
       }
       return;
     }
@@ -76,7 +78,7 @@ export async function runToolsList(repoRoot: string, options: ToolsListOptions =
   }
 
   if (harness.tools.length === 0) {
-    console.log("No tools defined. Add one with `tr tools add` or `tr tools detect`.");
+    console.log("No tools defined. Add one with `threadroot tools add` or `threadroot tools detect`.");
     return;
   }
 
@@ -118,6 +120,35 @@ export async function runToolRun(repoRoot: string, name: string, options: ToolRu
   }
 
   const { result } = outcome;
+  if (options.brief) {
+    const brief = await createRunBrief(repoRoot, result);
+    if (options.json) {
+      printJson({ ...outcome, brief });
+      if (!result.ok) {
+        process.exitCode = result.exitCode ?? 1;
+      }
+      return;
+    }
+    console.log(brief.summary);
+    console.log(`raw output: ${brief.rawOutputPath}`);
+    if (brief.failures.length > 0) {
+      console.log("failures:");
+      for (const failure of brief.failures) {
+        const location = failure.path ? `${failure.path}${failure.line ? `:${failure.line}` : ""}: ` : "";
+        console.log(`- ${location}${failure.message}`);
+      }
+    }
+    if (brief.suggestedNextReads.length > 0) {
+      console.log("suggested next reads:");
+      for (const file of brief.suggestedNextReads) {
+        console.log(`- ${file}`);
+      }
+    }
+    if (!result.ok) {
+      process.exitCode = result.exitCode ?? 1;
+    }
+    return;
+  }
   if (options.json) {
     printJson(outcome);
     if (!result.ok) {
@@ -142,7 +173,7 @@ export async function runToolRun(repoRoot: string, name: string, options: ToolRu
 
 export async function runToolsAdd(repoRoot: string, name: string, options: ToolAddOptions): Promise<void> {
   if (!options.description) {
-    throw new Error("`tr tools add` requires --description.");
+    throw new Error("`threadroot tools add` requires --description.");
   }
   if (!options.run && !options.script) {
     throw new Error("Provide either --run <command> or --script <path>.");
@@ -179,7 +210,7 @@ export async function runToolsCreate(repoRoot: string, options: ToolCreateOption
   const run = options.run ?? options.fromCommand;
   const name = options.fromCommand ? deriveNameFromCommand(options.fromCommand) : undefined;
   if (!name) {
-    throw new Error("`tr tools create` currently requires --from-command <command>.");
+    throw new Error("`threadroot tools create` currently requires --from-command <command>.");
   }
   await runToolsAdd(repoRoot, name, {
     ...options,
@@ -248,7 +279,7 @@ export async function runToolsDetect(repoRoot: string, options: ToolsDetectOptio
     return;
   }
 
-  console.log("Proposed starter tools (materialize with `tr tools add`):");
+  console.log("Proposed starter tools (materialize with `threadroot tools add`):");
   for (const candidate of candidates) {
     const confirm = candidate.confirm ? " (confirm)" : "";
     const healthcheck = candidate.healthcheck ? ", healthcheck suggested" : "";

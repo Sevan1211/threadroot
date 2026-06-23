@@ -1,7 +1,7 @@
 {
   "name": "threadroot",
   "version": "0.1.8",
-  "description": "Local context router for coding agents: working sets, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
+  "description": "Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -76,5 +76,8 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.12.0"
+  "packageManager": "pnpm@9.12.0",
+  "optionalDependencies": {
+    "better-sqlite3": "^12.11.1"
+  }
 }

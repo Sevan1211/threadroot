@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { EffectiveHarness, LoadedTool } from "../src/core/harness/index.js";
 import { connectionManifestSchema, harnessManifestSchema, toolManifestSchema } from "../src/core/harness/index.js";
+import { createRunBrief } from "../src/core/run-brief.js";
 import {
   ToolCreateError,
   ToolExecutionError,
@@ -153,6 +154,16 @@ describe("execute", () => {
     const fail = await executeShell("exit 3", { cwd: dir });
     expect(fail.ok).toBe(false);
     expect(fail.exitCode).toBe(3);
+  });
+
+  it("creates compact run briefs with raw output stored locally", async () => {
+    const result = await executeShell("printf 'FAIL test/auth.test.ts:12 expected login\\n' >&2; exit 1", { cwd: dir });
+    const brief = await createRunBrief(dir, result);
+
+    expect(brief.ok).toBe(false);
+    expect(brief.rawOutputPath).toContain(".threadroot/cache/runs/");
+    expect(brief.failures[0]).toMatchObject({ path: "test/auth.test.ts", line: 12 });
+    expect(brief.suggestedNextReads).toContain("test/auth.test.ts");
   });
 
   it("injects input env vars", async () => {

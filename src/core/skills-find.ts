@@ -85,7 +85,7 @@ function candidateFromSource(source: string, name: string, url?: string, summary
     source,
     url,
     summary,
-    installCommand: `threadroot skills add ${source} --skill ${name}`,
+    installCommand: `threadroot skills ingest ${source} --skill ${name}`,
   };
 }
 
@@ -126,7 +126,7 @@ export function parseSkillSearchOutput(query: string, stdout: string): SkillSear
         source: skillsSearchUrl(query),
         url: skillsSearchUrl(query),
         summary: "Open skills.sh search results, choose a GitHub-backed skill, then install it through Threadroot.",
-        installCommand: `threadroot skills add <github-or-skills.sh-source> --skill ${slug || "<skill-name>"}`,
+        installCommand: `threadroot skills ingest <github-or-skills.sh-source> --skill ${slug || "<skill-name>"}`,
       },
     ];
   }

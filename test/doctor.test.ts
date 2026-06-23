@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { doctor } from "../src/core/doctor.js";
 import { initHarness } from "../src/core/init/index.js";
 import { REQUIRED_MCP_TOOLS } from "../src/core/mcp-check.js";
-import { setupGlobal } from "../src/core/setup.js";
 
 let repo: string;
 const execFileAsync = promisify(execFile);
@@ -54,6 +53,19 @@ async function writeFakeMcpServer(): Promise<string> {
   return filePath;
 }
 
+async function writeCodexMcpConfig(entry: { command: string; args: string[] }): Promise<void> {
+  const args = entry.args.map((arg) => `"${arg.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(", ");
+  await write(
+    ".codex/config.toml",
+    [
+      "[mcp_servers.threadroot]",
+      `command = "${entry.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+      `args = [${args}]`,
+      "",
+    ].join("\n"),
+  );
+}
+
 describe("doctor", () => {
   it("reports a clean initialized harness without errors", async () => {
     await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
@@ -65,7 +77,7 @@ describe("doctor", () => {
     expect(report.summary.errors).toBe(0);
     expect(report.summary.warnings).toBe(0);
     expect(codes(report)).not.toContain("compiled_output_missing");
-    expect(codes(report)).toContain("global_setup_missing");
+    expect(codes(report)).not.toContain("global_setup_missing");
   });
 
   it("treats ignored .threadroot as healthy but flags unignored and tracked harness state", async () => {
@@ -231,12 +243,7 @@ describe("doctor", () => {
   it("does not show MCP missing hints when global Codex MCP verifies", async () => {
     await initHarness(repo, { import: false, home: repo });
     const server = await writeFakeMcpServer();
-    await setupGlobal({
-      home: repo,
-      agents: "codex",
-      mcp: true,
-      mcpEntry: { command: "bash", args: [server] },
-    });
+    await writeCodexMcpConfig({ command: "bash", args: [server] });
 
     const report = await doctor(repo, { home: repo });
 
@@ -247,16 +254,31 @@ describe("doctor", () => {
 
   it("warns when global Codex MCP is configured but broken", async () => {
     await initHarness(repo, { import: false, home: repo });
-    await setupGlobal({
-      home: repo,
-      agents: "codex",
-      mcp: true,
-      mcpEntry: { command: path.join(repo, "missing-threadroot"), args: ["mcp"] },
-    });
+    await writeCodexMcpConfig({ command: path.join(repo, "missing-threadroot"), args: ["mcp"] });
 
     const report = await doctor(repo, { home: repo });
 
     expect(report.ok).toBe(true);
     expect(codes(report)).toContain("codex_mcp_unhealthy");
+  });
+
+  it("warns when project skills reference removed Threadroot commands", async () => {
+    await initHarness(repo, { import: false, home: repo });
+    await write(
+      ".threadroot/skills/stale/SKILL.md",
+      [
+        "---",
+        "name: stale",
+        "description: Use when testing stale Threadroot command references.",
+        "---",
+        "",
+        "Run `threadroot start \"fix bug\"` before broad reads.",
+      ].join("\n"),
+    );
+
+    const report = await doctor(repo, { home: repo });
+
+    expect(report.ok).toBe(true);
+    expect(codes(report)).toContain("stale_skill_command_reference");
   });
 });

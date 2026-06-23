@@ -145,7 +145,7 @@ function compactMemory(type: string, body: string): ContextMemory {
 /**
  * Assemble the task-relevant harness slice: ranked skills (deterministic
  * keyword match on name/when/tags), all available tools and rules, and durable
- * memory. This powers MCP `context(task)` and `tr context`.
+ * memory. This powers task packets, skill matching, and MCP context surfaces.
  */
 export async function assembleContext(
   repoRoot: string,

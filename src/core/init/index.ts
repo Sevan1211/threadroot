@@ -17,7 +17,6 @@ import { inferProfile, readJson } from "../scan/package.js";
 import { walkRepo } from "../scan/walk.js";
 import { stringify as stringifyYaml } from "yaml";
 import type { ProfileId } from "../../types.js";
-import { exposeProject } from "../expose.js";
 import { ensureThreadrootGitignore, ensureThreadrootGitignoreFile, type GitignorePolicyResult } from "../gitignore.js";
 import { writeRepoMap } from "../repo-map.js";
 import { PROJECT_MEMORY_TEMPLATE, writeSeedSkills } from "./builtins.js";
@@ -43,8 +42,6 @@ export type InitOptions = {
   profile?: ProfileId;
   /** Enable legacy compiled adapter outputs. Defaults to local-only. */
   adapters?: AdapterId[];
-  /** Write thin provider project skill shims after init. */
-  expose?: string;
   /** Write a visible root .gitignore entry instead of private .git/info/exclude. */
   gitignore?: boolean;
   home?: string;
@@ -62,7 +59,6 @@ export type InitReport = {
   importFiles: string[];
   ignore: GitignorePolicyResult;
   compiled: string[];
-  exposed: string[];
 };
 
 async function pathExists(target: string): Promise<boolean> {
@@ -247,11 +243,6 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
   }
 
   const { written } = await runCompile(repoRoot, { home: options.home });
-  const exposed = options.expose
-    ? (await exposeProject(repoRoot, { agents: options.expose })).entries
-        .filter((entry) => entry.status !== "missing" && entry.status !== "skipped")
-        .map((entry) => entry.path)
-    : [];
 
   return {
     name,
@@ -265,6 +256,5 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
     importFiles,
     ignore,
     compiled: written,
-    exposed,
   };
 }

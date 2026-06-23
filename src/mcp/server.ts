@@ -1,5 +1,6 @@
 import readline from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -10,12 +11,11 @@ import {
   HarnessError,
   type EffectiveHarness,
   appendMemory,
-  assembleContext,
   readMemory,
   resolveHarness,
 } from "../core/harness/index.js";
 import { doctor } from "../core/doctor.js";
-import { projectLockPath, userLockPath } from "../core/harness/paths.js";
+import { projectHarnessDir, projectLockPath, userLockPath } from "../core/harness/paths.js";
 import { harnessStatus } from "../core/status.js";
 import { checkToolHealth, createTool, detectToolCandidates, runTool } from "../core/tools/index.js";
 import { checkConnections, createConnection } from "../core/connections/index.js";
@@ -25,7 +25,11 @@ import { findSkills } from "../core/skills-find.js";
 import { scanSkillPath } from "../core/skills-scan.js";
 import { THREADROOT_VERSION } from "../core/version.js";
 import { readRepoFile, repoMapStatus, searchRepo, writeRepoMap } from "../core/repo-map.js";
-import { assembleWorkingSet } from "../core/working-set.js";
+import { indexStatus, readRepoIndex } from "../core/repo-index.js";
+import { createRunBrief } from "../core/run-brief.js";
+import { runContextEvals } from "../core/context-evals.js";
+import { assembleTaskPacket, readLatestTaskPacket, writeLatestTaskPacket } from "../core/task-packet.js";
+import { embeddingsStatus } from "../core/embeddings.js";
 import { webFetch, webStatus } from "../core/web.js";
 
 type JsonRpcRequest = {
@@ -50,6 +54,14 @@ type ToolSpec = {
   run: (repoRoot: string, args: unknown) => Promise<unknown> | unknown;
 };
 
+type ResourceSpec = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  description: string;
+  read: (repoRoot: string) => Promise<unknown> | unknown;
+};
+
 function defineTool<Schema extends z.ZodTypeAny>(spec: {
   name: string;
   description: string;
@@ -62,30 +74,16 @@ function defineTool<Schema extends z.ZodTypeAny>(spec: {
 
 const toolRegistry: ToolSpec[] = [
   defineTool({
-    name: "context",
-    description: "Return the task-relevant harness slice: ranked skills, rules, tools, and memory.",
-    inputSchema: objectSchema(
-      { task: { type: "string", description: "The coding task to assemble context for." } },
-      ["task"],
-    ),
-    args: z.object({ task: z.string().min(1) }),
-    run: async (repoRoot, args) => {
-      const harness = await loadHarnessOrNull(repoRoot);
-      if (!harness) {
-        return { note: "No harness found. Run `tr init` first." };
-      }
-      return assembleContext(repoRoot, args.task, { harness });
-    },
-  }),
-  defineTool({
-    name: "working_set",
+    name: "task_packet",
     description:
-      "Return the compact task-specific working set: ranked files, tests, commands, skills, memory, warnings, and token estimate.",
+      "Compile the canonical Threadroot task packet: indexed files, symbols, snippets, tests, commands, skills, memory, risks, and token estimate.",
     inputSchema: objectSchema(
       {
-        task: { type: "string", description: "The coding task to assemble a working set for." },
+        task: { type: "string", description: "The coding task to compile a task packet for." },
         budgetTokens: { type: "number", description: "Preferred token budget for the response." },
         maxFiles: { type: "number", description: "Maximum ranked non-test files to return." },
+        debugRanking: { type: "boolean", description: "Include retrieval scoring details." },
+        forceIndex: { type: "boolean", description: "Refresh the repo index before compiling." },
       },
       ["task"],
     ),
@@ -93,8 +91,42 @@ const toolRegistry: ToolSpec[] = [
       task: z.string().min(1),
       budgetTokens: z.number().int().positive().max(100_000).optional(),
       maxFiles: z.number().int().positive().max(100).optional(),
+      debugRanking: z.boolean().optional(),
+      forceIndex: z.boolean().optional(),
     }),
-    run: async (repoRoot, args) => assembleWorkingSet(repoRoot, args.task, args),
+    run: async (repoRoot, args) => {
+      const packet = await assembleTaskPacket(repoRoot, args.task, args);
+      await writeLatestTaskPacket(repoRoot, packet);
+      return packet;
+    },
+  }),
+  defineTool({
+    name: "index_status",
+    description: "Return Threadroot repo intelligence index status, backend, freshness, adapters, and object counts.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: (repoRoot) => indexStatus(repoRoot),
+  }),
+  defineTool({
+    name: "trace_context",
+    description: "Compile a task packet with retrieval debug-ranking evidence for diagnosis.",
+    inputSchema: objectSchema(
+      { task: { type: "string", description: "The coding task to trace context selection for." } },
+      ["task"],
+    ),
+    args: z.object({ task: z.string().min(1) }),
+    run: async (repoRoot, args) => {
+      const packet = await assembleTaskPacket(repoRoot, args.task, { debugRanking: true });
+      await writeLatestTaskPacket(repoRoot, packet);
+      return packet;
+    },
+  }),
+  defineTool({
+    name: "eval_context",
+    description: "Run Threadroot built-in gold-context retrieval evals and return recall, precision, MRR, nDCG, and token metrics.",
+    inputSchema: objectSchema({}),
+    args: z.object({}),
+    run: (repoRoot) => runContextEvals(repoRoot),
   }),
   defineTool({
     name: "repo_map",
@@ -149,7 +181,7 @@ const toolRegistry: ToolSpec[] = [
     run: async (repoRoot) => {
       const harness = await loadHarnessOrNull(repoRoot);
       if (!harness) {
-        return { skills: [], note: "No harness found. Run `tr init` first." };
+        return { skills: [], note: "No harness found. Run `threadroot init` first." };
       }
       const lockEntries = await skillLockEntries(repoRoot);
       return {
@@ -203,7 +235,7 @@ const toolRegistry: ToolSpec[] = [
     run: async (repoRoot) => {
       const harness = await loadHarnessOrNull(repoRoot);
       if (!harness) {
-        return { tools: [], note: "No harness found. Run `tr init` to create one." };
+        return { tools: [], note: "No harness found. Run `threadroot init` to create one." };
       }
       return {
         tools: harness.tools.map((tool) => ({
@@ -228,7 +260,7 @@ const toolRegistry: ToolSpec[] = [
     run: async (repoRoot) => {
       const harness = await loadHarnessOrNull(repoRoot);
       if (!harness) {
-        return { checks: [], note: "No harness found. Run `tr init` first." };
+        return { checks: [], note: "No harness found. Run `threadroot init` first." };
       }
       return { checks: await Promise.all(harness.tools.map((tool) => checkToolHealth(repoRoot, tool))) };
     },
@@ -241,12 +273,14 @@ const toolRegistry: ToolSpec[] = [
       {
         name: { type: "string", description: "Tool name." },
         input: { type: "object", description: "Tool inputs as key/value pairs.", additionalProperties: true },
+        brief: { type: "boolean", description: "Store full output locally and return a compact run summary." },
       },
       ["name"],
     ),
     args: z.object({
       name: z.string().min(1),
       input: z.record(z.unknown()).optional(),
+      brief: z.boolean().optional(),
     }),
     run: async (repoRoot, args) => {
       const outcome = await runTool(repoRoot, {
@@ -265,6 +299,16 @@ const toolRegistry: ToolSpec[] = [
         };
       }
       const { result } = outcome;
+      if (args.brief) {
+        return {
+          ok: result.ok,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          durationMs: result.durationMs,
+          command: result.command,
+          brief: await createRunBrief(repoRoot, result),
+        };
+      }
       return {
         ok: result.ok,
         exitCode: result.exitCode,
@@ -366,7 +410,7 @@ const toolRegistry: ToolSpec[] = [
     run: async (repoRoot) => {
       const harness = await loadHarnessOrNull(repoRoot);
       if (!harness) {
-        return { connections: [], note: "No harness found. Run `tr init` first." };
+        return { connections: [], note: "No harness found. Run `threadroot init` first." };
       }
       return {
         connections: harness.connections.map((connection) => ({
@@ -527,6 +571,97 @@ const toolRegistry: ToolSpec[] = [
 
 const tools = toolRegistry.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 
+async function latestRun(repoRoot: string): Promise<unknown> {
+  const dir = path.join(projectHarnessDir(repoRoot), "cache", "runs");
+  const files = await readdir(dir).catch(() => []);
+  const latest = files.filter((file) => file.endsWith(".json")).sort().at(-1);
+  if (!latest) {
+    return { note: "No run brief has been recorded yet. Use `threadroot run <tool> --brief`." };
+  }
+  return JSON.parse(await readFile(path.join(dir, latest), "utf8")) as unknown;
+}
+
+const resourceRegistry: ResourceSpec[] = [
+  {
+    uri: "threadroot://repo-map",
+    name: "Repo Map",
+    mimeType: "application/json",
+    description: "Compact repo-map status and excerpt.",
+    read: (repoRoot) => repoMapStatus(repoRoot),
+  },
+  {
+    uri: "threadroot://task/latest",
+    name: "Latest Task Packet",
+    mimeType: "application/json",
+    description: "Most recent Threadroot task packet compiled by CLI or MCP.",
+    read: async (repoRoot) => (await readLatestTaskPacket(repoRoot)) ?? { note: "No task packet has been compiled yet." },
+  },
+  {
+    uri: "threadroot://runs/latest",
+    name: "Latest Run Brief",
+    mimeType: "application/json",
+    description: "Most recent compact run summary with raw-output pointer.",
+    read: latestRun,
+  },
+  {
+    uri: "threadroot://skills",
+    name: "Skills",
+    mimeType: "application/json",
+    description: "Installed skill metadata without loading full skill bodies.",
+    read: async (repoRoot) => {
+      const harness = await loadHarnessOrNull(repoRoot);
+      return {
+        skills: (harness?.skills ?? []).map((skill) => ({
+          name: skill.name,
+          description: skill.frontmatter.description,
+          when: skill.frontmatter.when,
+          tags: skill.frontmatter.tags,
+          scope: skill.frontmatter.scope,
+          sourcePath: skill.sourcePath,
+        })),
+      };
+    },
+  },
+  {
+    uri: "threadroot://memory",
+    name: "Memory",
+    mimeType: "application/json",
+    description: "Harness memory entries.",
+    read: async (repoRoot) => {
+      const harness = await loadHarnessOrNull(repoRoot);
+      return { memory: harness?.memory ?? [] };
+    },
+  },
+  {
+    uri: "threadroot://index",
+    name: "Index Stats",
+    mimeType: "application/json",
+    description: "Repo intelligence index status and counts.",
+    read: (repoRoot) => indexStatus(repoRoot),
+  },
+  {
+    uri: "threadroot://index/snapshot",
+    name: "Index Snapshot",
+    mimeType: "application/json",
+    description: "Current repo intelligence index snapshot; may be larger than index stats.",
+    read: async (repoRoot) => (await readRepoIndex(repoRoot)) ?? { note: "No repo index has been built yet." },
+  },
+  {
+    uri: "threadroot://embeddings",
+    name: "Embeddings Status",
+    mimeType: "application/json",
+    description: "Optional embedding adapter status.",
+    read: (repoRoot) => embeddingsStatus(repoRoot),
+  },
+];
+
+const resources = resourceRegistry.map(({ uri, name, mimeType, description }) => ({
+  uri,
+  name,
+  mimeType,
+  description,
+}));
+
 export async function runMcpServer(repoRoot: string): Promise<void> {
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
 
@@ -557,9 +692,9 @@ export async function handleMessage(
       return resultResponse(request, {
         protocolVersion: "2024-11-05",
         serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
-        capabilities: { tools: {} },
+        capabilities: { tools: {}, resources: {} },
         instructions:
-          "Threadroot exposes the repository's local agent harness. Call `working_set` before broad coding work, use `repo_search`/`repo_read` only for targeted follow-up, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs.",
+          "Threadroot exposes the repository's local agent harness. Call `task_packet` before broad coding work, use `repo_search`/`repo_read` only for targeted follow-up, inspect `threadroot://index` and `threadroot://task/latest` as lazy resources, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs.",
       });
     }
 
@@ -569,6 +704,28 @@ export async function handleMessage(
 
     if (request.method === "tools/list") {
       return resultResponse(request, { tools });
+    }
+
+    if (request.method === "resources/list") {
+      return resultResponse(request, { resources });
+    }
+
+    if (request.method === "resources/read") {
+      const params = request.params as { uri?: string } | undefined;
+      const resource = resourceRegistry.find((entry) => entry.uri === params?.uri);
+      if (!resource) {
+        throw new Error(`Unknown resource: ${params?.uri ?? "<missing>"}`);
+      }
+      const value = await resource.read(repoRoot);
+      return resultResponse(request, {
+        contents: [
+          {
+            uri: resource.uri,
+            mimeType: resource.mimeType,
+            text: JSON.stringify(value, null, 2),
+          },
+        ],
+      });
     }
 
     if (request.method === "tools/call") {

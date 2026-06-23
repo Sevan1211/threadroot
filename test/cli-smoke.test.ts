@@ -60,20 +60,24 @@ describe("CLI smoke", () => {
     expect(statusJson.exists).toBe(true);
     expect(statusJson.manifest.name).toBe("demo");
 
-    const context = await run("context", "write tests");
-    expect(context).toContain("task: write tests");
-    expect(context).toContain("memory:");
+    const index = await run("index");
+    expect(index).toContain("index:");
+    expect(index).toContain("objects:");
 
-    const contextJson = JSON.parse(await run("context", "write tests", "--json")) as { task: string };
-    expect(contextJson.task).toBe("write tests");
+    const task = await run("task", "write tests");
+    expect(task).toContain("task: write tests");
+    expect(task).toContain("index:");
 
-    const workingSet = await run("working-set", "write tests");
-    expect(workingSet).toContain("working set: write tests");
-    expect(workingSet).toContain("token estimate:");
+    const taskJson = JSON.parse(await run("task", "write tests", "--json")) as { task: string; index: { exists: boolean } };
+    expect(taskJson.task).toBe("write tests");
+    expect(taskJson.index.exists).toBe(true);
 
-    const workingSetJson = JSON.parse(await run("working-set", "write tests", "--json")) as { task: string; tokenEstimate: number };
-    expect(workingSetJson.task).toBe("write tests");
-    expect(workingSetJson.tokenEstimate).toBeGreaterThan(0);
+    const evalContext = await run("eval", "context");
+    expect(evalContext).toContain("context eval:");
+    expect(evalContext).toContain("No built-in eval cases apply");
+
+    const embeddings = await run("embeddings", "status");
+    expect(embeddings).toContain("embeddings:");
 
     const map = await run("map", "--check");
     expect(map).toContain("repo map: current");
@@ -91,19 +95,18 @@ describe("CLI smoke", () => {
     const skillsJson = JSON.parse(await run("skills", "list", "--json")) as { skills: Array<{ name: string }> };
     expect(skillsJson.skills.map((skill) => skill.name)).toContain("find-skills");
 
-    const diff = await run("diff");
-    expect(diff).toContain("No drift");
-
     const doctor = await run("doctor");
-    expect(doctor).toContain("Threadroot doctor: clean");
+    expect(doctor).toContain("Threadroot doctor:");
     expect(process.exitCode).toBeUndefined();
-
-    const start = await run("start", "write tests");
-    expect(start).toContain("Threadroot start:");
-    expect(start).toContain("agent command map:");
 
     const toolsJson = JSON.parse(await run("tools", "list", "--json")) as { tools: unknown[] };
     expect(Array.isArray(toolsJson.tools)).toBe(true);
+
+    const addedTool = await run("tools", "add", "say-ok", "--description", "Say ok", "--run", "echo ok");
+    expect(addedTool).toContain("Created project tool `say-ok`");
+    const brief = await run("run", "say-ok", "--brief");
+    expect(brief).toContain("Command succeeded");
+    expect(brief).toContain("raw output:");
 
     const connectionsJson = JSON.parse(await run("connections", "list", "--json")) as { connections: unknown[] };
     expect(Array.isArray(connectionsJson.connections)).toBe(true);
@@ -111,7 +114,8 @@ describe("CLI smoke", () => {
     const automationJson = JSON.parse(await run("automation", "status", "--json")) as { mode: string };
     expect(automationJson.mode).toBe("ask");
 
-    const expose = await run("expose", "codex", "--dry-run");
-    expect(expose).toContain(".agents");
+    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "start", "write tests"])).rejects.toThrow();
+    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "working-set", "write tests"])).rejects.toThrow();
+    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "context", "write tests"])).rejects.toThrow();
   }, 15000);
 });

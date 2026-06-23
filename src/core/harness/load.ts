@@ -229,7 +229,7 @@ export async function loadManifest(repoRoot: string): Promise<HarnessManifest> {
     raw = await readFile(manifestPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new HarnessError(`No harness found at ${manifestPath}. Run \`tr init\` first.`);
+      throw new HarnessError(`No harness found at ${manifestPath}. Run \`threadroot init\` first.`);
     }
     throw error;
   }

@@ -4,11 +4,11 @@ This document is the handoff surface for the future website/cloud repo. The OSS 
 
 ## Product Boundary
 
-Threadroot OSS is the local context router for coding agents:
+Threadroot OSS is the local repo intelligence runtime for coding agents:
 
 - `.threadroot/` is the only default project artifact.
 - `.threadroot/` is local-only in `0.1.8` and should not be committed to git.
-- The CLI initializes, validates, routes context, imports existing provider files non-destructively, scans skills, and exposes MCP.
+- The CLI initializes, validates, indexes repo context, routes task packets, imports existing provider files non-destructively, scans skills, evaluates context quality, and serves MCP.
 - MCP exposes the same local harness to agent clients.
 - Skills, tools, connections, memory, web fetch, and policy execute locally.
 - No secrets are stored in the repo.
@@ -44,8 +44,7 @@ Prefer the 0.1.8 public path:
 ```bash
 threadroot init --profile <profile> --json
 threadroot connect <agent> --json
-threadroot start "<initial task>" --json
-threadroot working-set "<initial task>" --json
+threadroot task "<initial task>" --json
 ```
 
 For a blank repo:
@@ -66,14 +65,14 @@ Provider-native project files stay opt-in:
 
 ```bash
 threadroot connect <agent> --project-files --json
-threadroot expose <agent>
-threadroot skills expose <name-or-all> --agent <agent-or-universal>
 ```
 
 Verification:
 
 ```bash
-threadroot working-set "<task>" --json
+threadroot task "<task>" --json
+threadroot index --status --json
+threadroot eval context --json
 threadroot map --check --json
 threadroot doctor --json
 threadroot status --json
@@ -83,7 +82,7 @@ threadroot mcp check --json
 Success message:
 
 ```text
-Success: Threadroot is ready. Run threadroot start "<task>" and threadroot working-set "<task>" for future sessions.
+Success: Threadroot is ready. Run threadroot task "<task>" for future sessions.
 ```
 
 ## Default Harness Model
@@ -98,12 +97,12 @@ Every initialized project starts with five seed skills:
 
 The website should describe these as adaptive procedures, not a bundled library. Agents should:
 
-1. Start with `threadroot start "<task>"`.
-2. Ask for `threadroot working-set "<task>"` before broad reads.
+1. Start with `threadroot task "<task>"`.
+2. Read the task packet's first files before broad repo exploration.
 3. Refresh stale codebase navigation with `threadroot map --write`.
 4. Use installed skills only when relevant.
 5. Search with `threadroot skills find "<query>"` when no installed skill fits and a reusable procedure is needed.
-6. Install through `threadroot skills add <source> --skill <name>`.
+6. Install through `threadroot skills ingest <source> --skill <name>`.
 7. Create a project-specific skill under `.threadroot/skills/` when no good external skill exists.
 8. Create tools/connections only through Threadroot commands.
 
@@ -114,12 +113,13 @@ The website/cloud repo should call these instead of scraping text:
 ```bash
 threadroot init --json
 threadroot connect <agent> --json
-threadroot start "<task>" --json
-threadroot working-set "<task>" --json
+threadroot task "<task>" --json
+threadroot index --status --json
+threadroot eval context --json
+threadroot embeddings status --json
 threadroot import --json
 threadroot status --json
 threadroot doctor --json
-threadroot context "<task>" --json
 threadroot map --write --json
 threadroot map --check --json
 threadroot mcp check --json
@@ -127,18 +127,20 @@ threadroot web status --json
 threadroot web fetch <url> --json
 threadroot automation status --json
 threadroot automation approve --json
+threadroot memory gc --json
 threadroot skills match "<task>" --json
 threadroot skills find "<query>" --json
 threadroot skills list --json
 threadroot skills inspect <path> --json
 threadroot skills scan <path> --json
-threadroot skills add <source> --json
+threadroot skills ingest <source> --json
 threadroot skills trust <name> --json
 threadroot skills validate --json
 threadroot tools list --json
 threadroot tools detect --json
 threadroot tools create --json
 threadroot tools check --json
+threadroot run <tool> --brief --json
 threadroot connections list --json
 threadroot connections add <name> --provider <provider> --command <command> --json
 threadroot connections check --json
@@ -157,12 +159,12 @@ threadroot skills find "optimize website performance" --json
 Install:
 
 ```bash
-threadroot skills add <source> --skill <name> --json
+threadroot skills ingest <source> --skill <name> --json
 ```
 
 Security UX:
 
-- Show scan risk and findings from `skills add`, `skills inspect`, or `skills scan`.
+- Show scan risk and findings from `skills ingest`, `skills inspect`, or `skills scan`.
 - Show Snyk Agent Scan status when available.
 - Offer strict mode with `--require-snyk`; offer `--no-snyk` for local/offline testing.
 - Tell users Threadroot detects risk signals but does not certify third-party skills.
@@ -204,6 +206,16 @@ Rules:
 - MCP cannot self-confirm risky tool execution.
 - MCP can create low-risk tool/connection manifests only after `threadroot automation approve`.
 - High-risk, destructive, secret-bearing, or cloud-mutating actions require local human review.
+
+## Context And Indexing
+
+The website should treat `threadroot task "<task>" --json` as the canonical context API. The task packet includes ranked files and tests, symbol outlines, selected snippets, likely commands, recommended skills without full skill bodies, relevant memory, warnings, index status, token estimate, omitted sections, and optional debug-ranking evidence.
+
+`threadroot index --status --json` reports whether Threadroot is using SQLite/FTS5 or degraded fallback. Missing index is acceptable before the first task. Stale or degraded index should be shown as a context-quality warning, not a security failure.
+
+`threadroot eval context --json` is the local quality gate for routing changes. Built-in cases that do not apply to the current repo are skipped and reported in `skippedCases`. Cloud dashboards can display recall, precision, MRR, nDCG, irrelevant-file, command-hit, skill-hit, skipped-case, and token metrics.
+
+Embeddings are optional and disabled by default. Do not ask for API keys during onboarding unless the user explicitly wants semantic retrieval.
 
 ## Web
 
@@ -247,7 +259,7 @@ The OSS core is ready for website work when:
 - `threadroot init --json` initializes a temp repo with no visible provider files.
 - `threadroot connect <agent> --json` writes only `.threadroot/providers/<agent>/connection.json` by default.
 - Initialized repos contain exactly the five seed skills by default.
-- `threadroot working-set "<task>" --json` returns ranked files and token estimates.
+- `threadroot task "<task>" --json` returns ranked files, symbols, snippets, commands, skills, memory, index status, and token estimates.
 - `threadroot doctor --json` reports `ok: true` or actionable findings.
 - Skill installs write `.threadroot/lock.json` provenance.
 - MCP check verifies the local stdio server where configured.

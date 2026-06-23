@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/core/doctor.js";
 import { readLockFile } from "../src/core/install/index.js";
-import { addSkill, exposeSkills, parseSkillAddSource, parseSkillsShSource, trustSkill } from "../src/core/skills-install.js";
+import { addSkill, parseSkillAddSource, parseSkillsShSource, trustSkill } from "../src/core/skills-install.js";
 import { scanSkillPath } from "../src/core/skills-scan.js";
 import { handleMessage } from "../src/mcp/server.js";
 
@@ -158,7 +158,7 @@ describe("skill scan", () => {
   });
 });
 
-describe("skills add", () => {
+describe("skills ingest backend", () => {
   it("creates a minimal harness and installs one local skill into .threadroot", async () => {
     await write(repo, "package.json", JSON.stringify({ name: "demo-site" }));
     await writeSkill(repo, "external/ui-polish", "ui-polish");
@@ -206,8 +206,8 @@ describe("skills add", () => {
     expect(result.installed).toEqual([]);
     expect(result.selectionCommands).toEqual(
       expect.arrayContaining([
-        "threadroot skills add ./external --skill alpha",
-        "threadroot skills add ./external --skill beta",
+        "threadroot skills ingest ./external --skill alpha",
+        "threadroot skills ingest ./external --skill beta",
       ]),
     );
   });
@@ -234,18 +234,6 @@ describe("skills add", () => {
     expect(result.installed[0]?.entry.resolved).toMatch(/^[0-9a-f]{40}$/);
     expect(result.installed[0]?.entry.integrity).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result.installed[0]?.entry.objectPath).toBe("skills/ui-polish");
-  });
-
-  it("writes universal provider shims without copying risky allowed-tools fields", async () => {
-    await writeSkill(repo, "external/ui-polish", "ui-polish", "allowed-tools: Bash(git:*)");
-    await addSkill(repo, "./external/ui-polish", { snyk: false });
-
-    const exposed = await exposeSkills(repo, { skill: "ui-polish", agents: "universal" });
-    const shim = await readFile(path.join(repo, ".agents/skills/ui-polish/SKILL.md"), "utf8");
-
-    expect(exposed.entries[0]).toMatchObject({ status: "create", path: path.join(".agents", "skills", "ui-polish", "SKILL.md") });
-    expect(shim).toContain("Canonical skill: `.threadroot/skills/ui-polish/SKILL.md`");
-    expect(shim).not.toContain("allowed-tools");
   });
 
   it("doctor warns until an external skill is trusted", async () => {

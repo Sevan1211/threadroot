@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { stringify as stringifyYaml } from "yaml";
 
-import { AGENT_PROVIDERS, type AgentProviderId, parseAgentProviderList } from "./agent-providers.js";
 import { parseFrontmatter } from "./harness/frontmatter.js";
 import {
   projectHarnessDir,
@@ -23,7 +22,6 @@ import { scanSkillPath, type SkillScanReport } from "./skills-scan.js";
 import { runSnykAgentScan } from "./snyk-agent-scan.js";
 
 export type SkillAddScope = "project" | "user";
-export type SkillExposeAgent = AgentProviderId | "all" | "universal";
 
 export type SkillAddOptions = {
   scope?: SkillAddScope;
@@ -33,7 +31,6 @@ export type SkillAddOptions = {
   dryRun?: boolean;
   force?: boolean;
   strict?: boolean;
-  expose?: string;
   home?: string;
   snyk?: boolean;
   requireSnyk?: boolean;
@@ -60,19 +57,6 @@ export type AddedSkill = {
   externalScan?: ExternalScannerReport;
 };
 
-export type SkillShimEntry = {
-  agent: SkillExposeAgent;
-  label: string;
-  skill: string;
-  path: string;
-  status: "create" | "update" | "unchanged" | "skipped" | "removed" | "missing";
-  message?: string;
-};
-
-export type SkillExposeResult = {
-  entries: SkillShimEntry[];
-};
-
 export type SkillAddResult = {
   source: string;
   scope: SkillAddScope;
@@ -81,11 +65,9 @@ export type SkillAddResult = {
   installed: AddedSkill[];
   needsSelection: boolean;
   selectionCommands: string[];
-  exposure?: SkillExposeResult;
 };
 
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const THREADROOT_SKILL_SHIM_MARKER = "<!-- threadroot:managed external-skill-shim -->";
 
 type SkillSourceInfo = {
   ref: ObjectSourceRef;
@@ -542,11 +524,11 @@ function sourceRepoName(ref: ObjectSourceRef, sourceRoot: string): string {
 }
 
 function selectionCommand(source: string, candidate: SkillCandidate): string {
-  return `threadroot skills add ${source} --skill ${candidate.name}`;
+  return `threadroot skills ingest ${source} --skill ${candidate.name}`;
 }
 
 function exactPathSelectionCommand(source: string, candidate: SkillCandidate): string {
-  return `threadroot skills add ${source} --path ${candidate.objectPath}`;
+  return `threadroot skills ingest ${source} --path ${candidate.objectPath}`;
 }
 
 function likelySkillObjectPaths(skillName: string, repoName: string): string[] {
@@ -728,14 +710,6 @@ export async function addSkill(repoRoot: string, rawSource: string, options: Ski
       );
     }
 
-    const exposure = options.expose
-      ? await exposeSkills(repoRoot, {
-          skill: installed.map((skill) => skill.name).join(","),
-          agents: options.expose,
-          force: options.force,
-        })
-      : undefined;
-
     return {
       source: rawSource,
       scope,
@@ -744,118 +718,10 @@ export async function addSkill(repoRoot: string, rawSource: string, options: Ski
       installed,
       needsSelection: false,
       selectionCommands,
-      exposure,
     };
   } finally {
     await fetched?.cleanup();
   }
-}
-
-function providerTargets(agents: string | undefined): Array<{ id: SkillExposeAgent; label: string; dir: string }> {
-  const raw = agents?.trim() || "universal";
-  if (raw === "universal") {
-    return [{ id: "universal", label: "Universal Agent Skills", dir: path.join(".agents", "skills") }];
-  }
-  return parseAgentProviderList(raw, ["codex"]).map((id) => ({
-    id,
-    label: AGENT_PROVIDERS[id].label,
-    dir: AGENT_PROVIDERS[id].projectSkillDir,
-  }));
-}
-
-function skillShimContent(name: string, description: string): string {
-  return [
-    "---",
-    `name: ${name}`,
-    `description: ${description}`,
-    "---",
-    "",
-    THREADROOT_SKILL_SHIM_MARKER,
-    "",
-    `# ${name}`,
-    "",
-    "This provider-native skill is a thin Threadroot shim.",
-    "",
-    `Canonical skill: \`.threadroot/skills/${name}/SKILL.md\``,
-    "",
-    "Before using this skill, read the canonical Threadroot skill file and follow its instructions.",
-    "Do not treat this shim as the source of truth.",
-    "",
-  ].join("\n");
-}
-
-export async function exposeSkills(
-  repoRoot: string,
-  options: { skill: string; agents?: string; force?: boolean; dryRun?: boolean; undo?: boolean },
-): Promise<SkillExposeResult> {
-  const { resolveHarness } = await import("./harness/load.js");
-  const harness = await resolveHarness(repoRoot);
-  const names = options.skill === "all" ? harness.skills.map((skill) => skill.name) : options.skill.split(",").map((name) => name.trim());
-  const entries: SkillShimEntry[] = [];
-
-  for (const skillName of names.filter(Boolean)) {
-    const skill = harness.skills.find((entry) => entry.name === skillName);
-    if (!skill) {
-      entries.push({
-        agent: "universal",
-        label: "Universal Agent Skills",
-        skill: skillName,
-        path: "",
-        status: "missing",
-        message: `Unknown skill: ${skillName}`,
-      });
-      continue;
-    }
-    for (const target of providerTargets(options.agents)) {
-      const relativePath = path.join(target.dir, skill.name, "SKILL.md");
-      const absolutePath = path.join(repoRoot, relativePath);
-      if (options.undo) {
-        const existing = await exists(absolutePath) ? await readFile(absolutePath, "utf8") : undefined;
-        if (!existing) {
-          entries.push({ agent: target.id, label: target.label, skill: skill.name, path: relativePath, status: "missing" });
-        } else if (!existing.includes(THREADROOT_SKILL_SHIM_MARKER)) {
-          entries.push({
-            agent: target.id,
-            label: target.label,
-            skill: skill.name,
-            path: relativePath,
-            status: "skipped",
-            message: "Existing provider skill is not Threadroot-managed.",
-          });
-        } else if (options.dryRun) {
-          entries.push({ agent: target.id, label: target.label, skill: skill.name, path: relativePath, status: "removed" });
-        } else {
-          await rm(path.dirname(absolutePath), { recursive: true, force: true });
-          entries.push({ agent: target.id, label: target.label, skill: skill.name, path: relativePath, status: "removed" });
-        }
-        continue;
-      }
-
-      const desired = skillShimContent(skill.name, skill.frontmatter.description);
-      const existing = await exists(absolutePath) ? await readFile(absolutePath, "utf8") : undefined;
-      if (existing === desired) {
-        entries.push({ agent: target.id, label: target.label, skill: skill.name, path: relativePath, status: "unchanged" });
-      } else if (existing && !existing.includes(THREADROOT_SKILL_SHIM_MARKER) && !options.force) {
-        entries.push({
-          agent: target.id,
-          label: target.label,
-          skill: skill.name,
-          path: relativePath,
-          status: "skipped",
-          message: "Existing provider skill is not Threadroot-managed. Re-run with --force to replace it.",
-        });
-      } else {
-        const statusValue = existing ? "update" : "create";
-        if (!options.dryRun) {
-          await mkdir(path.dirname(absolutePath), { recursive: true });
-          await writeFile(absolutePath, desired, "utf8");
-        }
-        entries.push({ agent: target.id, label: target.label, skill: skill.name, path: relativePath, status: statusValue });
-      }
-    }
-  }
-
-  return { entries };
 }
 
 export async function trustSkill(

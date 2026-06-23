@@ -1,12 +1,15 @@
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readRepoFile, repoMapStatus, searchRepo, writeRepoMap } from "../src/core/repo-map.js";
 
 let repo: string;
+const execFileAsync = promisify(execFile);
 
 beforeEach(async () => {
   repo = await mkdtemp(path.join(tmpdir(), "tr-repo-map-"));
@@ -59,6 +62,21 @@ describe("repo map", () => {
 
     const status = await repoMapStatus(repo);
     expect(status.status).toBe("stale");
+  });
+
+  it("does not include deleted git-index files in generated maps", async () => {
+    await execFileAsync("git", ["init"], { cwd: repo });
+    await write("package.json", JSON.stringify({ name: "demo" }));
+    await write("test/live.test.ts", "test('live', () => {});\n");
+    await write("test/deleted.test.ts", "test('deleted', () => {});\n");
+    await execFileAsync("git", ["add", "package.json", "test/live.test.ts", "test/deleted.test.ts"], { cwd: repo });
+    await rm(path.join(repo, "test/deleted.test.ts"));
+
+    await writeRepoMap(repo);
+    const content = await readFile(path.join(repo, ".threadroot/memory/repo-map.md"), "utf8");
+
+    expect(content).toContain("test/live.test.ts");
+    expect(content).not.toContain("test/deleted.test.ts");
   });
 
   it("supports safe targeted search and reads", async () => {

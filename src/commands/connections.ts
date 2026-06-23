@@ -34,9 +34,9 @@ export async function runConnectionsList(repoRoot: string, options: ConnectionsL
   } catch (error) {
     if (error instanceof HarnessError) {
       if (options.json) {
-        printJson({ connections: [], ok: false, error: "harness_missing", message: "No harness found. Run `tr init` first." });
+        printJson({ connections: [], ok: false, error: "harness_missing", message: "No harness found. Run `threadroot init` first." });
       } else {
-        console.log("No harness found. Run `tr init` first.");
+        console.log("No harness found. Run `threadroot init` first.");
       }
       return;
     }

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { findSkills, parseSkillSearchOutput } from "../src/core/skills-find.js";
 
 describe("skills find", () => {
-  it("parses skills.sh and GitHub-backed skill results into Threadroot install commands", () => {
+  it("parses skills.sh and GitHub-backed skill results into Threadroot ingest commands", () => {
     const candidates = parseSkillSearchOutput(
       "find performance skills",
       [
@@ -18,12 +18,12 @@ describe("skills find", () => {
           name: "find-skills",
           source: "https://www.skills.sh/vercel-labs/skills/find-skills",
           installCommand:
-            "threadroot skills add https://www.skills.sh/vercel-labs/skills/find-skills --skill find-skills",
+            "threadroot skills ingest https://www.skills.sh/vercel-labs/skills/find-skills --skill find-skills",
         }),
         expect.objectContaining({
           name: "skill-creator",
           source: "https://github.com/anthropics/skills",
-          installCommand: "threadroot skills add https://github.com/anthropics/skills --skill skill-creator",
+          installCommand: "threadroot skills ingest https://github.com/anthropics/skills --skill skill-creator",
         }),
       ]),
     );
@@ -42,7 +42,7 @@ describe("skills find", () => {
       name: "git-commit",
       source: "https://www.skills.sh/github/awesome-copilot/git-commit",
       url: "https://skills.sh/github/awesome-copilot/git-commit",
-      installCommand: "threadroot skills add https://www.skills.sh/github/awesome-copilot/git-commit --skill git-commit",
+      installCommand: "threadroot skills ingest https://www.skills.sh/github/awesome-copilot/git-commit --skill git-commit",
     });
   });
 
@@ -55,7 +55,7 @@ describe("skills find", () => {
 
     expect(report.status).toBe("fallback");
     expect(report.searchUrl).toContain("skills.sh");
-    expect(report.candidates[0]?.installCommand).toContain("threadroot skills add");
+    expect(report.candidates[0]?.installCommand).toContain("threadroot skills ingest");
   });
 
   it("removes ANSI color codes from the JSON diagnostic raw field", async () => {

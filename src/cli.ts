@@ -5,40 +5,45 @@ import {
   runAutomationStatus,
   type AutomationCliOptions,
 } from "./commands/automation.js";
-import { runBootstrap, type BootstrapCliOptions } from "./commands/bootstrap.js";
-import { runCompileCommand, type CompileCliOptions } from "./commands/compile.js";
 import { runConnect, type ConnectCliOptions } from "./commands/connect.js";
-import { runContext } from "./commands/context.js";
-import { runDiff } from "./commands/diff.js";
 import { runDoctor } from "./commands/doctor.js";
-import { runExpose, type ExposeCliOptions } from "./commands/expose.js";
+import {
+  runEmbeddingsConfigure,
+  runEmbeddingsRefresh,
+  runEmbeddingsStatus,
+  type EmbeddingsConfigureOptions,
+} from "./commands/embeddings.js";
+import { runEvalContext, type EvalCliOptions } from "./commands/eval.js";
+import { runIndex, runIndexStatus, type IndexCliOptions } from "./commands/indexer.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runImport, type ImportCliOptions } from "./commands/import.js";
-import { runInstall, type InstallCliOptions } from "./commands/install.js";
 import { runMap, type MapCliOptions } from "./commands/map.js";
-import { runMcp, runMcpCheck, runMcpSetup, type McpCheckOptions, type McpSetupOptions } from "./commands/mcp.js";
-import { runMemoryAppend, runMemoryRead, runRemember, type RememberOptions } from "./commands/memory.js";
+import { runMcp, runMcpCheck, type McpCheckOptions } from "./commands/mcp.js";
 import {
-  runSkillsAdd,
-  runSkillsExpose,
+  runMemoryAppend,
+  runMemoryGc,
+  runMemoryRead,
+  runRemember,
+  type MemoryGcCliOptions,
+  type RememberOptions,
+} from "./commands/memory.js";
+import {
   runSkillsFind,
+  runSkillsIngest,
   runSkillsInspect,
   runSkillsList,
   runSkillsMatch,
   runSkillsScan,
   runSkillsTrust,
   runSkillsValidate,
-  type SkillsAddOptions,
-  type SkillsExposeOptions,
   type SkillsFindOptions,
+  type SkillsIngestOptions,
   type SkillsMatchOptions,
   type SkillsTrustOptions,
   type SkillsValidateOptions,
 } from "./commands/skills.js";
-import { runSetup, type SetupCliOptions } from "./commands/setup.js";
-import { runStart, type StartCliOptions } from "./commands/start.js";
 import { runStatus } from "./commands/status.js";
-import { runWorkingSet, type WorkingSetCliOptions } from "./commands/working-set.js";
+import { runTask, type TaskCliOptions } from "./commands/task.js";
 import {
   runToolRun,
   runToolsAdd,
@@ -63,32 +68,19 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Local context router for coding agents: working sets, skills, tools, memory, web fetch, and MCP in .threadroot.")
+    .description("Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP in .threadroot.")
     .version(THREADROOT_VERSION);
 
   program
-    .command("bootstrap")
-    .description("Plan or apply first-run Threadroot setup for this machine and repository.")
-    .option("-y, --yes", "Apply the setup plan. Without --yes, bootstrap prints a dry-run plan.")
-    .option("--dry-run", "Print the setup plan without writing files.")
-    .option("--agent <list>", "Provider(s): codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
-    .option("--task <task>", "Task used for the initial context slice.")
-    .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
-    .option("--expose <list>", "Also write project provider skill shims: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
+    .command("task")
+    .argument("<task>", "Task to compile a repo-intelligence packet for.")
+    .description("Compile the canonical task packet: indexed files, symbols, tests, commands, skills, memory, and risks.")
+    .option("--budget <tokens>", "Preferred token budget for the returned task packet.")
+    .option("--max-files <count>", "Maximum ranked non-test files to return.")
+    .option("--debug-ranking", "Include retrieval scoring details.")
+    .option("--force-index", "Refresh the repo index before compiling the packet.")
     .option("--json", "Print machine-readable JSON.")
-    .option("--no-global", "Skip one-time machine-level agent setup.")
-    .option("--no-init", "Skip project harness initialization.")
-    .option("--no-import", "Skip importing existing vendor files during init.")
-    .option("--profile <profile>", "Override the detected project profile during init.")
-    .action((options: BootstrapCliOptions) => runBootstrap(repoRoot, options));
-
-  program
-    .command("start")
-    .argument("[task]", "Task to prepare context for.")
-    .option("--task <task>", "Task to prepare context for.")
-    .option("--json", "Print machine-readable JSON.")
-    .description("Start a focused Threadroot agent session: doctor, status, context, and command map.")
-    .action((task: string | undefined, options: StartCliOptions) => runStart(repoRoot, task, options));
+    .action((task: string, options: TaskCliOptions) => runTask(repoRoot, task, options));
 
   program
     .command("init")
@@ -99,30 +91,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--profile <profile>", "Override the detected project profile.")
     .option("--gitignore", "Write a visible root .gitignore entry instead of private .git/info/exclude.")
     .option("--adapters <list>", "Comma-separated adapters: agents,claude,copilot,cursor.")
-    .option("--expose <list>", "Comma-separated provider skill shims to write: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
     .action((options: InitCliOptions) => runInit(repoRoot, options));
-
-  program
-    .command("expose")
-    .argument("[agent]", "Provider(s) to expose: codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
-    .option("--dry-run", "Show project files that would be written.")
-    .option("--check", "Check current project exposure state.")
-    .option("--undo", "Remove Threadroot-managed project exposure files.")
-    .option("--force", "Replace an existing unmanaged threadroot skill.")
-    .description("Write thin provider project skills that point agents at `.threadroot/`.")
-    .action((agent: string | undefined, options: ExposeCliOptions) => runExpose(repoRoot, agent, options));
-
-  program
-    .command("setup")
-    .option("--global", "Install machine-level Threadroot agent bootstrap skills/config.")
-    .option("--agent <list>", "Provider(s): codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
-    .option("--dry-run", "Show global files that would be written.")
-    .option("--check", "Check global Threadroot setup state.")
-    .option("--undo", "Remove Threadroot-managed global setup files/blocks.")
-    .option("--force", "Replace an existing unmanaged threadroot skill.")
-    .option("--mcp", "Also add Threadroot MCP to Codex global config when Codex is selected.")
-    .description("Set up Threadroot once per machine for supported coding agents.")
-    .action((options: SetupCliOptions) => runSetup(repoRoot, options));
 
   program
     .command("connect")
@@ -144,38 +113,20 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .action((options) => runStatus(repoRoot, options));
 
   program
-    .command("diff")
-    .description("Show the diff between the canonical harness and each compiled vendor file.")
-    .action(() => runDiff(repoRoot));
-
-  program
     .command("doctor")
     .description("Check harness validity, compiled output health, MCP hints, and tool trust.")
     .option("--json", "Print machine-readable JSON.")
     .action((options) => runDoctor(repoRoot, options));
 
   program
-    .command("compile")
-    .option("--adapter <adapter>", "Restrict output to one adapter: agents, claude, copilot, or cursor.")
-    .description("Compile the canonical harness into vendor files.")
-    .action((options: CompileCliOptions) => runCompileCommand(repoRoot, options));
-
-  program
-    .command("context")
-    .argument("<task>", "Task to assemble a relevant harness slice for.")
-    .description("Assemble the task-relevant harness slice: skills, rules, tools, connections, and memory.")
+    .command("index")
+    .description("Build or inspect the local repo intelligence index.")
+    .option("--force", "Rebuild even when a usable index exists.")
+    .option("--status", "Show index status without rebuilding.")
     .option("--json", "Print machine-readable JSON.")
-    .action((task: string, options) => runContext(repoRoot, task, options));
-
-  program
-    .command("working-set")
-    .alias("working_set")
-    .argument("<task>", "Task to rank files, commands, skills, and memory for.")
-    .description("Return the compact task-specific working set agents should read first.")
-    .option("--budget <tokens>", "Preferred token budget for the returned working set.")
-    .option("--max-files <count>", "Maximum ranked non-test files to return.")
-    .option("--json", "Print machine-readable JSON.")
-    .action((task: string, options: WorkingSetCliOptions) => runWorkingSet(repoRoot, task, options));
+    .action((options: IndexCliOptions & { status?: boolean }) =>
+      options.status ? runIndexStatus(repoRoot, options) : runIndex(repoRoot, options),
+    );
 
   program
     .command("map")
@@ -191,18 +142,39 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--input <pair...>", "Tool input as key=value (repeatable).")
     .option("-y, --yes", "Confirm running a tool marked confirm:true.")
     .option("--timeout <ms>", "Override the execution timeout in milliseconds.")
+    .option("--brief", "Store full output locally and print a compact failure summary.")
     .option("--json", "Print machine-readable JSON.")
     .description("Execute a harness tool locally.")
     .action((tool: string, options: ToolRunOptions) => runToolRun(repoRoot, tool, options));
 
-  program
-    .command("install")
-    .argument("<source>", "Object source: local path or git (github:owner/repo/path[@ref]).")
-    .option("--kind <kind>", "Object kind: skill, tool, rule, or connection (inferred when omitted).")
-    .option("--path <path>", "Path to the object within a git source repo.")
-    .option("--user", "Install into the user harness (~/.threadroot) instead of the project.")
-    .description("Install a harness object from a local path or git source.")
-    .action((source: string, options: InstallCliOptions) => runInstall(repoRoot, source, options));
+  const evalCommand = program.command("eval").description("Evaluate Threadroot context and routing quality.");
+  evalCommand
+    .command("context")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run built-in gold-context retrieval evals.")
+    .action((options: EvalCliOptions) => runEvalContext(repoRoot, options));
+
+  const embeddings = program.command("embeddings").description("Configure optional embedding retrieval adapters.");
+  embeddings
+    .command("configure")
+    .option("--provider <provider>", "Embedding provider name.")
+    .option("--model <model>", "Embedding model name.")
+    .option("--endpoint <url>", "Provider endpoint or local service URL.")
+    .option("--dimension <count>", "Vector dimension.")
+    .option("--disable", "Disable configured embeddings.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Write explicit local embedding configuration. Does not call a provider.")
+    .action((options: EmbeddingsConfigureOptions) => runEmbeddingsConfigure(repoRoot, options));
+  embeddings
+    .command("status")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show optional embedding adapter status.")
+    .action((options) => runEmbeddingsStatus(repoRoot, options));
+  embeddings
+    .command("refresh")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Refresh optional embeddings when an explicit adapter is available.")
+    .action((options) => runEmbeddingsRefresh(repoRoot, options));
 
   program
     .command("import")
@@ -232,6 +204,15 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .argument("<note>", "Note to append.")
     .description("Append a durable note to memory.")
     .action((type: string, note: string) => runMemoryAppend(repoRoot, type, note));
+  memory
+    .command("gc")
+    .option("--type <type>", "Compact one memory type instead of project, current-focus, handoff, and pitfalls.")
+    .option("--max-entries <count>", "Maximum bullet entries to keep per memory file.")
+    .option("--max-chars <count>", "Maximum body characters to keep per memory file.")
+    .option("--dry-run", "Report compaction without writing files.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Dedupe and compact local memory, archiving trimmed notes under .threadroot/cache/memory/.")
+    .action((options: MemoryGcCliOptions) => runMemoryGc(repoRoot, options));
 
   const tools = program.command("tools").description("Manage executable harness tools.");
   tools
@@ -353,8 +334,8 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Recommend installed skills by metadata without loading full skill bodies.")
     .action((task: string, options: SkillsMatchOptions) => runSkillsMatch(repoRoot, task, options));
   skills
-    .command("add")
-    .argument("<source>", "Skill source: owner/repo, skills:owner/repo/skill, skills.sh URL, GitHub URL, or local path.")
+    .command("ingest")
+    .argument("<source>", "Skill source URL, owner/repo, skills:owner/repo/skill, GitHub URL, or local path.")
     .option("--user", "Install into the user harness (~/.threadroot) instead of the project.")
     .option("--path <path>", "Path to a skill inside the source repository.")
     .option("--skill <name>", "Skill name/slug inside a multi-skill source.")
@@ -364,10 +345,9 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--strict", "Fail when the static scan reports anything above low risk.")
     .option("--no-snyk", "Skip optional Snyk Agent Scan integration.")
     .option("--require-snyk", "Fail unless Snyk Agent Scan runs and passes.")
-    .option("--expose <agent>", "Also expose installed skill shims: universal, codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
     .option("--json", "Print machine-readable JSON.")
-    .description("Install an external Agent Skill into `.threadroot/skills/` with scan and provenance.")
-    .action((source: string, options: SkillsAddOptions) => runSkillsAdd(repoRoot, source, options));
+    .description("Ingest a skill link or repo into `.threadroot/skills/` with scan, lock, and provenance.")
+    .action((source: string, options: SkillsIngestOptions) => runSkillsIngest(repoRoot, source, options));
   skills
     .command("list")
     .option("--json", "Print machine-readable JSON.")
@@ -393,16 +373,6 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Mark an installed external skill as reviewed after human inspection.")
     .action((name: string, options: SkillsTrustOptions) => runSkillsTrust(repoRoot, name, options));
   skills
-    .command("expose")
-    .argument("<name-or-all>", "Skill name, comma-separated names, or all.")
-    .option("--agent <agent>", "Provider target: universal, codex,claude,cursor,copilot,gemini,windsurf,antigravity,opencode,all.")
-    .option("--dry-run", "Show provider skill shims that would be written.")
-    .option("--force", "Replace existing unmanaged provider skill shims.")
-    .option("--undo", "Remove Threadroot-managed provider skill shims.")
-    .option("--json", "Print machine-readable JSON.")
-    .description("Write thin provider-native shims for installed Threadroot skills.")
-    .action((skill: string, options: SkillsExposeOptions) => runSkillsExpose(repoRoot, skill, options));
-  skills
     .command("validate")
     .option("--path <path>", "Validate a repo-relative skill file, skill directory, or skill collection.")
     .option("--json", "Print machine-readable JSON.")
@@ -417,13 +387,6 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .option("--json", "Print machine-readable JSON.")
     .description("Verify Codex MCP config and the Threadroot stdio server handshake.")
     .action((options: McpCheckOptions) => runMcpCheck(repoRoot, options));
-  mcp
-    .command("setup")
-    .option("--agent <agent>", "all, generic, codex, copilot, cursor, or claude.")
-    .option("--write", "Write project-local MCP config files for the agents.")
-    .option("--json", "Print machine-readable JSON.")
-    .description("Print MCP config snippets and a pasteable agent bootstrap prompt.")
-    .action((options: McpSetupOptions) => runMcpSetup(repoRoot, options));
 
   return program;
 }

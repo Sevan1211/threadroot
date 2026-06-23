@@ -8,8 +8,10 @@ import type { McpServerEntry } from "./mcp-config.js";
 import { THREADROOT_VERSION } from "./version.js";
 
 export const REQUIRED_MCP_TOOLS = [
-  "context",
-  "working_set",
+  "task_packet",
+  "index_status",
+  "trace_context",
+  "eval_context",
   "repo_map",
   "repo_search",
   "repo_read",

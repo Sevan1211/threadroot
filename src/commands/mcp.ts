@@ -1,74 +1,14 @@
 import { runMcpServer } from "../mcp/server.js";
-import { mcpSetupGuide } from "../core/mcp-setup.js";
-import { writeProjectMcpConfigs, type ProjectMcpAgent } from "../core/mcp-config.js";
-import { checkCodexMcp, mcpEntryForCurrentProcess } from "../core/mcp-check.js";
+import { checkCodexMcp } from "../core/mcp-check.js";
 import { printJson, type JsonCliOptions } from "./json.js";
 
 export async function runMcp(repoRoot: string): Promise<void> {
   await runMcpServer(repoRoot);
 }
 
-export type McpSetupOptions = JsonCliOptions & {
-  agent?: string;
-  write?: boolean;
-};
-
 export type McpCheckOptions = JsonCliOptions & {
   timeout?: string;
 };
-
-function parseProjectMcpAgents(value: string | undefined): ProjectMcpAgent[] | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const agents: ProjectMcpAgent[] = [];
-  for (const raw of value.split(",")) {
-    const key = raw.trim().toLowerCase();
-    if (!key || key === "all") {
-      continue;
-    }
-    if (key === "vscode") {
-      agents.push("copilot");
-      continue;
-    }
-    if (key === "copilot" || key === "cursor" || key === "claude") {
-      agents.push(key);
-      continue;
-    }
-    if (key === "codex") {
-      continue;
-    }
-    throw new Error(
-      `Unsupported project MCP agent: ${raw}. Supported: claude, cursor, copilot, vscode, all. Use \`threadroot connect codex\` for Codex user/local setup.`,
-    );
-  }
-  return agents.length > 0 ? [...new Set(agents)] : undefined;
-}
-
-export async function runMcpSetup(repoRoot: string, options: McpSetupOptions): Promise<void> {
-  if (options.write) {
-    const entry = mcpEntryForCurrentProcess();
-    const result = await writeProjectMcpConfigs({ repoRoot, entry, agents: parseProjectMcpAgents(options.agent) });
-    if (options.json) {
-      printJson(result);
-      return;
-    }
-    console.log("Wrote project MCP config:");
-    for (const file of result.written) {
-      console.log(`- ${file}`);
-    }
-    for (const note of result.notes) {
-      console.log(`note: ${note}`);
-    }
-    return;
-  }
-  const guide = mcpSetupGuide({ repoRoot, agent: options.agent });
-  if (options.json) {
-    printJson({ guide });
-  } else {
-    console.log(guide);
-  }
-}
 
 export async function runMcpCheck(repoRoot: string, options: McpCheckOptions): Promise<void> {
   const timeoutMs = options.timeout ? Number.parseInt(options.timeout, 10) : undefined;

@@ -11,7 +11,7 @@ export async function runStatus(repoRoot: string, options: StatusCliOptions = {}
   }
 
   if (!status.exists) {
-    console.log("No harness found. Run `tr init` first.");
+    console.log("No harness found. Run `threadroot init` first.");
     return;
   }
 

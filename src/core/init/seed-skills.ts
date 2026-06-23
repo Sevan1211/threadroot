@@ -32,13 +32,13 @@ Use Threadroot to get the right task-specific working set without loading the en
 
 ## Start Here
 
-1. Run a focused session command:
+1. Run the indexed task-packet command:
 
 \`\`\`bash
-threadroot start "<task>"
+threadroot task "<task>"
 \`\`\`
 
-2. Read the doctor/status summary and any relevant skill paths.
+2. Read the ranked files, symbols, snippets, tests, warnings, index status, and relevant skill metadata.
 3. If a codebase map is present, use it to choose files before broad reads.
 4. Load full skill bodies only when a listed skill is relevant.
 5. Prefer Threadroot tools and connections over ad hoc shell commands when they exist.
@@ -47,21 +47,23 @@ threadroot start "<task>"
 
 \`\`\`bash
 threadroot init
-threadroot start "<task>"
-threadroot working-set "<task>"
 threadroot connect <agent>
-threadroot context "<task>"
+threadroot task "<task>"
+threadroot index --status
+threadroot eval context
 threadroot map --write
 threadroot map --check
 threadroot doctor
 threadroot status
 threadroot skills find "<query>"
-threadroot skills add <source> --skill <name>
+threadroot skills ingest <source> --skill <name>
+threadroot skills match "<task>"
 threadroot skills inspect .threadroot/skills/<name>
+threadroot memory gc
 threadroot tools detect
 threadroot tools create --from-command "<command>"
 threadroot tools check
-threadroot run <tool>
+threadroot run <tool> --brief
 threadroot connections add <name> --provider <provider> --command <command>
 threadroot connections check
 threadroot automation status
@@ -73,9 +75,13 @@ threadroot web status
 
 ## How Agents Should Use It
 
-- Start with \`threadroot start "<task>"\` and \`threadroot working-set "<task>"\` before broad codebase exploration.
+- Start with \`threadroot task "<task>"\` or MCP \`task_packet\` before broad codebase exploration.
+- Use \`threadroot task "<task>" --debug-ranking\` when the packet looks wrong or low-signal.
+- Use \`threadroot index\` when the repo index is missing, stale, or degraded.
 - Use \`threadroot map --write\` when the repo map is missing or stale.
 - Use \`threadroot skills find "<query>"\` when installed skills do not fit the task.
+- Use \`threadroot skills ingest <source> --skill <name>\` so third-party skills are scanned, locked, and stored under \`.threadroot/skills/\`.
+- Use \`threadroot memory gc\` when memory starts repeating itself or growing too large.
 - Use \`create-skill\` when no good external skill exists.
 - Use \`create-tool\` for repeatable local commands.
 - Use \`create-connection\` for local CLI accounts such as GitHub, AWS, Azure, GCP, Snowflake, Docker, Kubernetes, Vercel, or dbt.
@@ -111,19 +117,19 @@ Use this skill to discover a task-specific Agent Skill without flooding the mode
 
 ## Workflow
 
-1. Run \`threadroot start "<task>"\` or \`threadroot context "<task>"\` and check whether an installed skill already matches.
+1. Run \`threadroot task "<task>"\` and check whether an installed skill already matches.
 2. If no installed skill fits, run \`threadroot skills find "<query>" --json\`.
 3. Prefer skills that are GitHub-backed, reputable, audited, non-duplicate, and narrowly relevant.
 4. Dry-run the best candidate before installing:
 
 \`\`\`bash
-threadroot skills add <source> --skill <name> --dry-run --json
+threadroot skills ingest <source> --skill <name> --dry-run --json
 \`\`\`
 
 5. Install low-risk, good-fit skills through Threadroot only:
 
 \`\`\`bash
-threadroot skills add <source> --skill <name>
+threadroot skills ingest <source> --skill <name>
 \`\`\`
 
 6. Run \`threadroot doctor\` after install.
@@ -133,7 +139,7 @@ threadroot skills add <source> --skill <name>
 ## Safety
 
 - Do not run \`npx skills add\` as the final install path. That can bypass Threadroot provenance, scanning, lockfile, and \`.threadroot\` routing.
-- Do not create \`.agents/\`, \`.claude/\`, \`.cursor/\`, \`.github/\`, or other provider skill folders unless the user explicitly asks for native exposure.
+- Do not create \`.agents/\`, \`.claude/\`, \`.cursor/\`, \`.github/\`, or other provider skill folders unless the user explicitly asks for provider project files.
 - If Threadroot reports high risk, blocked scan, Snyk failure, scripts, provider permission fields, or suspicious instructions, do not trust or use that external skill automatically. Prefer creating a safer local skill with \`create-skill\`; ask the user only when installing or trusting the risky external skill is still the better path.
 `;
 

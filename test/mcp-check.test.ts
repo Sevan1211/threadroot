@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -10,7 +10,6 @@ import {
   readCodexThreadrootMcpEntry,
   REQUIRED_MCP_TOOLS,
 } from "../src/core/mcp-check.js";
-import { setupGlobal } from "../src/core/setup.js";
 import { THREADROOT_VERSION } from "../src/core/version.js";
 
 let home: string;
@@ -49,6 +48,22 @@ async function writeFakeMcpServer(tools = [...REQUIRED_MCP_TOOLS]): Promise<stri
   return filePath;
 }
 
+async function writeCodexMcpConfig(entry: { command: string; args: string[] }): Promise<void> {
+  const dir = path.join(home, ".codex");
+  await mkdir(dir, { recursive: true });
+  const args = entry.args.map((arg) => `"${arg.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(", ");
+  await writeFile(
+    path.join(dir, "config.toml"),
+    [
+      "[mcp_servers.threadroot]",
+      `command = "${entry.command.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+      `args = [${args}]`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
 describe("checkCodexMcp", () => {
   it("uses a stable npx command when setup is run from npm's npx cache", () => {
     const entry = mcpEntryForScriptPath(
@@ -72,12 +87,7 @@ describe("checkCodexMcp", () => {
 
   it("verifies configured stdio server tools", async () => {
     const server = await writeFakeMcpServer();
-    await setupGlobal({
-      home,
-      agents: "codex",
-      mcp: true,
-      mcpEntry: { command: "bash", args: [server] },
-    });
+    await writeCodexMcpConfig({ command: "bash", args: [server] });
 
     const config = await readFile(path.join(home, ".codex/config.toml"), "utf8");
     expect(config).toContain(`command = "bash"`);
@@ -90,13 +100,8 @@ describe("checkCodexMcp", () => {
   });
 
   it("errors when required Threadroot tools are missing", async () => {
-    const server = await writeFakeMcpServer(["context"]);
-    await setupGlobal({
-      home,
-      agents: "codex",
-      mcp: true,
-      mcpEntry: { command: "bash", args: [server] },
-    });
+    const server = await writeFakeMcpServer(["status"]);
+    await writeCodexMcpConfig({ command: "bash", args: [server] });
 
     const report = await checkCodexMcp({ repoRoot: repo, home });
     expect(report.status).toBe("error");

@@ -2,7 +2,7 @@ import { HarnessError, resolveHarness } from "../core/harness/index.js";
 import { assembleContext } from "../core/harness/context.js";
 import { toRepoPath } from "../core/paths.js";
 import { findSkills } from "../core/skills-find.js";
-import { addSkill, exposeSkills, trustSkill, type SkillAddOptions } from "../core/skills-install.js";
+import { addSkill, trustSkill, type SkillAddOptions } from "../core/skills-install.js";
 import { scanSkillPath } from "../core/skills-scan.js";
 import { inspectSkillPath, validateSkillPath, validateSkills } from "../core/skills.js";
 import { printJson, type JsonCliOptions } from "./json.js";
@@ -16,7 +16,7 @@ export type SkillsInspectOptions = JsonCliOptions;
 export type SkillsScanOptions = JsonCliOptions;
 export type SkillsFindOptions = JsonCliOptions;
 export type SkillsMatchOptions = JsonCliOptions;
-export type SkillsAddOptions = JsonCliOptions & {
+export type SkillsIngestOptions = JsonCliOptions & {
   user?: boolean;
   path?: string;
   skill?: string;
@@ -24,18 +24,11 @@ export type SkillsAddOptions = JsonCliOptions & {
   dryRun?: boolean;
   force?: boolean;
   strict?: boolean;
-  expose?: string;
   snyk?: boolean;
   requireSnyk?: boolean;
 };
 export type SkillsTrustOptions = JsonCliOptions & {
   user?: boolean;
-};
-export type SkillsExposeOptions = JsonCliOptions & {
-  agent?: string;
-  dryRun?: boolean;
-  force?: boolean;
-  undo?: boolean;
 };
 
 function printScan(report: Awaited<ReturnType<typeof scanSkillPath>>): void {
@@ -148,9 +141,9 @@ export async function runSkillsList(repoRoot: string, options: SkillsListOptions
   } catch (error) {
     if (error instanceof HarnessError) {
       if (options.json) {
-        printJson({ skills: [], ok: false, error: "harness_missing", message: "No harness found. Run `tr init` first." });
+        printJson({ skills: [], ok: false, error: "harness_missing", message: "No harness found. Run `threadroot init` first." });
       } else {
-        console.log("No harness found. Run `tr init` first.");
+        console.log("No harness found. Run `threadroot init` first.");
       }
       return;
     }
@@ -229,7 +222,7 @@ export async function runSkillsScan(
   }
 }
 
-export async function runSkillsAdd(repoRoot: string, source: string, options: SkillsAddOptions = {}): Promise<void> {
+export async function runSkillsIngest(repoRoot: string, source: string, options: SkillsIngestOptions = {}): Promise<void> {
   try {
     const addOptions: SkillAddOptions = {
       scope: options.user ? "user" : "project",
@@ -239,7 +232,6 @@ export async function runSkillsAdd(repoRoot: string, source: string, options: Sk
       dryRun: options.dryRun,
       force: options.force,
       strict: options.strict,
-      expose: options.expose,
       snyk: options.snyk,
       requireSnyk: options.requireSnyk,
     };
@@ -266,7 +258,7 @@ export async function runSkillsAdd(repoRoot: string, source: string, options: Sk
     }
 
     if (options.dryRun) {
-      console.log(`Threadroot skills add: dry run for ${source}`);
+      console.log(`Threadroot skills ingest: dry run for ${source}`);
       for (const candidate of result.candidates) {
         console.log(`- would install ${candidate.name} (${candidate.scan.risk}) from ${candidate.objectPath}`);
         console.log(`  external scan: ${formatExternalScan(candidate.externalScan)}`);
@@ -300,19 +292,12 @@ export async function runSkillsAdd(repoRoot: string, source: string, options: Sk
       }
       console.log(`  inspect: threadroot skills inspect .threadroot/skills/${installed.name}`);
     }
-    if (result.exposure) {
-      console.log("provider exposure:");
-      for (const entry of result.exposure.entries) {
-        const suffix = entry.message ? ` - ${entry.message}` : "";
-        console.log(`- ${entry.label}: ${entry.status} ${entry.path}${suffix}`);
-      }
-    }
     console.log("Threadroot detects risk signals; it does not certify third-party skills as safe.");
   } catch (error) {
     if (options.json) {
       printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
     } else {
-      console.error(`Skill add failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`Skill ingest failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     process.exitCode = 1;
   }
@@ -331,33 +316,6 @@ export async function runSkillsTrust(repoRoot: string, name: string, options: Sk
       printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
     } else {
       console.error(`Skill trust failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    process.exitCode = 1;
-  }
-}
-
-export async function runSkillsExpose(repoRoot: string, skill: string, options: SkillsExposeOptions = {}): Promise<void> {
-  try {
-    const result = await exposeSkills(repoRoot, {
-      skill,
-      agents: options.agent,
-      dryRun: options.dryRun,
-      force: options.force,
-      undo: options.undo,
-    });
-    if (options.json) {
-      printJson(result);
-      return;
-    }
-    for (const entry of result.entries) {
-      const suffix = entry.message ? ` - ${entry.message}` : "";
-      console.log(`${entry.label}: ${entry.status} ${entry.path}${suffix}`);
-    }
-  } catch (error) {
-    if (options.json) {
-      printJson({ ok: false, error: error instanceof Error ? error.message : String(error) });
-    } else {
-      console.error(`Skill expose failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     process.exitCode = 1;
   }
