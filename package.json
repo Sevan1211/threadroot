@@ -1,6 +1,6 @@
 {
   "name": "threadroot",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Codex Context Optimizer for smaller prompts, JSONL flight recording, tokens-to-green scoring, verification, and repo-local tuning.",
   "license": "MIT",
   "type": "module",

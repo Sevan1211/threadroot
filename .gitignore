@@ -9,6 +9,9 @@ coverage/
 # harness distribution later.
 .threadroot/
 
+# Codex optimizer run state is local evidence and should not be committed.
+.codex/threadroot/
+
 # threadroot:begin local-state
 .threadroot/cache/
 .threadroot/tmp/

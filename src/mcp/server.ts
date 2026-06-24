@@ -1,6 +1,6 @@
 import readline from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -154,9 +154,28 @@ const toolRegistry: ToolSpec[] = [
       includeResourceLinks: z.boolean().optional(),
     }),
     run: async (repoRoot, args) => {
-      const packet = await assembleTaskPacket(repoRoot, args.task, args);
-      await writeLatestTaskPacket(repoRoot, packet);
-      return packet;
+      if (!(await hasProjectHarness(repoRoot))) {
+        return createPrepBrief(repoRoot, args.task, {
+          budgetTokens: args.budgetTokens,
+          maxFiles: args.maxFiles,
+          forceIndex: args.forceIndex,
+        });
+      }
+
+      try {
+        const packet = await assembleTaskPacket(repoRoot, args.task, args);
+        await writeLatestTaskPacket(repoRoot, packet);
+        return packet;
+      } catch (error) {
+        if (isMissingHarnessError(error)) {
+          return createPrepBrief(repoRoot, args.task, {
+            budgetTokens: args.budgetTokens,
+            maxFiles: args.maxFiles,
+            forceIndex: args.forceIndex,
+          });
+        }
+        throw error;
+      }
     },
   }),
   defineTool({
@@ -1393,17 +1412,19 @@ function shortToolText(name: string, structured: Record<string, unknown>): strin
       task?: string;
       tokenEstimate?: number;
       nextReads?: string[];
+      promptTokenEstimate?: number;
+      firstReads?: string[];
       files?: Array<{ path: string }>;
       tests?: Array<{ path: string }>;
       recommendedSkills?: Array<{ name: string; confidence?: string }>;
       omitted?: Array<{ section: string; reason: string }>;
     };
-    const nextReads = (packet.nextReads ?? []).slice(0, 6);
+    const nextReads = (packet.nextReads ?? packet.firstReads ?? []).slice(0, 6);
     const skills = (packet.recommendedSkills ?? []).slice(0, 4).map((skill) => `${skill.name}${skill.confidence ? ` (${skill.confidence})` : ""}`);
     const omitted = (packet.omitted ?? []).filter((entry) => entry.section === "budget").map((entry) => entry.reason).slice(0, 2);
     return [
       `Threadroot task packet: ${packet.task ?? ""}`,
-      `Estimated tokens: ${packet.tokenEstimate ?? "unknown"}`,
+      `Estimated tokens: ${packet.tokenEstimate ?? packet.promptTokenEstimate ?? "unknown"}`,
       nextReads.length > 0 ? `Read next: ${nextReads.join(", ")}` : undefined,
       skills.length > 0 ? `Skills: ${skills.join(", ")}` : undefined,
       omitted.length > 0 ? `Budget notes: ${omitted.join(" ")}` : undefined,
@@ -1659,6 +1680,22 @@ function resultResponse(request: JsonRpcRequest, result: unknown): JsonRpcRespon
 
 function errorResponse(request: JsonRpcRequest, code: number, message: string): JsonRpcResponse {
   return { jsonrpc: "2.0", id: request.id ?? null, error: { code, message } };
+}
+
+function isMissingHarnessError(error: unknown): boolean {
+  return error instanceof HarnessError && error.message.includes("No harness found");
+}
+
+async function hasProjectHarness(repoRoot: string): Promise<boolean> {
+  try {
+    await access(path.join(projectHarnessDir(repoRoot), "harness.yaml"));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function write(payload: unknown): void {

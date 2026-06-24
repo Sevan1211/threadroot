@@ -6,6 +6,17 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 0.3.1 - Codex-native MCP migration hotfix
+
+### Changed
+
+- MCP `task_packet` now falls back to a Codex preflight brief when a repository has no `.threadroot/harness.yaml`, allowing Codex MCP smoke checks and tools to operate from `.codex/threadroot/` state after migration.
+- `.codex/threadroot/` is ignored as local optimizer state so generated briefs, runs, scores, and tuning artifacts stay out of release commits.
+
+## 0.3.0 - Codex/OpenAI-only rewrite
+
 ### Added
 
 - `threadroot prep "<task>"` to create compact Codex-ready preflight briefs without invoking Codex.
@@ -15,17 +26,6 @@ Threadroot follows semantic versioning after the first public release. While `0.
 - MCP `context_budget`, `score_latest`, `tune_latest`, `threadroot://brief/latest`, `threadroot://score/latest`, and `threadroot://tuning/latest`.
 - JSONL usage/evidence parsing for Codex input, cached input, output, reasoning tokens, command executions, file changes, MCP calls, web searches, plan updates, read files, edited files, and generated/cache leakage.
 - Memory profiles for optimizer preflight and Codex runs: `--memory tiny|conservative|standard`, with `conservative` as the default local-RAM-friendly profile.
-
-### Changed
-
-- The new optimizer preflight scanner no longer requires `.threadroot/` and avoids writing old harness state.
-- `threadroot codex run` now streams `codex exec --json` output to disk, parses metrics incrementally, stores bounded compact samples, records raw-output byte counts, and supports `--ephemeral`.
-- Legacy repo map/index freshness ignores `.codex/` optimizer state so local run artifacts do not make context look stale.
-
-## 0.3.0 - Codex/OpenAI-only rewrite
-
-### Added
-
 - `threadroot codex install|status|doctor` as the Codex-first setup and health surface.
 - MCP `codex_status` and `threadroot://codex` for Codex CLI, runner, and MCP setup visibility.
 - Codex-only loop execution through `codex exec --json --sandbox workspace-write`, with `--codex-bin` for advanced local executable overrides.
@@ -33,6 +33,9 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 ### Changed
 
+- The new optimizer preflight scanner no longer requires `.threadroot/` and avoids writing old harness state.
+- `threadroot codex run` now streams `codex exec --json` output to disk, parses metrics incrementally, stores bounded compact samples, records raw-output byte counts, and supports `--ephemeral`.
+- Legacy repo map/index freshness ignores `.codex/` optimizer state so local run artifacts do not make context look stale.
 - Threadroot is now positioned as a Codex/OpenAI companion instead of a generic coding-agent harness.
 - `threadroot loop run` now always means Codex and stores `codex` runner output in loop reports.
 - Init/import/compile flows now target Codex-native `AGENTS.md` only.

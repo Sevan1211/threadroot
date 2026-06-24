@@ -20,6 +20,18 @@ async function harnessRepo(): Promise<string> {
   return repo;
 }
 
+async function exists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 describe("mcp server handleMessage", () => {
   it("responds to initialize with server info", async () => {
     const response = await handleMessage(await tempRepo(), { jsonrpc: "2.0", id: 1, method: "initialize" });
@@ -293,6 +305,31 @@ describe("mcp server handleMessage", () => {
     const repoResourceResult = repoResource?.result as { contents: Array<{ text: string; mimeType: string }> };
     expect(repoResourceResult.contents[0]?.mimeType).toBe("text/plain");
     expect(repoResourceResult.contents[0]?.text).toContain("retryInvoice");
+  });
+
+  it("uses Codex preflight for task_packet when no harness exists", async () => {
+    const repo = await tempRepo();
+    await fs.mkdir(path.join(repo, "src"), { recursive: true });
+    await fs.writeFile(path.join(repo, "package.json"), JSON.stringify({ name: "demo" }, null, 2), "utf8");
+    await fs.writeFile(path.join(repo, "src", "billing.ts"), "export function retryInvoice() { return 'billing'; }\n", "utf8");
+
+    const task = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 247,
+      method: "tools/call",
+      params: { name: "task_packet", arguments: { task: "fix retryInvoice billing", budgetTokens: 1_500 } },
+    });
+
+    const taskResult = task?.result as {
+      structuredContent: { firstReads: string[]; paths: { prompt: string }; promptTokenEstimate: number };
+      content: Array<{ type: string; text?: string }>;
+    };
+    expect(taskResult.structuredContent.firstReads).toContain("src/billing.ts");
+    expect(taskResult.structuredContent.paths.prompt).toMatch(/^\.codex\/threadroot\/briefs\//u);
+    expect(taskResult.structuredContent.promptTokenEstimate).toBeLessThanOrEqual(1_500);
+    expect(taskResult.content[0]?.text).toContain("Estimated tokens:");
+    await expect(exists(path.join(repo, ".codex", "threadroot", "briefs", "latest.json"))).resolves.toBe(true);
+    await expect(exists(path.join(repo, ".threadroot"))).resolves.toBe(false);
   });
 
   it("reports web capability status through MCP", async () => {
