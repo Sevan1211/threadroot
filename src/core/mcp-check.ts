@@ -10,6 +10,7 @@ import { THREADROOT_VERSION } from "./version.js";
 
 export const REQUIRED_MCP_TOOLS = [
   "task_packet",
+  "context_budget",
   "index_status",
   "refresh_context",
   "trace_context",
@@ -25,7 +26,9 @@ export const REQUIRED_MCP_TOOLS = [
   "loop_report",
   "loop_run",
   "loop_finish",
-  "providers_status",
+  "codex_status",
+  "score_latest",
+  "tune_latest",
   "repo_map",
   "repo_search",
   "repo_read",
@@ -251,7 +254,7 @@ export async function checkCodexMcp(input: {
         tools: toolNames,
         taskPacketSmoke: handshake.taskPacketSmoke,
         messages: [
-          `MCP server version ${serverVersion} differs from local Threadroot ${THREADROOT_VERSION}. Update/reinstall the global Threadroot package, rerun \`threadroot connect codex\` if the command path changes, and restart the agent session before judging routing quality.`,
+          `MCP server version ${serverVersion} differs from local Threadroot ${THREADROOT_VERSION}. Update/reinstall the global Threadroot package, rerun \`threadroot codex install --refresh-skill\` if the command path changes, and restart the Codex session before judging routing quality.`,
         ],
       };
     }

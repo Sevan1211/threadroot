@@ -33,16 +33,16 @@ describe("skills find", () => {
     const candidates = parseSkillSearchOutput(
       "git commit",
       [
-        "\u001b[38;5;145mgithub/awesome-copilot@git-commit\u001b[0m \u001b[36m36K installs\u001b[0m",
-        "\u001b[38;5;102m└ https://skills.sh/github/awesome-copilot/git-commit\u001b[0m",
+        "\u001b[38;5;145mgithub/awesome-skills@git-commit\u001b[0m \u001b[36m36K installs\u001b[0m",
+        "\u001b[38;5;102m└ https://skills.sh/github/awesome-skills/git-commit\u001b[0m",
       ].join("\n"),
     );
 
     expect(candidates[0]).toMatchObject({
       name: "git-commit",
-      source: "https://www.skills.sh/github/awesome-copilot/git-commit",
-      url: "https://skills.sh/github/awesome-copilot/git-commit",
-      installCommand: "threadroot skills ingest https://www.skills.sh/github/awesome-copilot/git-commit --skill git-commit",
+      source: "https://www.skills.sh/github/awesome-skills/git-commit",
+      url: "https://skills.sh/github/awesome-skills/git-commit",
+      installCommand: "threadroot skills ingest https://www.skills.sh/github/awesome-skills/git-commit --skill git-commit",
     });
   });
 
@@ -61,11 +61,11 @@ describe("skills find", () => {
   it("removes ANSI color codes from the JSON diagnostic raw field", async () => {
     const report = await findSkills("git commit", {
       runner: async () => ({
-        stdout: "\u001b[38;5;102m└ https://skills.sh/github/awesome-copilot/git-commit\u001b[0m",
+        stdout: "\u001b[38;5;102m└ https://skills.sh/github/awesome-skills/git-commit\u001b[0m",
         stderr: "",
       }),
     });
 
-    expect(report.raw).toBe("└ https://skills.sh/github/awesome-copilot/git-commit");
+    expect(report.raw).toBe("└ https://skills.sh/github/awesome-skills/git-commit");
   });
 });

@@ -13,9 +13,9 @@ Please report security issues privately before opening a public issue. Until a d
 ## Security model
 
 - Threadroot does not store cloud secrets.
-- `.threadroot/` is local-only in `0.2.1` and should not be committed to git.
-- Repo indexes, run logs, web cache, provider receipts, built-in local embedding vectors, trace-derived lessons, embeddings config, local memory, and import reports under `.threadroot/` are local state.
-- Provider files are not created visibly by default. Explicit project-file exposure should be reviewed like any other agent instruction/config change.
+- `.threadroot/` is local-only in `0.3.0` and should not be committed to git.
+- Repo indexes, run logs, web cache, Codex install receipts, built-in local embedding vectors, trace-derived lessons, embeddings config, local memory, and import reports under `.threadroot/` are local state.
+- Codex-native files are not created visibly by default. Explicit project-file exposure should be reviewed like any other Codex instruction/config change.
 - Connections wrap locally authenticated CLIs such as `gh`, `aws`, `az`, or Snowflake CLI.
 - Tools are explicit YAML manifests and run locally with the user's permissions.
 - High-risk and confirmation-marked tools require explicit confirmation.

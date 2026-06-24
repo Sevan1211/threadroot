@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -39,6 +39,7 @@ async function writeFakeCodexJsonl(): Promise<string> {
   await writeFile(
     fakeCodex,
     [
+      "#!/usr/bin/env node",
       "process.stdin.resume();",
       "process.stdin.setEncoding('utf8');",
       "process.stdin.on('data', () => {});",
@@ -49,6 +50,9 @@ async function writeFakeCodexJsonl(): Promise<string> {
     ].join("\n"),
     "utf8",
   );
+  if (process.platform !== "win32") {
+    await chmod(fakeCodex, 0o755);
+  }
   return fakeCodex;
 }
 
@@ -155,7 +159,6 @@ describe("trace receipts and loop sessions", () => {
 
   it("generates an evidence-backed next loop prompt and report", async () => {
     const session = await startLoop(repo, "Improve loop evidence quality", {
-      agent: "codex",
       timeMinutes: 30,
       maxIterations: 2,
       risk: "low",
@@ -172,11 +175,12 @@ describe("trace receipts and loop sessions", () => {
     expect(report.latestTrace?.runId).toBe(next.trace.runId);
   });
 
-  it("runs a budgeted loop through a custom provider command", async () => {
-    const fakeAgent = path.join(repo, "fake-agent.mjs");
+  it("runs a budgeted loop through a fake Codex binary", async () => {
+    const fakeCodex = path.join(repo, "fake-codex-basic.mjs");
     await writeFile(
-      fakeAgent,
+      fakeCodex,
       [
+        "#!/usr/bin/env node",
         "let prompt = '';",
         "process.stdin.setEncoding('utf8');",
         "process.stdin.on('data', (chunk) => { prompt += chunk; });",
@@ -186,38 +190,38 @@ describe("trace receipts and loop sessions", () => {
       ].join("\n"),
       "utf8",
     );
+    if (process.platform !== "win32") {
+      await chmod(fakeCodex, 0o755);
+    }
 
-    await startLoop(repo, "Custom provider loop", { agent: "codex", maxIterations: 1 });
+    await startLoop(repo, "Custom provider loop", { maxIterations: 1 });
     const report = await runLoop(repo, {
       iterations: 1,
-      agentCommand: process.execPath,
-      agentArgs: [fakeAgent],
+      codexBin: fakeCodex,
       timeoutMs: 5_000,
       writeCandidates: false,
     });
 
     expect(report.iterations).toHaveLength(1);
     expect(report.stoppedReason).toBe("completed");
-    expect(report.iterations[0]?.provider.ok).toBe(true);
-    expect(report.iterations[0]?.provider.timedOut).toBe(false);
+    expect(report.iterations[0]?.codex.ok).toBe(true);
+    expect(report.iterations[0]?.codex.timedOut).toBe(false);
     expect(report.iterations[0]?.improvements.summary.candidates).toBeGreaterThanOrEqual(0);
 
-    const output = await readFile(report.iterations[0]!.provider.outputPath, "utf8");
+    const output = await readFile(report.iterations[0]!.codex.outputPath, "utf8");
     expect(output).toContain('"hasGoal":true');
 
     const loopReport = await reportLoop(repo);
     expect(loopReport.latestTrace?.status).toBe("partial");
   });
 
-  it("captures provider JSONL events and required verification evidence", async () => {
+  it("captures Codex JSONL events and required verification evidence", async () => {
     const fakeCodex = await writeFakeCodexJsonl();
 
-    await startLoop(repo, "Codex adapter loop", { agent: "codex", maxIterations: 1 });
+    await startLoop(repo, "Codex adapter loop", { maxIterations: 1 });
     const report = await runLoop(repo, {
       iterations: 1,
-      agentCommand: process.execPath,
-      agentArgs: [fakeCodex],
-      agentAdapter: "codex",
+      codexBin: fakeCodex,
       requiredCommands: [quotedNode("process.exit(0)")],
       timeoutMs: 5_000,
       verificationTimeoutMs: 5_000,
@@ -226,9 +230,9 @@ describe("trace receipts and loop sessions", () => {
 
     expect(report.stoppedReason).toBe("completed");
     expect(report.finalReportPath).toBeTruthy();
-    expect(report.iterations[0]?.provider.adapter).toBe("codex");
-    expect(report.iterations[0]?.provider.compactOutputPath).toContain("agent-output-1.brief.md");
-    expect(report.iterations[0]?.provider.eventsCaptured).toBeGreaterThanOrEqual(2);
+    expect(report.iterations[0]?.codex.runner).toBe("exec");
+    expect(report.iterations[0]?.codex.compactOutputPath).toContain("codex-output-1.brief.md");
+    expect(report.iterations[0]?.codex.eventsCaptured).toBeGreaterThanOrEqual(2);
     expect(report.iterations[0]?.verification).toHaveLength(1);
     expect(report.iterations[0]?.verification[0]?.ok).toBe(true);
     expect(report.iterations[0]?.verification[0]?.compactOutputPath).toContain("verification-1-1.brief.md");
@@ -239,20 +243,18 @@ describe("trace receipts and loop sessions", () => {
     expect(trace?.events.some((event) => event.type === "run_tool" && event.tool === "verification")).toBe(true);
 
     const finalReport = await readFile(report.finalReportPath!, "utf8");
-    expect(finalReport).toContain("Provider events captured");
-    expect(finalReport).toContain("Provider compact output");
+    expect(finalReport).toContain("Codex events captured");
+    expect(finalReport).toContain("Codex compact output");
     expect(finalReport).toContain("Trace eval: Recall@5");
   });
 
   it("stops automated loops when required verification fails", async () => {
     const fakeCodex = await writeFakeCodexJsonl();
 
-    await startLoop(repo, "Verification failure loop", { agent: "codex", maxIterations: 2 });
+    await startLoop(repo, "Verification failure loop", { maxIterations: 2 });
     const report = await runLoop(repo, {
       iterations: 2,
-      agentCommand: process.execPath,
-      agentArgs: [fakeCodex],
-      agentAdapter: "codex",
+      codexBin: fakeCodex,
       requiredCommands: [quotedNode("process.exit(7)")],
       timeoutMs: 5_000,
       verificationTimeoutMs: 5_000,
@@ -265,24 +267,23 @@ describe("trace receipts and loop sessions", () => {
     expect((await latestTrace(repo))?.status).toBe("failed");
   });
 
-  it("records a failed trace and report when the provider command is missing", async () => {
-    await startLoop(repo, "Missing provider loop", { agent: "codex", maxIterations: 1 });
+  it("records a failed trace and report when the Codex command is missing", async () => {
+    await startLoop(repo, "Missing Codex loop", { maxIterations: 1 });
     const report = await runLoop(repo, {
       iterations: 1,
-      agentCommand: "threadroot-missing-provider-for-test",
-      agentAdapter: "custom",
+      codexBin: "threadroot-missing-codex-for-test",
       timeoutMs: 5_000,
       writeCandidates: false,
     });
 
-    expect(report.stoppedReason).toBe("provider-failed");
+    expect(report.stoppedReason).toBe("codex-failed");
     expect(report.iterations).toHaveLength(1);
-    expect(report.iterations[0]?.provider.ok).toBe(false);
-    expect(report.iterations[0]?.provider.exitCode).toBeNull();
+    expect(report.iterations[0]?.codex.ok).toBe(false);
+    expect(report.iterations[0]?.codex.exitCode).toBeNull();
     expect((await latestTrace(repo))?.status).toBe("failed");
 
-    const output = await readFile(report.iterations[0]!.provider.outputPath, "utf8");
-    expect(output).toContain("Provider command is not executable");
+    const output = await readFile(report.iterations[0]!.codex.outputPath, "utf8");
+    expect(output).toContain("Codex command is not executable");
   });
 
   it("exposes trace and loop primitives through MCP", async () => {

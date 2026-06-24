@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -20,3 +20,6 @@ function run(command, args) {
 
 await rm(path.join(process.cwd(), "dist"), { recursive: true, force: true });
 await run(process.execPath, [path.join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"]);
+if (process.platform !== "win32") {
+  await chmod(path.join(process.cwd(), "dist", "index.js"), 0o755);
+}

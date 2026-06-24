@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,7 +12,7 @@ import {
   readMemory,
   resolveHarness,
 } from "../src/core/harness/index.js";
-import { mcpServerEntry, writeProjectMcpConfigs } from "../src/core/mcp-config.js";
+import { mcpServerEntry } from "../src/core/mcp-config.js";
 import { harnessStatus } from "../src/core/status.js";
 
 let repo: string;
@@ -34,7 +34,7 @@ async function write(rel: string, content: string): Promise<void> {
 async function seedHarness(): Promise<void> {
   await write(
     ".threadroot/harness.yaml",
-    "name: demo\nversion: 1\nprofile: node-cli\nadapters:\n  - agents\n  - claude\n",
+    "name: demo\nversion: 1\nprofile: node-cli\nadapters:\n  - agents\n",
   );
   await write(
     ".threadroot/skills/add-test.md",
@@ -127,18 +127,9 @@ describe("harnessStatus", () => {
   });
 });
 
-describe("writeProjectMcpConfigs", () => {
-  it("writes merge-aware project config for each agent", async () => {
-    await write(".cursor/mcp.json", JSON.stringify({ mcpServers: { other: { command: "x", args: [] } } }));
-
-    const result = await writeProjectMcpConfigs({ repoRoot: repo, entry: mcpServerEntry("node", "/path/cli.js") });
-    expect(result.written).toContain(path.join(".vscode", "mcp.json"));
-
-    const vscode = JSON.parse(await readFile(path.join(repo, ".vscode", "mcp.json"), "utf8"));
-    expect(vscode.servers.threadroot).toEqual({ command: "node", args: ["/path/cli.js", "mcp"] });
-
-    const cursor = JSON.parse(await readFile(path.join(repo, ".cursor", "mcp.json"), "utf8"));
-    expect(cursor.mcpServers.other).toBeDefined();
-    expect(cursor.mcpServers.threadroot).toBeDefined();
+describe("mcpServerEntry", () => {
+  it("builds the Threadroot stdio MCP command entry", () => {
+    expect(mcpServerEntry("node", "/path/cli.js")).toEqual({ command: "node", args: ["/path/cli.js", "mcp"] });
+    expect(mcpServerEntry("threadroot")).toEqual({ command: "threadroot", args: ["mcp"] });
   });
 });

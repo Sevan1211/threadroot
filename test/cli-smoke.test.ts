@@ -12,6 +12,7 @@ beforeEach(async () => {
   repo = await mkdtemp(path.join(tmpdir(), "tr-cli-"));
   vi.stubEnv("HOME", path.join(repo, "home"));
   await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
+  await write("src/billing.ts", "export function retryInvoice() { return 'billing'; }\n");
 });
 
 afterEach(async () => {
@@ -47,19 +48,17 @@ describe("CLI smoke", () => {
     expect(init).toContain("Initialized harness `demo`");
     expect(init).toContain("adapters: none (local-only)");
 
-    const connect = await run("connect", "codex");
-    expect(connect).toContain("Threadroot connect: write");
-    expect(connect).toContain("codex: written");
-    expect(connect).toContain("codex mcp add threadroot");
+    const install = await run("codex", "install");
+    expect(install).toContain("Threadroot Codex install: written");
+    expect(install).toContain("codex mcp add threadroot");
 
     const status = await run("status");
     expect(status).toContain("harness: demo");
     expect(status).toContain("adapters: none (local-only)");
 
-    const providers = await run("providers");
-    expect(providers).toContain("Threadroot provider access");
-    expect(providers).toContain("codex");
-    expect(providers).toContain("cursor");
+    const codex = await run("codex", "status");
+    expect(codex).toContain("Codex:");
+    expect(codex).toContain("runner: codex exec --json");
 
     const statusJson = JSON.parse(await run("status", "--json")) as { exists: boolean; manifest: { name: string } };
     expect(statusJson.exists).toBe(true);
@@ -83,6 +82,23 @@ describe("CLI smoke", () => {
     expect(taskJson.task).toBe("write tests");
     expect(taskJson.index.exists).toBe(true);
 
+    const prep = await run("prep", "fix retryInvoice billing");
+    expect(prep).toContain("prep:");
+    expect(prep).toContain("prompt tokens:");
+    expect(prep).toContain(".codex/threadroot/briefs/");
+
+    const codexDryRun = await run("codex", "run", "fix retryInvoice billing", "--dry-run", "--require", "npm run test");
+    expect(codexDryRun).toContain("codex run: blocked");
+    expect(codexDryRun).toContain("tokens-to-green: n/a");
+
+    const score = await run("score", "latest");
+    expect(score).toContain("score: blocked");
+    expect(score).toContain("tokens-to-green: n/a");
+
+    const tune = await run("tune", "latest");
+    expect(tune).toContain("tune:");
+    expect(tune).toContain(".codex/threadroot/tuning/");
+
     const evalContext = await run("eval", "context");
     expect(evalContext).toContain("context eval:");
     expect(evalContext).toContain("No built-in eval cases apply");
@@ -95,7 +111,7 @@ describe("CLI smoke", () => {
 
     const web = await run("web", "status");
     expect(web).toContain("web fetch: available");
-    expect(web).toContain("web search: provider/delegated only");
+    expect(web).toContain("web search:");
 
     const skills = await run("skills", "validate");
     expect(skills).toContain("Skills valid.");

@@ -5,18 +5,12 @@ import { hashContent } from "../hash.js";
 import type { EffectiveHarness, LoadedRule, Reference } from "../harness/index.js";
 import { toRepoPath } from "../paths.js";
 import { agentsAdapter } from "./adapters/agents.js";
-import { claudeAdapter } from "./adapters/claude.js";
-import { copilotAdapter } from "./adapters/copilot.js";
-import { cursorAdapter } from "./adapters/cursor.js";
 import { composeWithManaged, extractHandAuthored } from "./managed.js";
 import { buildManagedBlock } from "./sections.js";
 import type { Adapter, CompiledFile, CompileContext, ResolvedReference } from "./types.js";
 
 export const ADAPTERS: Record<string, Adapter> = {
   agents: agentsAdapter,
-  claude: claudeAdapter,
-  copilot: copilotAdapter,
-  cursor: cursorAdapter,
 };
 
 /** Largest file we will inline for an eager reference (anti context-rot). */
@@ -103,7 +97,7 @@ export async function buildContext(repoRoot: string, harness: EffectiveHarness):
   return partial;
 }
 
-/** Compile the effective harness into vendor files for every enabled adapter. */
+/** Compile the effective harness into Codex-native AGENTS.md output. */
 export async function compile(repoRoot: string, harness: EffectiveHarness): Promise<CompiledFile[]> {
   const ctx = await buildContext(repoRoot, harness);
   const files: CompiledFile[] = [];

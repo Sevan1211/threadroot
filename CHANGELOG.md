@@ -6,7 +6,42 @@ Threadroot follows semantic versioning after the first public release. While `0.
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+
+- `threadroot prep "<task>"` to create compact Codex-ready preflight briefs without invoking Codex.
+- `threadroot codex run "<task>"` to run Preflight -> `codex exec --json` -> verification -> score reporting.
+- `threadroot score latest`, `threadroot tune latest`, and `threadroot eval codex` for tokens-to-green scoring, context-waste diagnosis, evidence-backed tuning proposals, and optimizer-vs-raw packet comparison.
+- Codex optimizer state under `.codex/threadroot/` for preflight briefs, lightweight index snapshots, run artifacts, scores, and tuning reports.
+- MCP `context_budget`, `score_latest`, `tune_latest`, `threadroot://brief/latest`, `threadroot://score/latest`, and `threadroot://tuning/latest`.
+- JSONL usage/evidence parsing for Codex input, cached input, output, reasoning tokens, command executions, file changes, MCP calls, web searches, plan updates, read files, edited files, and generated/cache leakage.
+- Memory profiles for optimizer preflight and Codex runs: `--memory tiny|conservative|standard`, with `conservative` as the default local-RAM-friendly profile.
+
+### Changed
+
+- The new optimizer preflight scanner no longer requires `.threadroot/` and avoids writing old harness state.
+- `threadroot codex run` now streams `codex exec --json` output to disk, parses metrics incrementally, stores bounded compact samples, records raw-output byte counts, and supports `--ephemeral`.
+- Legacy repo map/index freshness ignores `.codex/` optimizer state so local run artifacts do not make context look stale.
+
+## 0.3.0 - Codex/OpenAI-only rewrite
+
+### Added
+
+- `threadroot codex install|status|doctor` as the Codex-first setup and health surface.
+- MCP `codex_status` and `threadroot://codex` for Codex CLI, runner, and MCP setup visibility.
+- Codex-only loop execution through `codex exec --json --sandbox workspace-write`, with `--codex-bin` for advanced local executable overrides.
+- Codex-focused tests for install receipts, global skill refresh, status output, and JSONL trace extraction.
+
+### Changed
+
+- Threadroot is now positioned as a Codex/OpenAI companion instead of a generic coding-agent harness.
+- `threadroot loop run` now always means Codex and stores `codex` runner output in loop reports.
+- Init/import/compile flows now target Codex-native `AGENTS.md` only.
+- Package smoke now executes the packed CLI binary directly on POSIX and checks the executable bit.
+
+### Removed
+
+- Removed non-Codex coding-agent provider support, including `threadroot connect`, `threadroot providers`, MCP `providers_status`, provider receipts, non-Codex compile adapters, and custom provider loop options.
+- Removed package keywords and docs language for Claude, Cursor, Copilot, Gemini, Windsurf, OpenCode, and Antigravity support.
 
 ## 0.2.1 - Closed-loop self-improvement and local routing vectors
 

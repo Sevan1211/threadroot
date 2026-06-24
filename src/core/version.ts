@@ -1,1 +1,1 @@
-export const THREADROOT_VERSION = "0.2.1";
+export const THREADROOT_VERSION = "0.3.0";

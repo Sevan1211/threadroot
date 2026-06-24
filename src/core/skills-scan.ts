@@ -31,13 +31,11 @@ const EXECUTABLE_EXTENSIONS = new Set([".bash", ".cjs", ".js", ".mjs", ".ps1", "
 const CONFIG_FILE_NAMES = new Set([
   ".mcp.json",
   "mcp.json",
-  "opencode.json",
   "settings.json",
   "config.toml",
   "plugin.json",
 ]);
 const CONFIG_DIR_NAMES = new Set([
-  ".claude-plugin",
   ".codex-plugin",
   ".mcp",
   "agents",

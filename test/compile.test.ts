@@ -35,7 +35,7 @@ function harness(overrides: Partial<EffectiveHarness> = {}): EffectiveHarness {
     name: "demo",
     version: 1,
     profile: "node-cli",
-    adapters: ["agents", "claude", "copilot", "cursor"],
+    adapters: ["agents"],
     ...(manifestOverride ?? {}),
   });
   return {
@@ -101,41 +101,23 @@ describe("compile", () => {
     expect(agents!.content).toContain("This is a demo project.");
   });
 
-  it("keeps global rules in AGENTS.md but emits scoped rules as vendor files", async () => {
+  it("keeps global rules in AGENTS.md and does not emit non-Codex scoped rule files", async () => {
     const files = await compile(repoRoot, harness());
     const byPath = new Map(files.map((f) => [f.path, f.content]));
 
     expect(byPath.get("AGENTS.md")).not.toContain("Write vitest tests.");
-    expect(byPath.has(".cursor/rules/tests.mdc")).toBe(true);
-    expect(byPath.has(".claude/rules/tests.md")).toBe(true);
-    expect(byPath.has(".github/instructions/tests.instructions.md")).toBe(true);
-
-    expect(byPath.get(".cursor/rules/tests.mdc")).toContain("globs: test/**");
-    expect(byPath.get(".cursor/rules/tests.mdc")).toContain("alwaysApply: false");
-    expect(byPath.get(".claude/rules/tests.md")).toContain('  - "test/**"');
-    expect(byPath.get(".github/instructions/tests.instructions.md")).toContain('applyTo: "test/**"');
+    expect([...byPath.keys()]).toEqual(["AGENTS.md"]);
   });
 
   it("does not emit vendor files for global rules", async () => {
     const files = await compile(repoRoot, harness());
     expect(files.some((f) => f.path.endsWith("style.mdc"))).toBe(false);
-    expect(files.some((f) => f.path === ".claude/rules/style.md")).toBe(false);
+    expect(files).toEqual(expect.arrayContaining([expect.objectContaining({ path: "AGENTS.md" })]));
   });
 
-  it("CLAUDE.md imports AGENTS.md and copilot mirrors the canonical content", async () => {
+  it("does not emit removed non-Codex instruction files", async () => {
     const files = await compile(repoRoot, harness());
-    const claude = files.find((f) => f.path === "CLAUDE.md")!;
-    const copilot = files.find((f) => f.path === ".github/copilot-instructions.md")!;
-    const agents = files.find((f) => f.path === "AGENTS.md")!;
-
-    expect(claude.content).toContain("@AGENTS.md");
-    expect(copilot.content).toBe(agents.content);
-  });
-
-  it("emits a Claude slash command per tool", async () => {
-    const files = await compile(repoRoot, harness());
-    const command = files.find((f) => f.path === ".claude/commands/build.md")!;
-    expect(command.content).toContain("pnpm build");
+    expect(files.map((f) => f.path)).toEqual(["AGENTS.md"]);
   });
 
   it("is deterministic", async () => {
@@ -236,7 +218,7 @@ describe("detectDrift", () => {
 });
 
 describe("adapter registry", () => {
-  it("exposes all four adapters", () => {
-    expect(Object.keys(ADAPTERS).sort()).toEqual(["agents", "claude", "copilot", "cursor"]);
+  it("exposes only the Codex-native AGENTS adapter", () => {
+    expect(Object.keys(ADAPTERS).sort()).toEqual(["agents"]);
   });
 });

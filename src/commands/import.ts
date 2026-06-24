@@ -27,7 +27,7 @@ async function writeReport(repoRoot: string, report: ImportReport): Promise<stri
 
 export async function runImport(repoRoot: string, options: ImportCliOptions = {}): Promise<void> {
   if (options.moveProviderFiles) {
-    const message = "`--move-provider-files` is not implemented yet; Threadroot import is non-destructive in this release.";
+    const message = "`--move-provider-files` is a compatibility flag and is not supported in the Codex-only product line.";
     if (options.json) {
       printJson({ ok: false, error: "not_implemented", message });
     } else {
@@ -58,7 +58,7 @@ export async function runImport(repoRoot: string, options: ImportCliOptions = {}
     console.log(`duplicates skipped: ${report.skippedDuplicates.join(", ")}`);
   }
   if (report.importedRules.length > 0) {
-    console.log(`cursor rules detected: ${report.importedRules.map((rule) => rule.name).join(", ")}`);
+    console.log(`rules detected: ${report.importedRules.map((rule) => rule.name).join(", ")}`);
   }
   if (written.length > 0) {
     console.log("written:");
@@ -67,6 +67,6 @@ export async function runImport(repoRoot: string, options: ImportCliOptions = {}
     }
   }
   if (options.consolidate) {
-    console.log("note: consolidation is report-only in this release; visible provider files are never moved automatically.");
+    console.log("note: consolidation is report-only in this release; visible Codex files are never moved automatically.");
   }
 }

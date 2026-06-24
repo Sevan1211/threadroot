@@ -19,7 +19,7 @@ async function write(file: string, content: string): Promise<void> {
 const MANIFEST = `name: demo
 version: 1
 profile: node-cli
-adapters: [agents, claude]
+adapters: [agents]
 `;
 
 describe("frontmatter", () => {

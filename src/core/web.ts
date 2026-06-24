@@ -82,7 +82,7 @@ export function webStatus(): WebStatus {
     searchAvailable: false,
     notes: [
       "Threadroot web_fetch opens known public URLs and caches provenance under .threadroot/cache/web/.",
-      "Threadroot does not provide native general web_search yet; use provider-native search or a configured search MCP server.",
+      "Threadroot does not provide native general web_search yet; use Codex web search or a configured search MCP server.",
     ],
   };
 }

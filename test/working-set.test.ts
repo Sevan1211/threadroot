@@ -76,7 +76,7 @@ describe("assembleWorkingSet", () => {
     expect(paths.indexOf("CHANGELOG.md")).toBeGreaterThan(paths.indexOf("src/core/repo-index.ts"));
   });
 
-  it("routes full-product loop audits to loop, improvement, provider, and routing surfaces", async () => {
+  it("routes full-product loop audits to loop, improvement, Codex, and routing surfaces", async () => {
     await write("package.json", JSON.stringify({ name: "demo", scripts: { test: "vitest" } }));
     await write("README.md", "# Threadroot\n\nProduct promise.\n");
     await write("INTEGRATION.md", "# Integration\n\nMCP and website contract.\n");
@@ -84,7 +84,7 @@ describe("assembleWorkingSet", () => {
     await write("src/core/improve.ts", "export function improveLatest() { return 'trace candidates'; }\n");
     await write("src/core/task-packet.ts", "export function assembleTaskPacket() { return 'task packet'; }\n");
     await write("src/core/working-set.ts", "export function assembleWorkingSet() { return 'routing'; }\n");
-    await write("src/core/provider-adapters.ts", "export function providerStatuses() { return 'providers'; }\n");
+    await write("src/core/codex.ts", "export function codexStatus() { return 'codex'; }\n");
     await write("src/core/connections/index.ts", "export function checkConnections() { return 'connections'; }\n");
     await write("test/trace-loop.test.ts", "test('loop trace', () => undefined);\n");
 
@@ -102,7 +102,7 @@ describe("assembleWorkingSet", () => {
         "src/core/improve.ts",
         "src/core/task-packet.ts",
         "src/core/working-set.ts",
-        "src/core/provider-adapters.ts",
+        "src/core/codex.ts",
       ]),
     );
   });

@@ -26,7 +26,7 @@ tags:
 
 # Threadroot
 
-Threadroot is the local context and capability router for this project. It keeps agent-facing skills, tools, connections, rules, memory, repo maps, provider receipts, imports, and provenance under \`.threadroot/\`.
+Threadroot is the local context and capability router for Codex in this project. It keeps Codex-facing skills, tools, connections, rules, memory, repo maps, Codex install receipts, imports, and provenance under \`.threadroot/\`.
 
 Use Threadroot to get the right task-specific working set without loading the entire repository or every skill into the model. For this release, \`.threadroot/\` is local-only and should not be committed to git.
 
@@ -47,9 +47,10 @@ threadroot task "<task>"
 
 \`\`\`bash
 threadroot init
-threadroot connect <agent>
+threadroot codex install --refresh-skill
+threadroot codex status --json
+threadroot codex doctor --json
 threadroot task "<task>"
-threadroot providers --json
 threadroot trace start "<task>" --json
 threadroot trace event note --message "<note>" --json
 threadroot trace finish --status partial --json
@@ -59,7 +60,7 @@ threadroot index --status
 threadroot eval context
 threadroot eval traces --latest --json
 threadroot improve latest --json
-threadroot loop start "<goal>" --agent codex --time 60m --max-iterations 6 --json
+threadroot loop start "<goal>" --time 60m --max-iterations 6 --json
 threadroot loop next --json
 threadroot loop run --iterations 1 --require "<verification command>" --json
 threadroot loop report --json
@@ -90,7 +91,7 @@ threadroot web status
 
 - Start with \`threadroot task "<task>"\` or MCP \`task_packet\` before broad codebase exploration.
 - Trust \`task\` to refresh stale repo-map/index state before routing; use \`threadroot refresh\` or MCP \`refresh_context\` for explicit preflight.
-- Use \`threadroot providers --json\` or MCP \`providers_status\` before automated loops so the agent knows which provider CLIs and MCP surfaces are actually available on this machine.
+- Use \`threadroot codex status --json\`, \`threadroot codex doctor --json\`, or MCP \`codex_status\` before automated loops so Codex integration and MCP availability are known.
 - Use trace and loop commands for repeated improvement work. Run \`threadroot improve latest\` after meaningful traces so safe repo-local routing/eval/validation-skill lessons apply automatically; keep memory, new tools, connections, and higher-risk changes as candidates until the user or policy approves promotion.
 - Use \`threadroot task "<task>" --debug-ranking\` when the packet looks wrong or low-signal.
 - Use \`threadroot index\` only when you need a manual rebuild or status check.
@@ -105,7 +106,7 @@ threadroot web status
 ## Boundaries
 
 - \`.threadroot/\` is local-only in this release. Do not commit it to git.
-- Do not create provider-specific project files unless the user explicitly asks for project files.
+- Do not create Codex project files unless the user explicitly asks for project files.
 - Do not store secrets in Threadroot.
 - Do not execute high-risk tools, destructive cloud commands, or credential-related workflows without explicit user approval.
 - Keep context compact. Load only the files, skills, and memory needed for the current task.
@@ -115,7 +116,7 @@ const findSkillsSkill = `---
 name: find-skills
 description: Use when a task would benefit from a specialized Agent Skill that is not already installed, when the user asks for a capability, framework, domain, or workflow skill, or when current project skills do not strongly match the task.
 license: MIT
-compatibility: Threadroot-managed Agent Skills. Use through threadroot commands; do not install directly into provider skill folders.
+compatibility: Threadroot-managed Agent Skills. Use through threadroot commands; do not install directly into global skill folders.
 metadata:
   upstream: https://www.skills.sh/vercel-labs/skills/find-skills
   adaptedBy: threadroot
@@ -154,7 +155,7 @@ threadroot skills ingest <source> --skill <name>
 ## Safety
 
 - Do not run \`npx skills add\` as the final install path. That can bypass Threadroot provenance, scanning, lockfile, and \`.threadroot\` routing.
-- Do not create \`.agents/\`, \`.claude/\`, \`.cursor/\`, \`.github/\`, or other provider skill folders unless the user explicitly asks for provider project files.
+- Do not create \`.agents/\` or global Codex skill folders unless the user explicitly asks or runs \`threadroot codex install --refresh-skill\`.
 - If Threadroot reports high risk, blocked scan, Snyk failure, scripts, provider permission fields, or suspicious instructions, do not trust or use that external skill automatically. Prefer creating a safer local skill with \`create-skill\`; ask the user only when installing or trusting the risky external skill is still the better path.
 `;
 
@@ -308,9 +309,9 @@ threadroot doctor
 
 const closingLoopResearchSkill = `---
 name: closing-loop-research
-description: Use when researching or recommending Threadroot's closed-loop agent runtime, product direction, trace-driven improvement, loop/session design, agent-centered workflows, local-first architecture, MCP compatibility, eval gates, promotion policy, dogfooding strategy, or how to make coding agents improve over repeated local runs.
+description: Use when researching or recommending Threadroot's closed-loop Codex runtime, product direction, trace-driven improvement, loop/session design, Codex-centered workflows, local-first architecture, MCP compatibility, eval gates, promotion policy, dogfooding strategy, or how to make Codex improve over repeated local runs.
 license: MIT
-compatibility: Threadroot loop, trace, eval, improve, provider, MCP, and product-planning surfaces.
+compatibility: Threadroot loop, trace, eval, improve, Codex, MCP, and product-planning surfaces.
 metadata:
   adaptedBy: threadroot
   routesThrough: .threadroot
@@ -324,7 +325,7 @@ tags:
 
 # Closing Loop Research
 
-Use this skill to research and recommend Threadroot product direction when the goal is to make coding agents improve over repeated local runs.
+Use this skill to research and recommend Threadroot product direction when the goal is to make Codex improve over repeated local runs.
 
 ## Workflow
 
@@ -332,20 +333,19 @@ Use this skill to research and recommend Threadroot product direction when the g
 
 \`\`\`bash
 threadroot task "<research question>" --json
-threadroot providers --json
+threadroot codex status --json
 threadroot eval context --json
 \`\`\`
 
 2. Treat the user's request as product intent, not implementation proof.
 3. Ground current external claims in primary sources only:
    - OpenAI/Codex official docs for Codex CLI, skills, MCP, hooks, sandboxing, and non-interactive mode.
-   - Anthropic/Claude Code official docs for MCP, hooks, permissions, print mode, and automation surfaces.
    - Model Context Protocol specification/docs for tools, resources, prompts, structured content, and security.
    - Local Threadroot source, tests, command output, traces, and package smoke results for current behavior.
 4. Evaluate the product through these lenses:
-   - Agent-centered design: what should agents call, read, write, and be prompted with?
+   - Codex-centered design: what should Codex call, read, write, and be prompted with?
    - Local-first economics: no required hosted model, API key, cloud account, or token resale.
-   - Loop completeness: task packet, provider run, trace, verification, eval, candidates, gated promotion, next prompt, report.
+   - Loop completeness: task packet, Codex run, trace, verification, eval, candidates, gated promotion, next prompt, report.
    - Safety: budgets, approvals, risk policy, rollback, no silent durable self-modification.
    - Measurability: tests, lint, typecheck, package smoke, context evals, real-run recall, token budget, failed-command recovery.
    - Cross-platform behavior: Windows, macOS, Linux shells and paths.
@@ -357,14 +357,14 @@ threadroot eval context --json
 - Prefer assisted loops before full autonomous loops.
 - Prefer traces and evals over vague memory.
 - Prefer candidate generation plus approval over automatic promotion.
-- Prefer provider adapters over Threadroot-owned model calls.
+- Prefer Codex CLI/MCP integration over Threadroot-owned model calls.
 - Prefer machine-readable JSON and local files over prose-only state.
 - Do not claim improvement unless metrics or checks show it.
 `;
 
 const loopAutomationEngineeringSkill = `---
 name: loop-automation-engineering
-description: Use when implementing, testing, or reviewing Threadroot loop automation, provider adapters, Codex or Claude Code runner integration, trace ingestion, verification gates, promotion policy, loop prompts, loop reports, or cross-platform agent runtime behavior for local coding-agent improvement loops.
+description: Use when implementing, testing, or reviewing Threadroot loop automation, Codex runner integration, trace ingestion, verification gates, promotion policy, loop prompts, loop reports, or cross-platform Codex runtime behavior for local coding-agent improvement loops.
 license: MIT
 compatibility: Threadroot-managed Agent Skills. Keep local under .threadroot/skills.
 metadata:
@@ -373,30 +373,30 @@ metadata:
 tags:
   - loops
   - automation
-  - providers
+  - codex
   - evals
   - mcp
 ---
 
 # Loop Automation Engineering
 
-Use this skill when changing Threadroot's loop runtime or agent-provider integration.
+Use this skill when changing Threadroot's loop runtime or Codex integration.
 
 ## Operating Model
 
 Build Threadroot as the local control plane, not as another model host.
 
 \`\`\`text
-task packet -> provider run -> trace receipt -> verification -> eval -> candidates -> gated promotion -> next prompt
+task packet -> Codex run -> trace receipt -> verification -> eval -> candidates -> gated promotion -> next prompt
 \`\`\`
 
-Default loops should work with a user's existing Codex, Claude Code, Cursor, or other agent subscription and should not require a Threadroot API key or hosted service.
+Default loops should work with a user's existing Codex installation and should not require a Threadroot API key or hosted service.
 
 ## Implementation Rules
 
-1. Keep core loop code provider-neutral. Put provider command defaults, event parsers, and feature flags behind adapter boundaries.
-2. Capture evidence before claiming improvement. A loop report needs provider output, trace status, verification result, eval summary, candidates, and stop reason.
-3. Expose provider availability before automation. Use \`threadroot providers --json\` or MCP \`providers_status\`.
+1. Keep core loop code Codex-focused. Put Codex command defaults and event parsers behind the Codex runner boundary.
+2. Capture evidence before claiming improvement. A loop report needs Codex output, trace status, verification result, eval summary, candidates, and stop reason.
+3. Expose Codex availability before automation. Use \`threadroot codex status --json\` or MCP \`codex_status\`.
 4. Preserve raw logs and emit compact summaries with raw-output pointers.
 5. Promote nothing silently. Memory, skills, tools, evals, and prompt changes stay candidates until policy or user approval allows promotion.
 6. Optimize for fewer sharper agent calls by carrying ranked files, prior failures, required checks, and next best action forward.
@@ -404,13 +404,13 @@ Default loops should work with a user's existing Codex, Claude Code, Cursor, or 
 8. Keep automation cross-platform. Use \`process.execPath\`, Node fixtures, path APIs, and PATHEXT-aware lookup. Avoid bash-only tests.
 9. Prefer deterministic local verification in this order: targeted tests, typecheck, lint, full tests, build, package smoke, MCP check.
 
-## Provider Adapter Checklist
+## Codex Runner Checklist
 
-Each adapter should define:
+The Codex runner should define:
 
 - availability detection
 - noninteractive command construction
-- event stream format
+- JSONL event stream parsing
 - event-to-trace parser
 - sandbox/approval behavior
 - unsupported OS features
@@ -422,16 +422,9 @@ Codex baseline:
 - Pass the prompt on stdin when supported.
 - Use \`--sandbox workspace-write\` for repo-local work.
 
-Claude Code baseline:
-
-- Prefer MCP for Threadroot tools/resources/prompts.
-- Keep MCP setup user/local by default; project \`.mcp.json\` is opt-in.
-- Use print mode with stream JSON, \`--permission-mode auto\`, and turn limits.
-- Never use bypass-permissions as a default.
-
 ## Stop Conditions
 
-Stop or ask for review when verification fails, provider output is unparseable, time/iteration budget is exhausted, no measurable improvement appears, or the work crosses high-risk, destructive, secret, cloud, deploy, or credential boundaries.
+Stop or ask for review when verification fails, Codex output is unparseable, time/iteration budget is exhausted, no measurable improvement appears, or the work crosses high-risk, destructive, secret, cloud, deploy, or credential boundaries.
 `;
 
 export const SEED_SKILLS: readonly SeedSkillDefinition[] = [

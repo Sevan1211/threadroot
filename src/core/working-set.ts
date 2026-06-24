@@ -136,7 +136,7 @@ const THREADROOT_VALUE_HINTS: Array<{ path: string; score: number; reason: strin
   { path: "src/core/improve.ts", score: 12, reason: "Threadroot trace-driven improvement surface" },
   { path: "src/mcp/server.ts", score: 12, reason: "Threadroot MCP context surface" },
   { path: "src/core/harness/context.ts", score: 10, reason: "Threadroot context assembly surface" },
-  { path: "src/core/provider-adapters.ts", score: 10, reason: "Threadroot provider adapter surface" },
+  { path: "src/core/codex.ts", score: 10, reason: "Threadroot Codex integration surface" },
   { path: "src/core/connections/index.ts", score: 8, reason: "Threadroot connection surface" },
   { path: "test/mcp-server.test.ts", score: 8, reason: "Threadroot context-routing tests" },
   { path: "test/cli-smoke.test.ts", score: 7, reason: "Threadroot first-run workflow tests" },
@@ -154,7 +154,7 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
       { path: "src/core/loop.ts", score: 116 },
       { path: "src/core/improve.ts", score: 114 },
       { path: "src/core/working-set.ts", score: 112 },
-      { path: "src/core/provider-adapters.ts", score: 104 },
+      { path: "src/core/codex.ts", score: 104 },
       { path: "src/core/connections/index.ts", score: 98 },
       { path: "README.md", score: 54 },
       { path: "INTEGRATION.md", score: 50 },
@@ -183,11 +183,11 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
       { path: "src/core/loop.ts", score: 46 },
       { path: "src/core/improve.ts", score: 44 },
       { path: "src/core/trace-evals.ts", score: 34 },
-      { path: "src/core/provider-adapters.ts", score: 32 },
+      { path: "src/core/codex.ts", score: 32 },
       { path: "src/commands/loop.ts", score: 30 },
       { path: "src/commands/improve.ts", score: 28 },
       { path: "test/trace-loop.test.ts", score: 38 },
-      { path: "test/provider-adapters.test.ts", score: 24 },
+      { path: "test/codex.test.ts", score: 24 },
     ],
   },
   {
@@ -343,8 +343,8 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     ],
   },
   {
-    any: ["adapter", "adapters", "provider", "compile", "claude", "cursor", "copilot"],
-    reason: "provider adapter compile surface",
+    any: ["adapter", "adapters", "compile", "agents", "codex"],
+    reason: "Codex AGENTS compile surface",
     paths: [
       { path: "src/core/compile/index.ts", score: 22 },
       { path: "src/core/compile/adapters/shared.ts", score: 18 },
@@ -354,38 +354,12 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
   },
   {
     all: ["import"],
-    any: ["provider", "files", "non", "destructive"],
-    reason: "provider import surface",
+    any: ["agents", "files", "non", "destructive", "codex"],
+    reason: "Codex AGENTS import surface",
     paths: [
       { path: "src/core/init/import.ts", score: 68 },
       { path: "src/commands/import.ts", score: 64 },
       { path: "test/init.test.ts", score: 76 },
-    ],
-  },
-  {
-    all: ["claude"],
-    reason: "Claude adapter surface",
-    paths: [
-      { path: "src/core/compile/adapters/claude.ts", score: 30 },
-      { path: "src/core/compile/adapters/shared.ts", score: 16 },
-      { path: "test/compile.test.ts", score: 72 },
-    ],
-  },
-  {
-    all: ["cursor"],
-    reason: "Cursor adapter surface",
-    paths: [
-      { path: "src/core/compile/adapters/cursor.ts", score: 30 },
-      { path: "src/core/compile/adapters/shared.ts", score: 16 },
-      { path: "test/compile.test.ts", score: 72 },
-    ],
-  },
-  {
-    all: ["copilot"],
-    reason: "Copilot adapter surface",
-    paths: [
-      { path: "src/core/compile/adapters/copilot.ts", score: 30 },
-      { path: "test/compile.test.ts", score: 34 },
     ],
   },
   {
@@ -486,13 +460,14 @@ const SURFACE_HINTS: Array<{ all?: string[]; any?: string[]; not?: string[]; pat
     ],
   },
   {
-    all: ["connect", "codex"],
-    reason: "provider connect surface",
+    all: ["codex"],
+    any: ["install", "status", "doctor", "mcp"],
+    reason: "Codex install and health surface",
     paths: [
-      { path: "src/core/connect.ts", score: 42 },
-      { path: "src/commands/connect.ts", score: 38 },
-      { path: "test/connect.test.ts", score: 34 },
-      { path: "src/core/agent-providers.ts", score: 18 },
+      { path: "src/core/codex.ts", score: 42 },
+      { path: "src/commands/codex.ts", score: 38 },
+      { path: "test/codex.test.ts", score: 34 },
+      { path: "src/core/mcp-check.ts", score: 18 },
     ],
   },
   {

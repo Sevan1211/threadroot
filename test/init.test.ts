@@ -39,7 +39,7 @@ describe("initHarness", () => {
     expect(report.skills.length).toBe(7);
     expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
     expect(report.nextSteps.map((step) => step.command)).toEqual(
-      expect.arrayContaining(["threadroot connections discover --json", "threadroot connect codex --refresh-skill"]),
+      expect.arrayContaining(["threadroot connections discover --json", "threadroot codex install --refresh-skill"]),
     );
 
     const harness = await resolveHarness(repo);
@@ -97,46 +97,45 @@ describe("initHarness", () => {
     await expect(readFile(path.join(repo, ".threadroot/imports/report.json"), "utf8")).resolves.toContain("AGENTS.md");
   });
 
-  it("does not create AGENTS.md when importing other provider files", async () => {
-    await write("CLAUDE.md", "# Claude\n\nUse pnpm for package commands.\n");
+  it("ignores non-Codex instruction files during import", async () => {
+    await write("OTHER_AGENT.md", "# Other Agent\n\nUse pnpm for package commands.\n");
 
     await initHarness(repo, {});
 
     await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(path.join(repo, ".threadroot/imports/canonical.md"), "utf8")).resolves.toContain("Use pnpm");
+    await expect(readFile(path.join(repo, ".threadroot/imports/canonical.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
 });
 
-describe("importVendorFiles (approach D)", () => {
-  it("picks canonical by precedence and skips pure duplicates", async () => {
+describe("importVendorFiles", () => {
+  it("imports AGENTS.md as the only canonical source", async () => {
     await write("AGENTS.md", "# Guide\n\nUse conventional commits.\n");
     await write("CLAUDE.md", "# Guide\n\nUse conventional commits.\n");
 
     const report = await importVendorFiles(repo);
 
     expect(report.canonicalSource).toBe("AGENTS.md");
-    expect(report.skippedDuplicates).toContain("CLAUDE.md");
+    expect(report.canonicalBody).toContain("Use conventional commits.");
+    expect(report.skippedDuplicates).toHaveLength(0);
     expect(report.foldedFrom).toHaveLength(0);
   });
 
-  it("folds novel sections from secondary files", async () => {
-    await write("AGENTS.md", "# Guide\n\nUse conventional commits.\n");
-    await write("CLAUDE.md", "# Guide\n\nUse conventional commits.\n\n## Deploy\n\nRun the deploy script.\n");
+  it("ignores secondary non-Codex files", async () => {
+    await write("OTHER_AGENT.md", "# Guide\n\nUse conventional commits.\n\n## Deploy\n\nRun the deploy script.\n");
 
     const report = await importVendorFiles(repo);
 
-    expect(report.foldedFrom).toContain("CLAUDE.md");
-    expect(report.canonicalBody).toContain("Run the deploy script.");
-    expect(report.canonicalBody).toContain("<!-- imported from CLAUDE.md -->");
+    expect(report.canonicalSource).toBeUndefined();
+    expect(report.canonicalBody).toBe("");
+    expect(report.foldedFrom).toHaveLength(0);
   });
 
-  it("maps cursor .mdc rules structurally with applyTo", async () => {
-    await write(".cursor/rules/api.mdc", "---\nglobs: src/api/**\n---\nKeep handlers thin.\n");
+  it("does not import non-Codex rules", async () => {
+    await write(".other-agent/rules/api.md", "---\nglobs: src/api/**\n---\nKeep handlers thin.\n");
 
     const report = await importVendorFiles(repo);
 
-    expect(report.importedRules).toHaveLength(1);
-    expect(report.importedRules[0]).toMatchObject({ name: "api", applyTo: "src/api/**" });
+    expect(report.importedRules).toHaveLength(0);
   });
 });

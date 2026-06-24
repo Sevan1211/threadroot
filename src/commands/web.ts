@@ -22,7 +22,7 @@ export async function runWebStatus(_repoRoot: string, options: WebStatusCliOptio
     return;
   }
   console.log(`web fetch: ${status.fetchAvailable ? "available" : "unavailable"}`);
-  console.log(`web search: ${status.searchAvailable ? "available" : "provider/delegated only"}`);
+  console.log(`web search: ${status.searchAvailable ? "available" : "codex/delegated only"}`);
   for (const note of status.notes) {
     console.log(`note: ${note}`);
   }

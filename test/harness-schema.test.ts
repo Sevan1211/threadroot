@@ -15,7 +15,7 @@ describe("harness manifest schema", () => {
       name: "demo",
       version: 1,
       profile: "node-cli",
-      adapters: ["agents", "claude"],
+      adapters: ["agents"],
     });
 
     expect(manifest.memory.budget).toEqual({});

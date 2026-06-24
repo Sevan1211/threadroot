@@ -36,7 +36,9 @@ import { embeddingsStatus } from "../core/embeddings.js";
 import { webFetch, webStatus } from "../core/web.js";
 import { appendTraceEvent, finishTrace, latestTrace, startTrace } from "../core/trace.js";
 import { currentLoopSession, finishLoop, nextLoop, reportLoop, runLoop, startLoop } from "../core/loop.js";
-import { providerStatuses } from "../core/provider-adapters.js";
+import { codexStatus } from "../core/codex.js";
+import { createPrepBrief, readLatestScore, tuneLatest } from "../core/codex-optimizer.js";
+import { readCodexStateJson } from "../core/codex-state.js";
 
 type JsonRpcRequest = {
   jsonrpc?: "2.0";
@@ -158,6 +160,45 @@ const toolRegistry: ToolSpec[] = [
     },
   }),
   defineTool({
+    name: "context_budget",
+    title: "Context Budget",
+    description:
+      "Create a compact Codex preflight brief with strict token budgets: goal, first reads, likely tests, verification commands, and warnings.",
+    inputSchema: objectSchema(
+      {
+        task: { type: "string", description: "The coding task to prepare for Codex." },
+        mode: { type: "string", enum: ["cheap", "balanced", "deep"], description: "Preflight mode." },
+        memoryProfile: { type: "string", enum: ["standard", "conservative", "tiny"], description: "Preflight memory profile." },
+        budgetTokens: { type: "number", description: "Target prompt token budget." },
+        hardCapTokens: { type: "number", description: "Hard prompt token cap." },
+        maxFiles: { type: "number", description: "Maximum ranked non-test files to include." },
+        forceIndex: { type: "boolean", description: "Refresh the repo index before compiling." },
+        requiredCommands: { type: "array", items: { type: "string" }, description: "Verification commands Codex must satisfy." },
+      },
+      ["task"],
+    ),
+    outputSchema: outputObjectSchema({
+      id: { type: "string" },
+      promptTokenEstimate: { type: "number" },
+      packetTokenEstimate: { type: "number" },
+      firstReads: { type: "array" },
+      verificationCommands: { type: "array" },
+      paths: { type: "object" },
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({
+      task: z.string().min(1),
+      mode: z.enum(["cheap", "balanced", "deep"]).optional(),
+      memoryProfile: z.enum(["standard", "conservative", "tiny"]).optional(),
+      budgetTokens: z.number().int().positive().max(100_000).optional(),
+      hardCapTokens: z.number().int().positive().max(100_000).optional(),
+      maxFiles: z.number().int().positive().max(100).optional(),
+      forceIndex: z.boolean().optional(),
+      requiredCommands: z.array(z.string()).optional(),
+    }),
+    run: (repoRoot, args) => createPrepBrief(repoRoot, args.task, args),
+  }),
+  defineTool({
     name: "index_status",
     title: "Index Status",
     description: "Return Threadroot repo intelligence index status, backend, freshness, adapters, and object counts.",
@@ -219,7 +260,7 @@ const toolRegistry: ToolSpec[] = [
     inputSchema: objectSchema(
       {
         task: { type: "string", description: "Task or goal this trace records." },
-        agent: { type: "string", description: "Agent/provider label, such as codex or claude." },
+        agent: { type: "string", description: "Codex surface label. Defaults to codex." },
         budgetTokens: { type: "number", description: "Preferred task packet budget." },
         maxFiles: { type: "number", description: "Maximum ranked non-test files." },
         forceIndex: { type: "boolean", description: "Refresh the repo index before compiling the packet." },
@@ -347,11 +388,10 @@ const toolRegistry: ToolSpec[] = [
   defineTool({
     name: "loop_start",
     title: "Start Loop",
-    description: "Start a local manual/assisted loop session for budgeted agent improvement.",
+    description: "Start a local manual/assisted loop session for budgeted Codex improvement.",
     inputSchema: objectSchema(
       {
         goal: { type: "string", description: "Loop goal." },
-        agent: { type: "string", description: "Agent/provider label." },
         timeMinutes: { type: "number", description: "Time budget in minutes." },
         maxIterations: { type: "number", description: "Maximum iteration prompts." },
         risk: { type: "string", enum: ["low", "medium", "high"], description: "Risk budget." },
@@ -362,7 +402,6 @@ const toolRegistry: ToolSpec[] = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     args: z.object({
       goal: z.string().min(1),
-      agent: z.string().optional(),
       timeMinutes: z.number().int().positive().optional(),
       maxIterations: z.number().int().positive().optional(),
       risk: z.enum(["low", "medium", "high"]).optional(),
@@ -392,14 +431,12 @@ const toolRegistry: ToolSpec[] = [
   defineTool({
     name: "loop_run",
     title: "Run Loop",
-    description: "Run budgeted loop iterations through a provider command and generate trace-driven improvement candidates.",
+    description: "Run budgeted loop iterations through Codex and generate trace-driven improvement candidates.",
     inputSchema: objectSchema({
       iterations: { type: "number", description: "Maximum automated iterations to run." },
-      agentCommand: { type: "string", description: "Provider command to execute instead of the default adapter." },
-      agentArgs: { type: "array", items: { type: "string" }, description: "Arguments passed to agentCommand." },
-      agentAdapter: { type: "string", enum: ["codex", "claude", "custom"], description: "Parser adapter for agentCommand output." },
-      timeoutMs: { type: "number", description: "Per-iteration provider timeout in milliseconds." },
-      requiredCommands: { type: "array", items: { type: "string" }, description: "Verification commands to run after each provider iteration." },
+      codexBin: { type: "string", description: "Codex executable to run instead of `codex`." },
+      timeoutMs: { type: "number", description: "Per-iteration Codex timeout in milliseconds." },
+      requiredCommands: { type: "array", items: { type: "string" }, description: "Verification commands to run after each Codex iteration." },
       verificationTimeoutMs: { type: "number", description: "Per-command verification timeout in milliseconds." },
       writeCandidates: { type: "boolean", description: "Write pending candidates under .threadroot/improvements/pending/." },
     }),
@@ -407,9 +444,7 @@ const toolRegistry: ToolSpec[] = [
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     args: z.object({
       iterations: z.number().int().positive().max(100).optional(),
-      agentCommand: z.string().optional(),
-      agentArgs: z.array(z.string()).optional(),
-      agentAdapter: z.enum(["codex", "claude", "custom"]).optional(),
+      codexBin: z.string().optional(),
       timeoutMs: z.number().int().positive().optional(),
       requiredCommands: z.array(z.string()).optional(),
       verificationTimeoutMs: z.number().int().positive().optional(),
@@ -430,14 +465,34 @@ const toolRegistry: ToolSpec[] = [
     run: (repoRoot, args) => finishLoop(repoRoot, args.status),
   }),
   defineTool({
-    name: "providers_status",
-    title: "Provider Status",
-    description: "Return provider-specific automation, MCP setup, event capture, compression, and local CLI availability.",
+    name: "codex_status",
+    title: "Codex Status",
+    description: "Return Codex CLI availability, default runner plan, MCP setup, event capture, and setup guidance.",
     inputSchema: objectSchema({}),
-    outputSchema: outputObjectSchema({ providers: { type: "array" } }),
+    outputSchema: outputObjectSchema({ codex: { type: "object" } }),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     args: z.object({}),
-    run: async (repoRoot) => ({ providers: await providerStatuses(repoRoot) }),
+    run: async (repoRoot) => ({ codex: await codexStatus(repoRoot) }),
+  }),
+  defineTool({
+    name: "score_latest",
+    title: "Latest Codex Score",
+    description: "Return the latest Codex optimizer score: tokens-to-green, context waste, verification status, and recommendations.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ status: { type: "string" }, tokenLedger: { type: "object" }, contextPrecision: { type: "object" } }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({}),
+    run: async (repoRoot) => (await readLatestScore(repoRoot)) ?? { score: null, message: "No Codex optimizer score has been recorded yet." },
+  }),
+  defineTool({
+    name: "tune_latest",
+    title: "Tune Latest Codex Run",
+    description: "Generate evidence-backed routing and guidance proposals from the latest Codex optimizer score.",
+    inputSchema: objectSchema({}),
+    outputSchema: outputObjectSchema({ proposals: { type: "array" }, routingHintsPath: { type: "string" } }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    args: z.object({}),
+    run: (repoRoot) => tuneLatest(repoRoot),
   }),
   defineTool({
     name: "repo_map",
@@ -871,7 +926,7 @@ const toolRegistry: ToolSpec[] = [
   defineTool({
     name: "web_status",
     title: "Web Status",
-    description: "Return Threadroot web capability status. Native general search is provider/delegated only for now.",
+    description: "Return Threadroot web capability status. Native general search is delegated to Codex or a configured search MCP server for now.",
     inputSchema: objectSchema({}),
     args: z.object({}),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -964,6 +1019,16 @@ const resourceRegistry: ResourceSpec[] = [
     read: async (repoRoot) => (await readLatestTaskPacket(repoRoot)) ?? { note: "No task packet has been compiled yet." },
   },
   {
+    uri: "threadroot://brief/latest",
+    name: "Latest Codex Brief",
+    title: "Latest Codex Brief",
+    mimeType: "application/json",
+    description: "Most recent compact Codex preflight brief created by `threadroot prep` or MCP context_budget.",
+    annotations: { audience: ["assistant"], priority: 1 },
+    read: async (repoRoot) =>
+      (await readCodexStateJson(repoRoot, ["briefs", "latest.json"])) ?? { note: "No Codex preflight brief has been compiled yet." },
+  },
+  {
     uri: "threadroot://runs/latest",
     name: "Latest Run Brief",
     title: "Latest Run Brief",
@@ -971,6 +1036,25 @@ const resourceRegistry: ResourceSpec[] = [
     description: "Most recent compact run summary with raw-output pointer.",
     annotations: { audience: ["assistant"], priority: 0.7 },
     read: latestRun,
+  },
+  {
+    uri: "threadroot://score/latest",
+    name: "Latest Codex Score",
+    title: "Latest Codex Score",
+    mimeType: "application/json",
+    description: "Most recent Codex optimizer score: tokens-to-green, context waste, verification, and recommendations.",
+    annotations: { audience: ["assistant"], priority: 1 },
+    read: async (repoRoot) => (await readLatestScore(repoRoot)) ?? { note: "No Codex optimizer score has been recorded yet." },
+  },
+  {
+    uri: "threadroot://tuning/latest",
+    name: "Latest Codex Tuning",
+    title: "Latest Codex Tuning",
+    mimeType: "application/json",
+    description: "Most recent evidence-backed tuning proposals from Codex optimizer scoring.",
+    annotations: { audience: ["assistant"], priority: 0.8 },
+    read: async (repoRoot) =>
+      (await readCodexStateJson(repoRoot, ["tuning", "latest.json"])) ?? { note: "No Codex tuning report has been recorded yet." },
   },
   {
     uri: "threadroot://trace/latest",
@@ -991,13 +1075,13 @@ const resourceRegistry: ResourceSpec[] = [
     read: async (repoRoot) => (await currentLoopSession(repoRoot)) ?? { note: "No loop session is active." },
   },
   {
-    uri: "threadroot://providers",
-    name: "Provider Status",
-    title: "Provider Status",
+    uri: "threadroot://codex",
+    name: "Codex Status",
+    title: "Codex Status",
     mimeType: "application/json",
-    description: "Provider automation, MCP setup, event capture, compression, and local CLI availability.",
+    description: "Codex CLI availability, MCP setup, event capture, compression, and local runner plan.",
     annotations: { audience: ["assistant"], priority: 0.8 },
-    read: async (repoRoot) => ({ providers: await providerStatuses(repoRoot) }),
+    read: async (repoRoot) => ({ codex: await codexStatus(repoRoot) }),
   },
   {
     uri: "threadroot://skills",
@@ -1185,7 +1269,7 @@ export async function handleMessage(
         serverInfo: { name: "threadroot", version: THREADROOT_VERSION },
         capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
         instructions:
-          "Threadroot exposes the repository's local agent harness. Call `task_packet` before broad coding work; it refreshes stale map/index state before routing. Keep budgets small, use `repo_search`/`repo_read` or threadroot://repo/{path} only for targeted follow-up, inspect `threadroot://index` and `threadroot://task/latest` as lazy resources, run `doctor` for health/trust checks, load full skills only when recommended, and use `memory_append` for durable handoffs. For loop work, use `providers_status`, `loop_start`, `loop_next`, trace events, `eval_traces`, and `improve_latest` for guarded local trace-derived routing/eval/skill lessons; do not promote memory, tools, connections, or higher-risk changes without policy/user approval.",
+          "Threadroot exposes the repository's local Codex context optimizer. Prefer `context_budget`/`task_packet` before broad coding work; they refresh stale map/index state before routing and keep context small. Use `repo_search`/`repo_read` or threadroot://repo/{path} only for targeted follow-up, inspect `threadroot://brief/latest`, `threadroot://score/latest`, `threadroot://tuning/latest`, and `threadroot://codex` as lazy resources, run `codex_status` for health checks, and use `score_latest`/`tune_latest` after Codex runs to reduce tokens-to-green. Do not promote memory, tools, connections, or higher-risk changes without policy/user approval.",
       });
     }
 
@@ -1329,6 +1413,28 @@ function shortToolText(name: string, structured: Record<string, unknown>): strin
       .join("\n");
   }
 
+  if (name === "context_budget") {
+    const brief = structured as {
+      id?: string;
+      promptTokenEstimate?: number;
+      packetTokenEstimate?: number;
+      memory?: { profile?: string };
+      firstReads?: string[];
+      verificationCommands?: string[];
+      paths?: { brief?: string; prompt?: string };
+    };
+    return [
+      `Codex preflight: ${brief.id ?? "brief"}`,
+      `Memory profile: ${brief.memory?.profile ?? "conservative"}.`,
+      `Prompt tokens: ${brief.promptTokenEstimate ?? "unknown"} (raw packet ${brief.packetTokenEstimate ?? "unknown"}).`,
+      (brief.firstReads ?? []).length > 0 ? `Read first: ${(brief.firstReads ?? []).slice(0, 6).join(", ")}` : undefined,
+      (brief.verificationCommands ?? []).length > 0 ? `Verify: ${(brief.verificationCommands ?? []).join(", ")}` : undefined,
+      `Prompt: ${brief.paths?.prompt ?? "threadroot://brief/latest"}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   if (name === "eval_context") {
     const summary = structured.summary as Record<string, unknown> | undefined;
     return summary
@@ -1341,22 +1447,39 @@ function shortToolText(name: string, structured: Record<string, unknown>): strin
     return `Threadroot context refresh: map ${structured.mapStatus}, index ${structured.indexStatus}, refreshed ${refreshed}, duration ${structured.durationMs}ms.`;
   }
 
-  if (name === "providers_status") {
-    const providers = Array.isArray(structured.providers) ? structured.providers : [];
-    const lines = providers.slice(0, 8).map((provider) => {
-      const entry = provider as {
-        id?: unknown;
-        available?: unknown;
-        automation?: { status?: unknown };
-        mcp?: { access?: { mode?: unknown; checkCommand?: unknown } };
-      };
-      const mcpAccess =
-        typeof entry.mcp?.access?.checkCommand === "string"
-          ? `check: ${entry.mcp.access.checkCommand}`
-          : `mcp access: ${entry.mcp?.access?.mode ?? "unknown"}`;
-      return `${entry.id ?? "provider"}: ${entry.available === true ? "cli available" : "cli missing or mcp-only"} (${entry.automation?.status ?? "unknown"}, ${mcpAccess})`;
-    });
-    return [`Threadroot provider status:`, ...lines, "Full setup notes are in structuredContent and threadroot://providers."].join("\n");
+  if (name === "codex_status") {
+    const codex = structured.codex as
+      | {
+          available?: unknown;
+          defaultPlan?: { command?: unknown; args?: unknown };
+          mcp?: { configured?: unknown; checkCommand?: unknown };
+        }
+      | undefined;
+    const args = Array.isArray(codex?.defaultPlan?.args) ? codex.defaultPlan.args.join(" ") : "";
+    return [
+      `Threadroot Codex status: ${codex?.available === true ? "Codex CLI available" : "Codex CLI missing"}.`,
+      `Runner: ${codex?.defaultPlan?.command ?? "codex"} ${args}`.trim(),
+      `MCP: ${codex?.mcp?.configured === true ? "configured" : "missing"} (${codex?.mcp?.checkCommand ?? "threadroot mcp check --json"}).`,
+      "Full setup notes are in structuredContent and threadroot://codex.",
+    ].join("\n");
+  }
+
+  if (name === "score_latest") {
+    const score = structured as {
+      status?: unknown;
+      tokensToGreen?: unknown;
+      attempts?: unknown;
+      verification?: { passed?: unknown };
+      contextPrecision?: { irrelevantReadRatio?: unknown };
+    };
+    return score.status
+      ? `Latest Codex score: ${score.status}; attempts ${score.attempts ?? "?"}; tokens-to-green ${score.tokensToGreen ?? "n/a"}; verification ${score.verification?.passed === true ? "passed" : "failed"}; irrelevant read ratio ${score.contextPrecision?.irrelevantReadRatio ?? "?"}.`
+      : "No Codex optimizer score has been recorded yet.";
+  }
+
+  if (name === "tune_latest") {
+    const proposals = Array.isArray(structured.proposals) ? structured.proposals : [];
+    return `Codex tuning: ${proposals.length} proposal(s). Full report is in structuredContent and threadroot://tuning/latest.`;
   }
 
   if (name === "connections_discover") {

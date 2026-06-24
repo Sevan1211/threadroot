@@ -5,7 +5,16 @@ import {
   runAutomationStatus,
   type AutomationCliOptions,
 } from "./commands/automation.js";
-import { runConnect, type ConnectCliOptions } from "./commands/connect.js";
+import {
+  runCodexDoctor,
+  runCodexInstall,
+  runCodexRun,
+  runCodexStatus,
+  type CodexDoctorOptions,
+  type CodexInstallOptions,
+  type CodexRunCliOptions,
+  type CodexStatusOptions,
+} from "./commands/codex.js";
 import { runDoctor } from "./commands/doctor.js";
 import {
   runEmbeddingsConfigure,
@@ -13,7 +22,7 @@ import {
   runEmbeddingsStatus,
   type EmbeddingsConfigureOptions,
 } from "./commands/embeddings.js";
-import { runEvalContext, runEvalTraces, type EvalCliOptions, type TraceEvalCliOptions } from "./commands/eval.js";
+import { runEvalCodex, runEvalContext, runEvalTraces, type EvalCliOptions, type TraceEvalCliOptions } from "./commands/eval.js";
 import { runIndex, runIndexStatus, type IndexCliOptions } from "./commands/indexer.js";
 import { runInit, type InitCliOptions } from "./commands/init.js";
 import { runImport, type ImportCliOptions } from "./commands/import.js";
@@ -32,7 +41,6 @@ import {
 } from "./commands/loop.js";
 import { runMap, type MapCliOptions } from "./commands/map.js";
 import { runMcp, runMcpCheck, type McpCheckOptions } from "./commands/mcp.js";
-import { runProvidersStatus, type ProvidersOptions } from "./commands/providers.js";
 import {
   runMemoryAppend,
   runMemoryGc,
@@ -42,6 +50,8 @@ import {
   type RememberOptions,
 } from "./commands/memory.js";
 import { runRefresh, type RefreshCliOptions } from "./commands/refresh.js";
+import { runPrep, type PrepCliOptions } from "./commands/prep.js";
+import { runScoreLatest, type ScoreLatestOptions } from "./commands/score.js";
 import {
   runSkillsFind,
   runSkillsIngest,
@@ -59,6 +69,7 @@ import {
 } from "./commands/skills.js";
 import { runStatus } from "./commands/status.js";
 import { runTask, type TaskCliOptions } from "./commands/task.js";
+import { runTuneLatest, type TuneLatestOptions } from "./commands/tune.js";
 import {
   runTraceEvent,
   runTraceFinish,
@@ -95,8 +106,22 @@ export function createProgram(repoRoot = process.cwd()): Command {
   const program = new Command();
   program
     .name("threadroot")
-    .description("Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP in .threadroot.")
+    .description("Codex Context Optimizer: preflight small prompts, record Codex JSONL runs, score token waste, and tune repo context.")
     .version(THREADROOT_VERSION);
+
+  program
+    .command("prep")
+    .argument("<task>", "Task to turn into a compact Codex-ready preflight brief.")
+    .description("Create a compact Codex task brief without invoking Codex.")
+    .option("--mode <mode>", "Budget mode: cheap, balanced, or deep.")
+    .option("--memory <profile>", "Memory profile: conservative, tiny, or standard.")
+    .option("--budget <tokens>", "Target prompt token budget.")
+    .option("--hard-cap <tokens>", "Hard prompt token cap; fails when exceeded.")
+    .option("--max-files <count>", "Maximum ranked non-test files to include.")
+    .option("--force-index", "Refresh the repo index before compiling the brief.")
+    .option("--require <command...>", "Verification command(s) Codex must satisfy.")
+    .option("--json", "Print machine-readable JSON.")
+    .action((task: string, options: PrepCliOptions) => runPrep(repoRoot, task, options));
 
   program
     .command("task")
@@ -111,28 +136,55 @@ export function createProgram(repoRoot = process.cwd()): Command {
 
   program
     .command("init")
-    .description("Scaffold a local-only Threadroot harness and import existing vendor files once.")
+    .description("Scaffold a local-only Threadroot harness for Codex.")
     .option("--force", "Re-initialize over an existing harness.")
     .option("--yes", "Compatibility flag; init is non-interactive by default.")
-    .option("--no-import", "Skip importing existing vendor files (blank-slate init).")
+    .option("--no-import", "Skip importing existing Codex/AGENTS files (blank-slate init).")
     .option("--profile <profile>", "Override the detected project profile.")
     .option("--gitignore", "Write a visible root .gitignore entry instead of private .git/info/exclude.")
-    .option("--adapters <list>", "Comma-separated adapters: agents,claude,copilot,cursor.")
+    .option("--adapters <list>", "Compatibility option. Only the Codex AGENTS adapter is supported.")
     .action((options: InitCliOptions) => runInit(repoRoot, options));
 
-  program
-    .command("connect")
-    .argument("[agent]", "Provider to connect: codex,claude,cursor,vscode,copilot,gemini,windsurf,opencode,antigravity,all.")
-    .option("--all", "Connect all supported providers.")
-    .option("--dry-run", "Show the provider setup plan without writing the .threadroot provider receipt.")
-    .option("--check", "Check whether Threadroot has a local provider receipt.")
-    .option("--status", "Show provider receipt status.")
-    .option("--undo", "Remove Threadroot's local provider receipt.")
-    .option("--project-files", "Allow visible project provider files when a provider requires them.")
-    .option("--refresh-skill", "Install or refresh the global Threadroot agent skill for this provider.")
+  const codex = program.command("codex").description("Install, inspect, and verify the Codex/OpenAI integration.");
+  codex
+    .command("run")
+    .argument("<task>", "Task to run through Preflight -> codex exec --json -> verification -> score.")
+    .option("--mode <mode>", "Loop mode: cheap, balanced, or deep.")
+    .option("--memory <profile>", "Memory profile: conservative, tiny, or standard.")
+    .option("--codex-bin <command>", "Codex executable to run instead of `codex`.")
+    .option("--ephemeral", "Run `codex exec --ephemeral` so Codex does not persist session state for this automation run.")
+    .option("--timeout <ms>", "Codex execution timeout in milliseconds.")
+    .option("--verify-timeout <ms>", "Per-command verification timeout in milliseconds.")
+    .option("--require <command...>", "Verification command(s) Threadroot must run after Codex.")
+    .option("--budget <tokens>", "Target prompt token budget.")
+    .option("--hard-cap <tokens>", "Hard prompt token cap; fails when exceeded.")
+    .option("--max-files <count>", "Maximum ranked non-test files to include.")
+    .option("--force-index", "Refresh the repo index before compiling the brief.")
+    .option("--dry-run", "Create the preflight and score skeleton without invoking Codex.")
     .option("--json", "Print machine-readable JSON.")
-    .description("Connect a coding agent to Threadroot without visible provider project files by default.")
-    .action((agent: string | undefined, options: ConnectCliOptions) => runConnect(repoRoot, agent, options));
+    .description("Run a subscription-friendly Codex optimization loop through `codex exec --json`.")
+    .action((task: string, options: CodexRunCliOptions) => runCodexRun(repoRoot, task, options));
+  codex
+    .command("install")
+    .option("--dry-run", "Show the Codex setup plan without writing the local install receipt.")
+    .option("--check", "Check whether Threadroot has a local Codex install receipt.")
+    .option("--status", "Show Codex install receipt status.")
+    .option("--undo", "Remove Threadroot's local Codex install receipt.")
+    .option("--refresh-skill", "Install or refresh the global Threadroot Codex skill.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Install Threadroot for Codex by recording local state and printing the Codex MCP setup command.")
+    .action((options: CodexInstallOptions) => runCodexInstall(repoRoot, options));
+  codex
+    .command("status")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show Codex CLI, runner, and MCP availability.")
+    .action((options: CodexStatusOptions) => runCodexStatus(repoRoot, options));
+  codex
+    .command("doctor")
+    .option("--timeout <ms>", "MCP handshake timeout in milliseconds.")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Run Codex-focused health checks, including Threadroot MCP handshake and tool availability.")
+    .action((options: CodexDoctorOptions) => runCodexDoctor(repoRoot, options));
 
   program
     .command("status")
@@ -141,16 +193,24 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .action((options) => runStatus(repoRoot, options));
 
   program
-    .command("providers")
-    .description("Show provider automation, MCP, and local CLI availability for Threadroot loops.")
-    .option("--json", "Print machine-readable JSON.")
-    .action((options: ProvidersOptions) => runProvidersStatus(repoRoot, options));
-
-  program
     .command("doctor")
-    .description("Check harness validity, compiled output health, MCP hints, and tool trust.")
+    .description("Check harness validity, compiled output health, Codex MCP hints, and tool trust.")
     .option("--json", "Print machine-readable JSON.")
     .action((options) => runDoctor(repoRoot, options));
+
+  const score = program.command("score").description("Inspect Codex optimizer score reports.");
+  score
+    .command("latest")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Show latest tokens-to-green, context waste, verification status, and recommendations.")
+    .action((options: ScoreLatestOptions) => runScoreLatest(repoRoot, options));
+
+  const tune = program.command("tune").description("Use Codex run evidence to tune future preflight context.");
+  tune
+    .command("latest")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Create evidence-backed routing and guidance proposals from the latest score.")
+    .action((options: TuneLatestOptions) => runTuneLatest(repoRoot, options));
 
   program
     .command("index")
@@ -190,6 +250,11 @@ export function createProgram(repoRoot = process.cwd()): Command {
 
   const evalCommand = program.command("eval").description("Evaluate Threadroot context and routing quality.");
   evalCommand
+    .command("codex")
+    .option("--json", "Print machine-readable JSON.")
+    .description("Compare raw Threadroot task packets against compact Codex preflight prompts.")
+    .action((options) => runEvalCodex(repoRoot, options));
+  evalCommand
     .command("context")
     .option("--json", "Print machine-readable JSON.")
     .option("--min-recall <score>", "Exit non-zero when Recall@5 is below this score.")
@@ -212,7 +277,7 @@ export function createProgram(repoRoot = process.cwd()): Command {
   trace
     .command("start")
     .argument("<task>", "Task or goal this trace records.")
-    .option("--agent <agent>", "Agent/provider label, such as codex or claude.")
+    .option("--agent <agent>", "Codex surface label. Defaults to codex.")
     .option("--budget <tokens>", "Preferred task packet budget.")
     .option("--max-files <count>", "Maximum ranked non-test files in the starting packet.")
     .option("--force-index", "Refresh the repo index before compiling the starting packet.")
@@ -269,11 +334,11 @@ export function createProgram(repoRoot = process.cwd()): Command {
 
   program
     .command("import")
-    .option("--dry-run", "Detect provider files without writing an import report.")
-    .option("--consolidate", "Prepare a consolidation report. Does not move provider files in this release.")
-    .option("--move-provider-files", "Reserved for future explicit moves; currently errors rather than moving files.")
+    .option("--dry-run", "Detect Codex/AGENTS files without writing an import report.")
+    .option("--consolidate", "Prepare a consolidation report. Does not move files in this release.")
+    .option("--move-provider-files", "Compatibility flag; currently errors rather than moving files.")
     .option("--json", "Print machine-readable JSON.")
-    .description("Detect existing provider files and write a non-destructive .threadroot import report.")
+    .description("Detect existing Codex/AGENTS files and write a non-destructive .threadroot import report.")
     .action((options: ImportCliOptions) => runImport(repoRoot, options));
 
   const improve = program.command("improve").description("Generate and apply guarded local trace-driven improvements.");
@@ -294,11 +359,10 @@ export function createProgram(repoRoot = process.cwd()): Command {
     .description("Apply safe trace-derived improvement candidates into local routing, eval, and skill artifacts.")
     .action((options: ImproveApplyOptions) => runImproveApply(repoRoot, options));
 
-  const loop = program.command("loop").description("Run local Threadroot loop sessions for budgeted agent improvement.");
+  const loop = program.command("loop").description("Run local Threadroot loop sessions for budgeted Codex improvement.");
   loop
     .command("start")
     .argument("<goal>", "Loop goal.")
-    .option("--agent <agent>", "Agent/provider label, such as codex or claude.")
     .option("--time <duration>", "Time budget, such as 30m or 1h.")
     .option("--max-iterations <count>", "Maximum iteration prompts.")
     .option("--risk <risk>", "Risk budget: low, medium, or high.")
@@ -318,16 +382,14 @@ export function createProgram(repoRoot = process.cwd()): Command {
   loop
     .command("run")
     .option("--iterations <count>", "Maximum automated iterations to run.")
-    .option("--agent-command <command>", "Provider command to execute instead of the default adapter.")
-    .option("--agent-arg <arg...>", "Arguments passed to --agent-command.")
-    .option("--agent-adapter <adapter>", "Parser adapter for --agent-command output: codex, claude, or custom.")
-    .option("--timeout <ms>", "Per-iteration provider timeout in milliseconds.")
-    .option("--require <command...>", "Verification command(s) Threadroot must run after each provider iteration.")
+    .option("--codex-bin <command>", "Codex executable to run instead of `codex`.")
+    .option("--timeout <ms>", "Per-iteration Codex timeout in milliseconds.")
+    .option("--require <command...>", "Verification command(s) Threadroot must run after each Codex iteration.")
     .option("--verify-timeout <ms>", "Per-command verification timeout in milliseconds.")
     .option("--no-write-candidates", "Analyze improvements without writing pending candidate files.")
     .option("--no-auto-apply", "Do not apply auto-safe local trace-derived improvements after writing candidates.")
     .option("--json", "Print machine-readable JSON.")
-    .description("Run budgeted loop iterations through a provider command.")
+    .description("Run budgeted loop iterations through Codex.")
     .action((options: LoopRunOptions) => runLoopRun(repoRoot, options));
   loop
     .command("finish")

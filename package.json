@@ -1,7 +1,7 @@
 {
   "name": "threadroot",
-  "version": "0.2.1",
-  "description": "Local repo intelligence runtime for coding agents: task packets, indexed context, skills, tools, memory, web fetch, and MCP under one private .threadroot directory.",
+  "version": "0.3.0",
+  "description": "Codex Context Optimizer for smaller prompts, JSONL flight recording, tokens-to-green scoring, verification, and repo-local tuning.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,13 +26,12 @@
   "homepage": "https://github.com/Sevan1211/threadroot#readme",
   "keywords": [
     "ai",
-    "agents",
-    "agentic",
     "codex",
-    "claude",
-    "cursor",
-    "copilot",
+    "openai",
     "mcp",
+    "repo-context",
+    "tokens-to-green",
+    "codex-cli",
     "developer-tools",
     "cli",
     "skills"

@@ -2,7 +2,6 @@ import { finishLoop, nextLoop, reportLoop, runLoop, startLoop, type LoopRisk, ty
 import { printJson, type JsonCliOptions } from "./json.js";
 
 export type LoopStartOptions = JsonCliOptions & {
-  agent?: string;
   time?: string;
   maxIterations?: string;
   risk?: LoopRisk;
@@ -15,9 +14,7 @@ export type LoopFinishOptions = JsonCliOptions & {
 };
 export type LoopRunOptions = JsonCliOptions & {
   iterations?: string;
-  agentCommand?: string;
-  agentArg?: string[];
-  agentAdapter?: "codex" | "claude" | "custom";
+  codexBin?: string;
   timeout?: string;
   require?: string[];
   verifyTimeout?: string;
@@ -47,7 +44,6 @@ function parseMinutes(value: string | undefined): number | undefined {
 
 export async function runLoopStart(repoRoot: string, goal: string, options: LoopStartOptions = {}): Promise<void> {
   const session = await startLoop(repoRoot, goal, {
-    agent: options.agent,
     timeMinutes: parseMinutes(options.time),
     maxIterations: parsePositiveInt(options.maxIterations),
     risk: options.risk,
@@ -110,9 +106,7 @@ export async function runLoopFinish(repoRoot: string, options: LoopFinishOptions
 export async function runLoopRun(repoRoot: string, options: LoopRunOptions = {}): Promise<void> {
   const report = await runLoop(repoRoot, {
     iterations: parsePositiveInt(options.iterations),
-    agentCommand: options.agentCommand,
-    agentArgs: options.agentArg,
-    agentAdapter: options.agentAdapter,
+    codexBin: options.codexBin,
     timeoutMs: parsePositiveInt(options.timeout),
     requiredCommands: options.require,
     verificationTimeoutMs: parsePositiveInt(options.verifyTimeout),
@@ -126,7 +120,7 @@ export async function runLoopRun(repoRoot: string, options: LoopRunOptions = {})
   console.log(`loop run: ${report.iterations.length} iteration(s), stopped: ${report.stoppedReason}`);
   for (const iteration of report.iterations) {
     console.log(
-      `- iteration ${iteration.iteration}: ${iteration.provider.ok ? "ok" : "failed"} exit ${iteration.provider.exitCode ?? "unknown"} output ${iteration.provider.outputPath}`,
+      `- iteration ${iteration.iteration}: ${iteration.codex.ok ? "ok" : "failed"} exit ${iteration.codex.exitCode ?? "unknown"} output ${iteration.codex.outputPath}`,
     );
     for (const verification of iteration.verification) {
       console.log(`  verification ${verification.ok ? "ok" : "failed"}: ${verification.command} output ${verification.outputPath}`);

@@ -17,12 +17,12 @@ npm view threadroot
 
 If `npm view threadroot` returns package metadata, the unscoped package name is already taken. Rename the package or use a scope before publishing.
 
-## Commit, push, and publish 0.2.1 manually
+## Commit, push, and publish 0.3.0 manually
 
 ```bash
 git status
 git add .
-git commit -m "Release threadroot 0.2.1"
+git commit -m "Release threadroot 0.3.0"
 git push origin HEAD
 ```
 
@@ -42,8 +42,8 @@ npm publish --access public --provenance
 After publishing, create a GitHub release or tag:
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 For a later automated release, prefer npm trusted publishing from a GitHub-hosted
@@ -59,7 +59,8 @@ TMP_REPO="$(mktemp -d /tmp/threadroot-publish-smoke.XXXXXX)"
 cd "$TMP_REPO"
 npm exec threadroot -- --version
 npm exec threadroot -- init --no-import --profile node-cli
-npm exec threadroot -- connect codex --dry-run
+npm exec threadroot -- codex install --dry-run
+npm exec threadroot -- codex status --json
 npm exec threadroot -- task "smoke test repo context" --json
 npm exec threadroot -- index --status --json
 npm exec threadroot -- doctor

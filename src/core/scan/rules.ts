@@ -1,5 +1,6 @@
 export const ignoredDirectories = new Set([
   ".git",
+  ".codex",
   ".threadroot",
   "node_modules",
   "dist",

@@ -43,11 +43,11 @@ const INTERPRETERS: Record<string, string> = {
   ".rb": "ruby",
 };
 
-function cap(text: string): string {
-  if (text.length <= MAX_OUTPUT_CHARS) {
+function cap(text: string, maxOutputChars: number): string {
+  if (text.length <= maxOutputChars) {
     return text;
   }
-  return `${text.slice(0, MAX_OUTPUT_CHARS)}\n…[output truncated]`;
+  return `${text.slice(0, maxOutputChars)}\n…[output truncated]`;
 }
 
 function terminateProcess(child: ChildProcess, signal: NodeJS.Signals): void {
@@ -60,7 +60,13 @@ function terminateProcess(child: ChildProcess, signal: NodeJS.Signals): void {
   child.kill(signal);
 }
 
-function runProcess(plan: SpawnPlan, opts: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; signal?: AbortSignal }): Promise<ToolRunResult> {
+function runProcess(plan: SpawnPlan, opts: {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+  maxOutputChars: number;
+  signal?: AbortSignal;
+}): Promise<ToolRunResult> {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const spawnOptions: SpawnOptions = {
@@ -100,8 +106,8 @@ function runProcess(plan: SpawnPlan, opts: { cwd: string; env: NodeJS.ProcessEnv
         ok: !timedOut && code === 0,
         exitCode: code,
         signal,
-        stdout: cap(stdout),
-        stderr: cap(stderr),
+        stdout: cap(stdout, opts.maxOutputChars),
+        stderr: cap(stderr, opts.maxOutputChars),
         durationMs: Date.now() - started,
         timedOut,
         command: plan.label,
@@ -117,12 +123,12 @@ function runProcess(plan: SpawnPlan, opts: { cwd: string; env: NodeJS.ProcessEnv
     }, opts.timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer) => {
-      if (stdout.length < MAX_OUTPUT_CHARS) {
+      if (stdout.length < opts.maxOutputChars) {
         stdout += chunk.toString("utf8");
       }
     });
     child.stderr?.on("data", (chunk: Buffer) => {
-      if (stderr.length < MAX_OUTPUT_CHARS) {
+      if (stderr.length < opts.maxOutputChars) {
         stderr += chunk.toString("utf8");
       }
     });
@@ -168,6 +174,7 @@ export type ExecuteOptions = {
   cwd: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  maxOutputChars?: number;
   signal?: AbortSignal;
 };
 
@@ -179,6 +186,7 @@ export function executeShell(command: string, opts: ExecuteOptions): Promise<Too
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
       timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      maxOutputChars: opts.maxOutputChars ?? MAX_OUTPUT_CHARS,
       signal: opts.signal,
     },
   );
@@ -196,6 +204,7 @@ export function executeScript(repoRoot: string, scriptRef: string, opts: Execute
     cwd: opts.cwd,
     env: { ...process.env, ...opts.env },
     timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    maxOutputChars: opts.maxOutputChars ?? MAX_OUTPUT_CHARS,
     signal: opts.signal,
   });
 }

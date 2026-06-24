@@ -43,7 +43,7 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
     }
 
     if (report.import?.canonicalSource) {
-      console.log(`detected provider prose from ${report.import.canonicalSource}`);
+      console.log(`detected Codex prose from ${report.import.canonicalSource}`);
       if (report.import.foldedFrom.length > 0) {
         console.log(`  found novel sections in: ${report.import.foldedFrom.join(", ")}`);
       }
@@ -55,9 +55,9 @@ export async function runInit(repoRoot: string, options: InitCliOptions): Promis
       }
     }
     if (report.rules.length > 0) {
-      console.log(`imported ${report.rules.length} cursor rule(s)`);
+      console.log(`imported ${report.rules.length} rule(s)`);
     }
-    console.log(`compiled ${report.compiled.length} vendor file(s).`);
+    console.log(`compiled ${report.compiled.length} Codex file(s).`);
     if (report.nextSteps.length > 0) {
       console.log("next:");
       for (const step of report.nextSteps) {

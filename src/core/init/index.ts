@@ -34,13 +34,13 @@ export class InitError extends Error {
 export type InitOptions = {
   /** Re-initialize over an existing harness. */
   force?: boolean;
-  /** Skip importing existing vendor files (blank-slate init). */
+  /** Skip importing existing Codex AGENTS.md prose (blank-slate init). */
   import?: boolean;
-  /** Restrict the import to specific vendor files. */
+  /** Restrict the import to specific Codex-native files. */
   importFiles?: string[];
   /** Override the detected profile. */
   profile?: ProfileId;
-  /** Enable legacy compiled adapter outputs. Defaults to local-only. */
+  /** Enable Codex AGENTS.md compiled output. Defaults to local-only. */
   adapters?: AdapterId[];
   /** Write a visible root .gitignore entry instead of private .git/info/exclude. */
   gitignore?: boolean;
@@ -263,8 +263,8 @@ export async function initHarness(repoRoot: string, options: InitOptions = {}): 
         reason: "Find locally authenticated CLIs that can become safe Threadroot connections.",
       },
       {
-        command: "threadroot connect codex --refresh-skill",
-        reason: "Connect Codex to Threadroot MCP and refresh the global Threadroot skill.",
+        command: "threadroot codex install --refresh-skill",
+        reason: "Install Threadroot for Codex MCP and refresh the global Threadroot skill.",
       },
     ],
   };

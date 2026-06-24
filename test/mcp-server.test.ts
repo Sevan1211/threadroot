@@ -28,7 +28,7 @@ describe("mcp server handleMessage", () => {
       serverInfo: { name: "threadroot" },
       capabilities: { tools: { listChanged: false }, resources: { listChanged: false }, prompts: { listChanged: false } },
     });
-    expect(JSON.stringify(response?.result)).toContain("Call `task_packet` before broad coding work");
+    expect(JSON.stringify(response?.result)).toContain("Prefer `context_budget`/`task_packet` before broad coding work");
   });
 
   it("returns no response for notifications/initialized", async () => {
@@ -46,6 +46,7 @@ describe("mcp server handleMessage", () => {
     expect(names).toEqual(
       expect.arrayContaining([
         "task_packet",
+        "context_budget",
         "index_status",
         "refresh_context",
         "trace_context",
@@ -62,7 +63,9 @@ describe("mcp server handleMessage", () => {
         "loop_report",
         "loop_run",
         "loop_finish",
-        "providers_status",
+        "codex_status",
+        "score_latest",
+        "tune_latest",
         "repo_map",
         "repo_search",
         "repo_read",
@@ -90,6 +93,7 @@ describe("mcp server handleMessage", () => {
     expect(names).not.toContain("session_start");
     expect(names).not.toContain("context");
     expect(names).not.toContain("working_set");
+    expect(names).not.toContain("providers_status");
     for (const tool of tools) {
       expect(tool.inputSchema).toMatchObject({ type: "object" });
     }
@@ -97,6 +101,11 @@ describe("mcp server handleMessage", () => {
       title: "Compile Task Packet",
       outputSchema: { type: "object" },
       annotations: { readOnlyHint: true, openWorldHint: false },
+    });
+    expect(tools.find((tool) => tool.name === "context_budget")).toMatchObject({
+      title: "Context Budget",
+      outputSchema: { type: "object" },
+      annotations: { readOnlyHint: false, openWorldHint: false },
     });
     expect(tools.find((tool) => tool.name === "refresh_context")).toMatchObject({
       title: "Refresh Context",
@@ -225,6 +234,20 @@ describe("mcp server handleMessage", () => {
     expect(taskResult.structuredContent.files.find((file) => file.path === "src/billing.ts")?.symbols[0]?.name).toBe("retryInvoice");
     expect(taskResult.content.some((entry) => entry.type === "resource_link")).toBe(false);
 
+    const budget = await handleMessage(repo, {
+      jsonrpc: "2.0",
+      id: 246,
+      method: "tools/call",
+      params: { name: "context_budget", arguments: { task: "fix retryInvoice billing", budgetTokens: 1_500 } },
+    });
+    const budgetResult = budget?.result as {
+      content: Array<{ type: string; text: string }>;
+      structuredContent: { firstReads: string[]; paths: { prompt: string } };
+    };
+    expect(budgetResult.content[0]?.text).toContain("Codex preflight");
+    expect(budgetResult.structuredContent.firstReads).toContain("src/billing.ts");
+    expect(budgetResult.structuredContent.paths.prompt).toMatch(/^\.codex\/threadroot\/briefs\//u);
+
     const linkedTask = await handleMessage(repo, {
       jsonrpc: "2.0",
       id: 245,
@@ -241,8 +264,16 @@ describe("mcp server handleMessage", () => {
     const listed = await handleMessage(repo, { jsonrpc: "2.0", id: 242, method: "resources/list" });
     const listedResult = listed?.result as { resources: Array<{ uri: string }> };
     expect(listedResult.resources.map((resource) => resource.uri)).toEqual(
-      expect.arrayContaining(["threadroot://task/latest", "threadroot://index", "threadroot://providers"]),
+      expect.arrayContaining([
+        "threadroot://task/latest",
+        "threadroot://brief/latest",
+        "threadroot://score/latest",
+        "threadroot://tuning/latest",
+        "threadroot://index",
+        "threadroot://codex",
+      ]),
     );
+    expect(listedResult.resources.map((resource) => resource.uri)).not.toContain("threadroot://providers");
 
     const read = await handleMessage(repo, {
       jsonrpc: "2.0",
@@ -276,33 +307,35 @@ describe("mcp server handleMessage", () => {
     expect(result.structuredContent.searchAvailable).toBe(false);
   });
 
-  it("reports provider capabilities through MCP", async () => {
+  it("reports Codex capabilities through MCP", async () => {
     const response = await handleMessage(await tempRepo(), {
       jsonrpc: "2.0",
       id: 26,
       method: "tools/call",
-      params: { name: "providers_status", arguments: {} },
+      params: { name: "codex_status", arguments: {} },
     });
     const result = response?.result as {
       content: Array<{ type: string; text: string }>;
       structuredContent: {
-        providers: Array<{
+        codex: {
           id: string;
-          automation: { status: string };
-          mcp: { access: { mode: string; checkCommand?: string; smokeTools: string[] } };
-        }>;
+          defaultPlan: { command: string; args: string[] };
+          mcp: { checkCommand: string; smokeTools: string[] };
+        };
       };
     };
-    expect(result.content[0]?.text).toContain("Threadroot provider status");
-    expect(result.content[0]?.text).toContain("check: threadroot mcp check --json");
-    expect(result.structuredContent.providers.map((provider) => provider.id)).toEqual(
-      expect.arrayContaining(["codex", "claude", "cursor"]),
-    );
-    expect(result.structuredContent.providers.find((provider) => provider.id === "codex")?.mcp.access).toMatchObject({
-      mode: "threadroot-check",
+    expect(result.content[0]?.text).toContain("Threadroot Codex status");
+    expect(result.content[0]?.text).toContain("threadroot mcp check --json");
+    expect(result.structuredContent.codex).toMatchObject({
+      id: "codex",
+      defaultPlan: { command: "codex" },
+      mcp: {
+        smokeTools: expect.arrayContaining(["task_packet", "context_budget", "score_latest", "tune_latest", "codex_status"]),
+      },
+    });
+    expect(result.structuredContent.codex.mcp).toMatchObject({
       checkCommand: "threadroot mcp check --json",
     });
-    expect(result.structuredContent.providers.find((provider) => provider.id === "cursor")?.automation.status).toBe("mcp-first");
   });
 
   it("does not let MCP self-confirm risky tool execution", async () => {

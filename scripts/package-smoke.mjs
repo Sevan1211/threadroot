@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -44,7 +44,10 @@ function run(command, args, options = {}) {
 }
 
 function runThreadroot(bin, args, options = {}) {
-  return run(process.execPath, [bin, ...args], options);
+  if (process.platform === "win32") {
+    return run(process.execPath, [bin, ...args], options);
+  }
+  return run(bin, args, options);
 }
 
 function quotedNodeCommand(script) {
@@ -90,25 +93,35 @@ try {
   await writeFile(path.join(projectDir, "package.json"), '{"name":"threadroot-package-smoke"}\n', "utf8");
 
   const bin = path.join(packageDir, "dist", "index.js");
+  if (process.platform !== "win32") {
+    const mode = (await stat(bin)).mode;
+    if ((mode & 0o111) === 0) {
+      throw new Error(`Packed CLI bin is not executable: ${bin}`);
+    }
+  }
   await runThreadroot(bin, ["--version"], { cwd: projectDir });
   await runThreadroot(bin, ["init", "--no-import", "--profile", "node-cli"], { cwd: projectDir, env: { HOME: homeDir } });
-  await runThreadroot(bin, ["connect", "codex"], { cwd: projectDir, env: { HOME: homeDir } });
-  await runThreadroot(bin, ["providers"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["codex", "install"], { cwd: projectDir, env: { HOME: homeDir } });
+  await runThreadroot(bin, ["codex", "status"], { cwd: projectDir, env: { HOME: homeDir } });
   await runThreadroot(bin, ["connections", "discover", "--include-missing"], { cwd: projectDir, env: { HOME: homeDir } });
   await runThreadroot(bin, ["map", "--check"], { cwd: projectDir, env: { HOME: homeDir } });
   await runThreadroot(bin, ["task", "write tests"], { cwd: projectDir, env: { HOME: homeDir } });
-  const fakeAgent = path.join(projectDir, "fake-agent.mjs");
+  const fakeCodex = path.join(projectDir, "fake-codex.mjs");
   await writeFile(
-    fakeAgent,
+    fakeCodex,
     [
+      "#!/usr/bin/env node",
       "process.stdin.resume();",
       "process.stdin.setEncoding('utf8');",
       "process.stdin.on('data', () => {});",
-      "process.stdin.on('end', () => console.log(JSON.stringify({ ok: true })));",
+      "process.stdin.on('end', () => console.log(JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'package smoke', exit_code: 0 } })));",
     ].join("\n"),
     "utf8",
   );
-  await runThreadroot(bin, ["loop", "start", "package smoke loop", "--agent", "codex", "--max-iterations", "1"], {
+  if (process.platform !== "win32") {
+    await chmod(fakeCodex, 0o755);
+  }
+  await runThreadroot(bin, ["loop", "start", "package smoke loop", "--max-iterations", "1"], {
     cwd: projectDir,
     env: { HOME: homeDir },
   });
@@ -119,12 +132,8 @@ try {
       "run",
       "--iterations",
       "1",
-      "--agent-command",
-      process.execPath,
-      "--agent-arg",
-      fakeAgent,
-      "--agent-adapter",
-      "custom",
+      "--codex-bin",
+      fakeCodex,
       "--require",
       quotedNodeCommand("process.exit(0)"),
       "--no-write-candidates",

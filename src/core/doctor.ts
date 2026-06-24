@@ -82,16 +82,11 @@ async function mcpConfigHints(repoRoot: string, home?: string): Promise<DoctorFi
     ];
   }
 
-  const configs = [".vscode/mcp.json", ".cursor/mcp.json", ".mcp.json"];
-  const present = await Promise.all(configs.map((config) => exists(path.join(repoRoot, config))));
-  if (present.some(Boolean)) {
-    return [];
-  }
   return [
     finding(
       "info",
       "mcp_config_missing",
-      "No project-local MCP config found. This is fine for local-only harnesses; run `threadroot connect <agent>` for user/local provider setup.",
+      "No Codex Threadroot MCP config found. Run `threadroot codex install --refresh-skill`, then add the printed Codex MCP setup command if needed.",
     ),
   ];
 }
@@ -158,7 +153,7 @@ async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
       finding(
         "warning",
         "threadroot_not_ignored",
-        "`.threadroot/` is not ignored by git. For 0.2.1, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
+        "`.threadroot/` is not ignored by git. For 0.3.0, keep the harness local-only with `.threadroot/` in `.git/info/exclude` or `.gitignore`.",
         ".threadroot/",
       ),
     );
@@ -167,26 +162,16 @@ async function gitignoreHints(repoRoot: string): Promise<DoctorFinding[]> {
   return findings;
 }
 
-async function visibleProviderFileHints(repoRoot: string): Promise<DoctorFinding[]> {
-  const visibleProviderPaths = [
-    "AGENTS.md",
-    "CLAUDE.md",
-    ".codex",
-    ".claude",
-    ".agents",
-    ".cursor",
-    ".vscode",
-    ".github/copilot-instructions.md",
-    ".mcp.json",
-  ];
+async function visibleCodexFileHints(repoRoot: string): Promise<DoctorFinding[]> {
+  const codexPaths = ["AGENTS.md", ".codex", ".agents"];
   const findings: DoctorFinding[] = [];
-  for (const relativePath of visibleProviderPaths) {
+  for (const relativePath of codexPaths) {
     if (await exists(path.join(repoRoot, relativePath))) {
       findings.push(
         finding(
           "info",
-          "visible_provider_file_detected",
-          `Visible provider file or folder detected. Threadroot will not modify it unless explicitly asked: ${relativePath}`,
+          "visible_codex_file_detected",
+          `Visible Codex file or folder detected. Threadroot will not modify it unless explicitly asked: ${relativePath}`,
           relativePath,
         ),
       );
@@ -197,12 +182,15 @@ async function visibleProviderFileHints(repoRoot: string): Promise<DoctorFinding
 
 const STALE_THREADROOT_REFERENCES = [
   { pattern: /\bthreadroot\s+bootstrap\b/u, label: "threadroot bootstrap", replacement: "threadroot init" },
-  { pattern: /\bthreadroot\s+setup\b/u, label: "threadroot setup", replacement: "threadroot connect <agent>" },
+  { pattern: /\bthreadroot\s+setup\b/u, label: "threadroot setup", replacement: "threadroot codex install" },
   { pattern: /\bthreadroot\s+start\b/u, label: "threadroot start", replacement: "threadroot task \"<task>\"" },
   { pattern: /\bthreadroot\s+context\b/u, label: "threadroot context", replacement: "threadroot task \"<task>\"" },
   { pattern: /\bthreadroot\s+working-set\b/u, label: "threadroot working-set", replacement: "threadroot task \"<task>\"" },
-  { pattern: /\bthreadroot\s+expose\b/u, label: "threadroot expose", replacement: "threadroot connect <agent>" },
-  { pattern: /\bthreadroot\s+mcp\s+setup\b/u, label: "threadroot mcp setup", replacement: "threadroot connect <agent>" },
+  { pattern: /\bthreadroot\s+connect\b/u, label: "threadroot connect", replacement: "threadroot codex install" },
+  { pattern: /\bthreadroot\s+providers\b/u, label: "threadroot providers", replacement: "threadroot codex status" },
+  { pattern: /\bproviders_status\b/u, label: "providers_status", replacement: "codex_status" },
+  { pattern: /\bthreadroot\s+expose\b/u, label: "threadroot expose", replacement: "threadroot codex install" },
+  { pattern: /\bthreadroot\s+mcp\s+setup\b/u, label: "threadroot mcp setup", replacement: "threadroot codex install" },
   { pattern: /\bthreadroot\s+skills\s+expose\b/u, label: "threadroot skills expose", replacement: "threadroot skills inspect" },
   { pattern: /\btest\/mcp-setup\.test\.ts\b/u, label: "test/mcp-setup.test.ts", replacement: "test/mcp-check.test.ts" },
 ];
@@ -272,7 +260,7 @@ async function staleInstructionHints(repoRoot: string, home?: string): Promise<D
       finding(
         "warning",
         "stale_global_threadroot_skill",
-        `Installed Threadroot agent skill contains stale command references: ${stale.map((entry) => entry.label).join(", ")}. Run \`threadroot connect codex --refresh-skill\` and restart the agent session before judging provider integration.`,
+        `Installed Threadroot Codex skill contains stale command references: ${stale.map((entry) => entry.label).join(", ")}. Run \`threadroot codex install --refresh-skill\` and restart the Codex session before judging integration.`,
         globalSkillPath,
       ),
     );
@@ -613,7 +601,7 @@ export async function doctor(repoRoot: string, options: DoctorOptions = {}): Pro
   findings.push(...(await staleInstructionHints(repoRoot, options.home)));
   findings.push(...(await globalCliHints(options.home)));
   findings.push(...(await gitignoreHints(repoRoot)));
-  findings.push(...(await visibleProviderFileHints(repoRoot)));
+  findings.push(...(await visibleCodexFileHints(repoRoot)));
   findings.push(...(await mcpConfigHints(repoRoot, options.home)));
   return summarize(findings);
 }

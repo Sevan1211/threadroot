@@ -2,10 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { codexCommandPlan, codexTraceEvents, type CodexCommandPlan } from "./codex.js";
 import { findExecutable } from "./command-lookup.js";
 import { improveLatest, type ApplyImprovementReport, type ImprovementReport } from "./improve.js";
 import { projectHarnessDir } from "./harness/paths.js";
-import { providerCommandPlan, providerTraceEvents, type ProviderCommandPlan } from "./provider-adapters.js";
 import { compressRunOutput, type OutputCompression } from "./run-brief.js";
 import { runTraceEvals, type TraceEvalReport } from "./trace-evals.js";
 import { activeTrace, appendTraceEventIfActive, finishTrace, latestTrace, startTrace, type TraceReceipt } from "./trace.js";
@@ -34,7 +34,6 @@ export type LoopSession = {
 };
 
 export type StartLoopOptions = {
-  agent?: string;
   timeMinutes?: number;
   maxIterations?: number;
   risk?: LoopRisk;
@@ -55,9 +54,7 @@ export type LoopReport = {
 
 export type LoopRunOptions = {
   iterations?: number;
-  agentCommand?: string;
-  agentArgs?: string[];
-  agentAdapter?: ProviderCommandPlan["adapter"];
+  codexBin?: string;
   timeoutMs?: number;
   requiredCommands?: string[];
   verificationTimeoutMs?: number;
@@ -80,8 +77,8 @@ export type LoopVerificationResult = {
 export type LoopRunIteration = {
   iteration: number;
   traceRunId: string;
-  provider: {
-    adapter: ProviderCommandPlan["adapter"];
+  codex: {
+    runner: CodexCommandPlan["runner"];
     command: string;
     args: string[];
     exitCode: number | null;
@@ -103,7 +100,7 @@ export type LoopRunIteration = {
 export type LoopRunReport = {
   session: LoopSession;
   iterations: LoopRunIteration[];
-  stoppedReason: "iteration-budget" | "time-budget" | "provider-failed" | "verification-failed" | "completed";
+  stoppedReason: "iteration-budget" | "time-budget" | "codex-failed" | "verification-failed" | "completed";
   reportPath?: string;
   finalReportPath?: string;
 };
@@ -178,7 +175,7 @@ export async function startLoop(repoRoot: string, goal: string, options: StartLo
     schemaVersion: 1,
     sessionId: `${startedAt.replace(/[:.]/g, "-")}-${slug(goal)}`,
     goal,
-    agent: options.agent ?? "codex",
+    agent: "codex",
     risk: options.risk ?? "low",
     startedAt,
     deadlineAt,
@@ -210,7 +207,7 @@ function generatePrompt(session: LoopSession, trace: TraceReceipt, previous?: Tr
     `You are iteration ${session.iteration + 1} of a Threadroot loop session.`,
     "",
     `Goal: ${session.goal}`,
-    `Agent: ${session.agent}`,
+    "Runner: Codex",
     `Risk budget: ${session.risk}`,
     `Time remaining: ${timeRemaining(session)}`,
     `Iteration budget: ${session.iteration + 1}/${session.maxIterations}`,
@@ -241,7 +238,7 @@ function promptWithVerification(prompt: string, requiredCommands: string[]): str
     "Required verification commands for this automated loop iteration:",
     ...requiredCommands.map((command) => `- ${command}`),
     "",
-    "Threadroot will run these commands after the provider step and use their results to determine the trace status.",
+    "Threadroot will run these commands after the Codex step and use their results to determine the trace status.",
   ].join("\n");
 }
 
@@ -316,24 +313,24 @@ export async function finishLoop(repoRoot: string, status: Exclude<LoopStatus, "
   return updated;
 }
 
-async function runProviderPrompt(input: {
+async function runCodexPrompt(input: {
   repoRoot: string;
   session: LoopSession;
   iteration: number;
   prompt: string;
-  plan: ProviderCommandPlan;
+  plan: CodexCommandPlan;
   timeoutMs: number;
-}): Promise<LoopRunIteration["provider"]> {
+}): Promise<LoopRunIteration["codex"]> {
   const started = Date.now();
-  const outputPath = path.join(sessionDir(input.repoRoot, input.session.sessionId), `agent-output-${input.iteration}.log`);
+  const outputPath = path.join(sessionDir(input.repoRoot, input.session.sessionId), `codex-output-${input.iteration}.log`);
   const resolvedCommand = await findExecutable(input.plan.command);
   if (!resolvedCommand) {
     const artifacts = await writeOutputArtifacts(
       outputPath,
-      `[threadroot] Provider command is not executable or not on PATH: ${input.plan.command}\n`,
+      `[threadroot] Codex command is not executable or not on PATH: ${input.plan.command}\n`,
     );
     return {
-      adapter: input.plan.adapter,
+      runner: input.plan.runner,
       command: input.plan.command,
       args: input.plan.args,
       exitCode: null,
@@ -363,10 +360,10 @@ async function runProviderPrompt(input: {
         settled = true;
         const artifacts = await writeOutputArtifacts(
           outputPath,
-          [stdout, stderr, `[threadroot] Provider command timed out after ${input.timeoutMs}ms.`].filter(Boolean).join("\n"),
+          [stdout, stderr, `[threadroot] Codex command timed out after ${input.timeoutMs}ms.`].filter(Boolean).join("\n"),
         );
         resolve({
-          adapter: input.plan.adapter,
+          runner: input.plan.runner,
           command: resolvedCommand,
           args: input.plan.args,
           exitCode: null,
@@ -395,10 +392,10 @@ async function runProviderPrompt(input: {
       try {
         const artifacts = await writeOutputArtifacts(
           outputPath,
-          [stdout, stderr, `[threadroot] Failed to start provider command ${resolvedCommand}: ${error.message}`].filter(Boolean).join("\n"),
+          [stdout, stderr, `[threadroot] Failed to start Codex command ${resolvedCommand}: ${error.message}`].filter(Boolean).join("\n"),
         );
         resolve({
-          adapter: input.plan.adapter,
+          runner: input.plan.runner,
           command: resolvedCommand,
           args: input.plan.args,
           exitCode: null,
@@ -419,12 +416,12 @@ async function runProviderPrompt(input: {
       if (forceTimer) clearTimeout(forceTimer);
       const artifacts = await writeOutputArtifacts(
         outputPath,
-        [stdout, stderr, timedOut ? `[threadroot] Provider command timed out after ${input.timeoutMs}ms.` : undefined]
+        [stdout, stderr, timedOut ? `[threadroot] Codex command timed out after ${input.timeoutMs}ms.` : undefined]
           .filter(Boolean)
           .join("\n"),
       );
       resolve({
-        adapter: input.plan.adapter,
+        runner: input.plan.runner,
         command: resolvedCommand,
         args: input.plan.args,
         exitCode,
@@ -457,22 +454,22 @@ function terminateChild(child: ChildProcessWithoutNullStreams): void {
   child.kill("SIGTERM");
 }
 
-async function captureProviderTraceEvents(repoRoot: string, provider: LoopRunIteration["provider"]): Promise<LoopRunIteration["provider"]> {
-  const output = await readFile(provider.outputPath, "utf8").catch(() => "");
-  const events = providerTraceEvents(
+async function captureCodexTraceEvents(repoRoot: string, codex: LoopRunIteration["codex"]): Promise<LoopRunIteration["codex"]> {
+  const output = await readFile(codex.outputPath, "utf8").catch(() => "");
+  const events = codexTraceEvents(
     {
-      adapter: provider.adapter,
-      command: provider.command,
-      args: provider.args,
+      runner: codex.runner,
+      command: codex.command,
+      args: codex.args,
       promptViaStdin: true,
-      outputFormat: provider.adapter === "custom" ? "text" : "jsonl",
+      outputFormat: "jsonl",
     },
     output,
   );
   for (const event of events) {
     await appendTraceEventIfActive(repoRoot, event);
   }
-  return { ...provider, eventsCaptured: events.length };
+  return { ...codex, eventsCaptured: events.length };
 }
 
 async function runVerificationCommands(
@@ -526,14 +523,14 @@ function markdownLoopReport(report: LoopRunReport): string {
     lines.push(`## Iteration ${iteration.iteration}`, "");
     lines.push(`Trace: ${iteration.traceRunId}`);
     lines.push(
-      `Provider: ${iteration.provider.adapter} ${iteration.provider.ok ? "passed" : "failed"} exit ${iteration.provider.exitCode ?? "unknown"} (${iteration.provider.durationMs}ms)`,
+      `Codex: ${iteration.codex.runner} ${iteration.codex.ok ? "passed" : "failed"} exit ${iteration.codex.exitCode ?? "unknown"} (${iteration.codex.durationMs}ms)`,
     );
-    lines.push(`Provider output: ${iteration.provider.outputPath}`);
-    lines.push(`Provider compact output: ${iteration.provider.compactOutputPath}`);
+    lines.push(`Codex output: ${iteration.codex.outputPath}`);
+    lines.push(`Codex compact output: ${iteration.codex.compactOutputPath}`);
     lines.push(
-      `Provider compression: saved ~${iteration.provider.compression.estimatedTokensSaved} token(s), ratio ${iteration.provider.compression.compressionRatio}`,
+      `Codex compression: saved ~${iteration.codex.compression.estimatedTokensSaved} token(s), ratio ${iteration.codex.compression.compressionRatio}`,
     );
-    lines.push(`Provider events captured: ${iteration.provider.eventsCaptured}`);
+    lines.push(`Codex events captured: ${iteration.codex.eventsCaptured}`);
     if (iteration.verification.length > 0) {
       lines.push("", "Verification:");
       for (const check of iteration.verification) {
@@ -589,15 +586,11 @@ export async function runLoop(repoRoot: string, options: LoopRunOptions = {}): P
     }
     const next = await nextLoop(repoRoot);
     const prompt = promptWithVerification(next.prompt, requiredCommands);
-    const plan = providerCommandPlan({
-      agent: next.session.agent,
+    const plan = codexCommandPlan({
       repoRoot,
-      prompt,
-      agentCommand: options.agentCommand,
-      agentArgs: options.agentArgs,
-      agentAdapter: options.agentAdapter,
+      codexBin: options.codexBin,
     });
-    let provider = await runProviderPrompt({
+    let codex = await runCodexPrompt({
       repoRoot,
       session: next.session,
       iteration: next.session.iteration,
@@ -605,25 +598,25 @@ export async function runLoop(repoRoot: string, options: LoopRunOptions = {}): P
       plan,
       timeoutMs: options.timeoutMs ?? 60 * 60_000,
     });
-    provider = await captureProviderTraceEvents(repoRoot, provider);
+    codex = await captureCodexTraceEvents(repoRoot, codex);
     await appendTraceEventIfActive(repoRoot, {
       type: "command",
-      command: [provider.command, ...provider.args].join(" "),
-      exitCode: provider.exitCode,
-      ok: provider.ok,
-      durationMs: provider.durationMs,
-      message: provider.ok
-        ? "Provider command completed."
-        : provider.timedOut
-          ? "Provider command timed out."
-          : "Provider command failed.",
+      command: [codex.command, ...codex.args].join(" "),
+      exitCode: codex.exitCode,
+      ok: codex.ok,
+      durationMs: codex.durationMs,
+      message: codex.ok
+        ? "Codex command completed."
+        : codex.timedOut
+          ? "Codex command timed out."
+          : "Codex command failed.",
       data: {
-        outputPath: provider.outputPath,
-        compactOutputPath: provider.compactOutputPath,
-        compression: provider.compression,
+        outputPath: codex.outputPath,
+        compactOutputPath: codex.compactOutputPath,
+        compression: codex.compression,
       },
     });
-    const verification = provider.ok
+    const verification = codex.ok
       ? await runVerificationCommands(repoRoot, next.session, next.session.iteration, requiredCommands, options.verificationTimeoutMs ?? 120_000)
       : [];
     const verificationOk = verification.every((entry) => entry.ok);
@@ -631,14 +624,14 @@ export async function runLoop(repoRoot: string, options: LoopRunOptions = {}): P
     if (active?.runId === next.trace.runId) {
       await finishTrace(
         repoRoot,
-        provider.ok && verificationOk ? (verification.length > 0 ? "passed" : "partial") : "failed",
-        provider.ok
+        codex.ok && verificationOk ? (verification.length > 0 ? "passed" : "partial") : "failed",
+        codex.ok
           ? verificationOk
             ? verification.length > 0
-              ? "Provider and required verification completed."
-              : "Provider run completed; pending verification and candidate review."
+              ? "Codex and required verification completed."
+              : "Codex run completed; pending verification and candidate review."
             : "Required verification failed."
-          : "Provider command failed.",
+          : "Codex command failed.",
       );
     }
     const traceEval = await runTraceEvals(repoRoot, { latest: true });
@@ -651,14 +644,14 @@ export async function runLoop(repoRoot: string, options: LoopRunOptions = {}): P
     iterations.push({
       iteration: next.session.iteration,
       traceRunId: next.trace.runId,
-      provider,
+      codex,
       verification,
       traceEval,
       improvements,
       appliedImprovements,
     });
-    if (!provider.ok) {
-      stoppedReason = "provider-failed";
+    if (!codex.ok) {
+      stoppedReason = "codex-failed";
       break;
     }
     if (!verificationOk) {

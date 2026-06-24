@@ -17,8 +17,8 @@ export type ObjectScope = z.infer<typeof objectScopeSchema>;
 export const riskLevelSchema = z.enum(["low", "medium", "high"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
-/** Optional compile targets enabled for a repo (spec §6). Empty means local-only. */
-export const adapterIdSchema = z.enum(["agents", "claude", "copilot", "cursor"]);
+/** Optional Codex-native compile targets enabled for a repo. Empty means local-only. */
+export const adapterIdSchema = z.enum(["agents"]);
 export type AdapterId = z.infer<typeof adapterIdSchema>;
 
 /** Project-level automation mode for agent-created capabilities. */

@@ -323,12 +323,7 @@ async function detectSkillCandidates(sourceRoot: string, repoName: string, expli
   for (const base of [
     "skills",
     ".agents/skills",
-    ".claude/skills",
-    ".cursor/skills",
     ".github/skills",
-    ".gemini/skills",
-    ".windsurf/skills",
-    ".opencode/skills",
     ".agent/skills",
   ]) {
     const full = path.join(sourceRoot, base);
@@ -537,12 +532,7 @@ function likelySkillObjectPaths(skillName: string, repoName: string): string[] {
     path.posix.join(repoName, skillName),
     path.posix.join("skills", skillName),
     path.posix.join(".agents/skills", skillName),
-    path.posix.join(".claude/skills", skillName),
-    path.posix.join(".cursor/skills", skillName),
     path.posix.join(".github/skills", skillName),
-    path.posix.join(".gemini/skills", skillName),
-    path.posix.join(".windsurf/skills", skillName),
-    path.posix.join(".opencode/skills", skillName),
     path.posix.join(".agent/skills", skillName),
   ];
 }
