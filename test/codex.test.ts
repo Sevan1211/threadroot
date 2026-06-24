@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { codexCommandPlan, codexStatus, codexTraceEvents, installCodex } from "../src/core/codex.js";
+import { codexCommandPlan, codexStatus, installCodex } from "../src/core/codex.js";
 import { initHarness } from "../src/core/init/index.js";
 
 let repo: string;
@@ -43,14 +43,14 @@ describe("Codex integration", () => {
     const report = await installCodex(repo);
 
     expect(report.status).toBe("written");
-    await expect(readFile(path.join(repo, ".threadroot/codex/install.json"), "utf8")).resolves.toContain(
+    await expect(readFile(path.join(repo, ".codex/threadroot/install.json"), "utf8")).resolves.toContain(
       "codex mcp add threadroot",
     );
 
-    await expect(exists("AGENTS.md")).resolves.toBe(false);
-    await expect(exists(".codex")).resolves.toBe(false);
+    await expect(exists("AGENTS.md")).resolves.toBe(true);
+    await expect(exists(".codex/threadroot/init.json")).resolves.toBe(true);
     await expect(exists(".agents/skills/threadroot/SKILL.md")).resolves.toBe(false);
-    await expect(exists(".threadroot/providers/codex/connection.json")).resolves.toBe(false);
+    await expect(exists(".threadroot")).resolves.toBe(false);
   });
 
   it("refreshes the global Codex skill only when explicitly requested", async () => {
@@ -63,8 +63,9 @@ describe("Codex integration", () => {
     const skill = await readFile(path.join(repo, ".agents", "skills", "threadroot", "SKILL.md"), "utf8");
     expect(skill).toContain("threadroot codex status --json");
     expect(skill).toContain("threadroot codex doctor --json");
-    expect(skill).toContain("threadroot task \"<task>\" --json");
-    expect(skill).toContain("MCP `task_packet`");
+    expect(skill).toContain("threadroot prep \"<task>\" --json");
+    expect(skill).toContain("MCP `context_budget`");
+    expect(skill).not.toContain("threadroot task");
     expect(skill).not.toContain("threadroot providers");
     expect(skill).not.toContain("providers_status");
     expect(skill).not.toContain("threadroot connect");
@@ -79,24 +80,4 @@ describe("Codex integration", () => {
     expect(status.mcp.smokeTools).toContain("codex_status");
   });
 
-  it("extracts Codex JSONL command, file, and MCP tool events into trace events", () => {
-    const plan = codexCommandPlan({ repoRoot: "/repo" });
-    const events = codexTraceEvents(
-      plan,
-      [
-        JSON.stringify({ type: "item.started", item: { type: "command_execution", command: "npm test", status: "in_progress" } }),
-        JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test", exit_code: 0 } }),
-        JSON.stringify({ type: "item.completed", item: { type: "file_change", path: "src/index.ts" } }),
-        JSON.stringify({ type: "item.completed", item: { type: "mcp_tool_call", name: "task_packet", status: "completed" } }),
-      ].join("\n"),
-    );
-
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "command", command: "npm test", ok: true }),
-        expect.objectContaining({ type: "edit_file", path: "src/index.ts" }),
-        expect.objectContaining({ type: "run_tool", tool: "task_packet" }),
-      ]),
-    );
-  });
 });

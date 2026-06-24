@@ -12,8 +12,12 @@ No unreleased changes yet.
 
 ### Changed
 
-- MCP `task_packet` now falls back to a Codex preflight brief when a repository has no `.threadroot/harness.yaml`, allowing Codex MCP smoke checks and tools to operate from `.codex/threadroot/` state after migration.
-- `.codex/threadroot/` is ignored as local optimizer state so generated briefs, runs, scores, and tuning artifacts stay out of release commits.
+- `threadroot init` is now a Codex-native adoption command: it creates or updates compact root `AGENTS.md` guidance, writes `.codex/threadroot/init.json`, adds `.codex/threadroot/` to `.gitignore`, and never creates `.threadroot/`.
+- `threadroot init --force` removes legacy `.threadroot/` state before migrating a project to `.codex/threadroot/`.
+- `threadroot codex install` now writes its local receipt to `.codex/threadroot/install.json`; `--refresh-skill` still writes the global Codex skill to `$HOME/.agents/skills/threadroot/`, which is Codex's documented global skill location.
+- The public CLI is now limited to the Codex optimizer surface: `init`, `prep`, `codex run/install/status/doctor`, `score latest`, `tune latest`, `eval codex`, and `mcp`.
+- MCP now exposes only optimizer-focused tools/resources: `task_packet`, `context_budget`, `repo_search`, `repo_read`, `score_latest`, `trace_latest`, `tune_latest`, `codex_status`, and the `.codex/threadroot` resources.
+- Removed stale standalone docs, legacy harness tests, unused provider/tool/skill/loop/indexer source modules, and old SQLite/YAML build dependencies from the release surface.
 
 ## 0.3.0 - Codex/OpenAI-only rewrite
 

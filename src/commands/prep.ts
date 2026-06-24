@@ -56,7 +56,7 @@ export async function runPrep(repoRoot: string, task: string, options: PrepCliOp
   console.log(`mode: ${brief.mode}`);
   console.log(`memory: ${brief.memory.profile}`);
   console.log(`prompt tokens: ${brief.promptTokenEstimate}/${brief.budget.hardCapTokens}`);
-  console.log(`legacy packet tokens: ${brief.packetTokenEstimate}`);
+  console.log(`local scan estimate tokens: ${brief.packetTokenEstimate}`);
   console.log(`brief: ${brief.paths.brief}`);
   console.log(`prompt: ${brief.paths.prompt}`);
   if (brief.firstReads.length > 0) {

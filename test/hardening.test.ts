@@ -12,8 +12,8 @@ async function tempRepo(): Promise<string> {
 describe("toRepoPath containment", () => {
   it("resolves a valid relative path inside the repo", async () => {
     const repo = await tempRepo();
-    const resolved = toRepoPath(repo, ".threadroot/harness.yaml");
-    expect(resolved).toBe(path.join(path.resolve(repo), ".threadroot/harness.yaml"));
+    const resolved = toRepoPath(repo, ".codex/threadroot/init.json");
+    expect(resolved).toBe(path.join(path.resolve(repo), ".codex/threadroot/init.json"));
   });
 
   it("rejects parent-directory traversal", async () => {

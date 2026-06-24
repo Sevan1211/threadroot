@@ -12,9 +12,6 @@ import {
   readCodexStateJson,
   writeCodexStateJson,
 } from "./codex-state.js";
-import { runContextEvals, type ContextEvalReport } from "./context-evals.js";
-import { compressRunOutput, type OutputCompression } from "./run-brief.js";
-import { executeShell, type ToolRunResult } from "./tools/execute.js";
 
 export type CodexOptimizerMode = "cheap" | "balanced" | "deep";
 export type MemoryProfile = "standard" | "conservative" | "tiny";
@@ -226,18 +223,31 @@ export type TuneReport = {
 export type CodexEvalReport = {
   schemaVersion: 1;
   createdAt: string;
-  baseline: ContextEvalReport;
+  baseline: {
+    schemaVersion: 1;
+    createdAt: string;
+    cases: Array<{
+      id: string;
+      task: string;
+      tokenEstimate: number;
+      rawPrompt: string;
+    }>;
+    summary: {
+      cases: number;
+      averageTokens: number;
+    };
+  };
   optimizer: {
     cases: number;
     averagePrepPromptTokens: number;
-    averageLegacyPacketTokens: number;
+    averageRawPromptTokens: number;
     estimatedTokenReduction: number;
     estimatedTokenReductionRatio: number;
   };
   cases: Array<{
     id: string;
     task: string;
-    legacyPacketTokens: number;
+    rawPromptTokens: number;
     prepPromptTokens: number;
     reduction: number;
     firstReads: string[];
@@ -248,6 +258,13 @@ const MAX_PROMPT_FAILURE_CHARS = 3_000;
 const MAX_JSONL_EVENT_CHARS = 512_000;
 const STREAM_SAMPLE_HEAD_CHARS = 8_000;
 const STREAM_SAMPLE_TAIL_CHARS = 64_000;
+const DEFAULT_VERIFY_TIMEOUT_MS = 120_000;
+const MAX_SHELL_OUTPUT_CHARS = 1_000_000;
+const KILL_GRACE_MS = 2_000;
+
+const PATH_PATTERN = /((?:src|test|tests|app|lib|packages|docs|scripts)[\\/][^\s:()]+):(\d+)(?::\d+)?/;
+const FAILURE_PATTERN = /\b(error|failed|failure|fail|exception|assertion|timeout|timed out|traceback|panic)\b/iu;
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
 
 type MemoryProfileConfig = {
   targetTokens: number;
@@ -256,6 +273,41 @@ type MemoryProfileConfig = {
   maxIndexFiles: number;
   maxScannedBytes: number;
   verificationOutputChars: number;
+};
+
+type RunFailure = {
+  path?: string;
+  line?: number;
+  message: string;
+};
+
+export type OutputCompression = {
+  rawChars: number;
+  rawLines: number;
+  compactChars: number;
+  compactLines: number;
+  estimatedRawTokens: number;
+  estimatedCompactTokens: number;
+  estimatedTokensSaved: number;
+  compressionRatio: number;
+  pruners: string[];
+  preservedSignals: number;
+};
+
+type CompactRunOutput = {
+  text: string;
+  compression: OutputCompression;
+};
+
+type ShellRunResult = {
+  ok: boolean;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  timedOut: boolean;
+  command: string;
 };
 
 const MEMORY_PROFILES: Record<MemoryProfile, MemoryProfileConfig> = {
@@ -313,6 +365,211 @@ type PrepPacket = {
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_PATTERN, "");
+}
+
+function capOutput(text: string, maxOutputChars: number): string {
+  if (text.length <= maxOutputChars) {
+    return text;
+  }
+  return `${text.slice(0, maxOutputChars)}\n[threadroot: output truncated]`;
+}
+
+function terminateProcess(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (process.platform === "win32" && child.pid) {
+    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" }).on("error", () => {
+      child.kill(signal);
+    });
+    return;
+  }
+  child.kill(signal);
+}
+
+function executeShell(command: string, opts: { cwd: string; timeoutMs?: number; maxOutputChars?: number }): Promise<ShellRunResult> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const child = spawn(command, {
+      cwd: opts.cwd,
+      env: process.env,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    let forceResolveTimer: NodeJS.Timeout | undefined;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_VERIFY_TIMEOUT_MS;
+    const maxOutputChars = opts.maxOutputChars ?? MAX_SHELL_OUTPUT_CHARS;
+
+    const complete = (exitCode: number | null, signal: NodeJS.Signals | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (forceResolveTimer) {
+        clearTimeout(forceResolveTimer);
+      }
+      resolve({
+        ok: !timedOut && exitCode === 0,
+        exitCode,
+        signal,
+        stdout: capOutput(stdout, maxOutputChars),
+        stderr: capOutput(stderr, maxOutputChars),
+        durationMs: Date.now() - started,
+        timedOut,
+        command,
+      });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminateProcess(child, "SIGTERM");
+      setTimeout(() => terminateProcess(child, "SIGKILL"), KILL_GRACE_MS).unref();
+      forceResolveTimer = setTimeout(() => complete(null, "SIGKILL"), KILL_GRACE_MS + 500);
+      forceResolveTimer.unref();
+    }, timeoutMs);
+
+    child.stdout?.on("data", (chunk: Buffer) => {
+      if (stdout.length < maxOutputChars) {
+        stdout += chunk.toString("utf8");
+      }
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (stderr.length < maxOutputChars) {
+        stderr += chunk.toString("utf8");
+      }
+    });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (forceResolveTimer) {
+        clearTimeout(forceResolveTimer);
+      }
+      reject(new Error(`Failed to start verification command \`${command}\`: ${error.message}`));
+    });
+    child.on("close", (exitCode, signal) => {
+      complete(exitCode, signal);
+    });
+  });
+}
+
+function parseRunFailures(output: string): RunFailure[] {
+  const failures: RunFailure[] = [];
+  const lines = stripAnsi(output).split(/\r?\n/);
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const isFailure = FAILURE_PATTERN.test(trimmed) || PATH_PATTERN.test(trimmed);
+    if (!isFailure) {
+      continue;
+    }
+    const match = trimmed.match(PATH_PATTERN);
+    const key = `${match?.[1] ?? ""}:${match?.[2] ?? ""}:${trimmed.slice(0, 180)}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    failures.push({
+      path: match?.[1]?.replace(/\\/g, "/"),
+      line: match?.[2] ? Number(match[2]) : undefined,
+      message: trimmed.slice(0, 320),
+    });
+    if (failures.length >= 12) {
+      break;
+    }
+  }
+  return failures;
+}
+
+function repeatedLineSignals(lines: string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.length > 240) {
+      continue;
+    }
+    counts.set(line, (counts.get(line) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 4)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([line, count]) => `- x${count} ${line}`);
+}
+
+function interestingTail(lines: string[]): string[] {
+  const interesting = lines
+    .map((line) => line.trim())
+    .filter((line) => line && (FAILURE_PATTERN.test(line) || PATH_PATTERN.test(line)))
+    .slice(-16);
+  if (interesting.length > 0) {
+    return interesting;
+  }
+  return lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-16);
+}
+
+function compressRunOutput(output: string, failures = parseRunFailures(output)): CompactRunOutput {
+  const normalized = stripAnsi(output).replace(/\r\n/g, "\n").trim();
+  const lines = normalized ? normalized.split("\n") : [];
+  const repeated = repeatedLineSignals(lines);
+  const pruners: string[] = [];
+  if (repeated.length > 0) {
+    pruners.push("repeated-lines");
+  }
+  if (failures.length > 0) {
+    pruners.push("failure-signals");
+  }
+  if (lines.length > 30 || normalized.length > 4_000) {
+    pruners.push("tail-window");
+  }
+
+  const sections = ["Threadroot compact run output"];
+  if (failures.length > 0) {
+    sections.push("", "Failure signals:");
+    for (const failure of failures) {
+      const location = failure.path ? `${failure.path}${failure.line ? `:${failure.line}` : ""}: ` : "";
+      sections.push(`- ${location}${failure.message}`);
+    }
+  }
+  if (repeated.length > 0) {
+    sections.push("", "Repeated output:", ...repeated);
+  }
+  if (normalized) {
+    const tail = interestingTail(lines);
+    sections.push("", tail.length < lines.length ? "Relevant tail:" : "Output:", ...tail.map((line) => `  ${line.slice(0, 500)}`));
+  } else {
+    sections.push("", "Output: <empty>");
+  }
+  sections.push("", "Full raw output is preserved in the paired .log file.");
+
+  const text = `${sections.join("\n")}\n`;
+  const estimatedRawTokens = estimateTokens(normalized);
+  const estimatedCompactTokens = estimateTokens(text);
+  return {
+    text,
+    compression: {
+      rawChars: normalized.length,
+      rawLines: lines.length,
+      compactChars: text.length,
+      compactLines: text.split("\n").length,
+      estimatedRawTokens,
+      estimatedCompactTokens,
+      estimatedTokensSaved: Math.max(0, estimatedRawTokens - estimatedCompactTokens),
+      compressionRatio: normalized.length > 0 ? Number((text.length / normalized.length).toFixed(3)) : 1,
+      pruners,
+      preservedSignals: failures.length + repeated.length,
+    },
+  };
 }
 
 function slug(value: string): string {
@@ -1268,7 +1525,7 @@ async function runVerification(
   const results: CodexVerificationResult[] = [];
   for (let index = 0; index < commands.length; index += 1) {
     const command = commands[index]!;
-    const result: ToolRunResult = await executeShell(command, { cwd: repoRoot, timeoutMs, maxOutputChars });
+    const result = await executeShell(command, { cwd: repoRoot, timeoutMs, maxOutputChars });
     const artifacts = await writeOutputPair(
       codexThreadrootPath(repoRoot, "runs", runId, `verify-attempt-${attempt}-${index + 1}`),
       [result.stdout, result.stderr].filter(Boolean).join("\n"),
@@ -1624,35 +1881,115 @@ export async function tuneLatest(repoRoot: string): Promise<TuneReport> {
   return report;
 }
 
+async function discoverCodexEvalCases(repoRoot: string): Promise<Array<{ id: string; task: string }>> {
+  const packageJson = await readPackageJson(repoRoot);
+  const scripts = packageJson.scripts ?? {};
+  const files = await listRepoFiles(repoRoot, 400);
+  const cases: Array<{ id: string; task: string }> = [];
+  const add = (id: string, task: string): void => {
+    if (!cases.some((entry) => entry.id === id)) {
+      cases.push({ id, task });
+    }
+  };
+
+  add("codex-preflight", "improve Codex preflight context while reducing prompt tokens");
+  if (scripts.test) {
+    add("test-failure", "fix a failing test with the smallest verified change");
+  }
+  if (scripts.typecheck) {
+    add("typecheck", "fix a TypeScript typecheck failure without broad refactors");
+  }
+  if (scripts.lint) {
+    add("lint", "fix a lint failure and keep the patch minimal");
+  }
+  if (files.some((file) => file === "AGENTS.md" || file.endsWith("/AGENTS.md"))) {
+    add("agents-guidance", "tighten AGENTS.md instructions for Codex without adding noisy context");
+  }
+  if (files.some((file) => file.includes("mcp") || file.includes("codex"))) {
+    add("codex-mcp", "verify Codex MCP tools expose only high-value context optimizer surfaces");
+  }
+  if (files.some((file) => isTestPath(file))) {
+    add("optimizer-score", "improve score latest metrics for tokens-to-green and context waste");
+  }
+
+  return cases.slice(0, 8);
+}
+
+async function buildRawCodexPrompt(repoRoot: string, task: string): Promise<string> {
+  const files = await listRepoFiles(repoRoot, 200);
+  const packageJson = await readPackageJson(repoRoot);
+  const scripts = Object.keys(packageJson.scripts ?? {}).slice(0, 12);
+  const snippets = await Promise.all(
+    files.slice(0, 20).map(async (file) => {
+      const text = await readRepoText(repoRoot, file, 800);
+      return [`--- ${file} ---`, text.slice(0, 800)].join("\n");
+    }),
+  );
+  return [
+    "You are Codex. Work in this repository and complete the task.",
+    "",
+    `Task: ${task}`,
+    "",
+    scripts.length > 0 ? `Available package scripts: ${scripts.join(", ")}` : "",
+    "",
+    "Repository files:",
+    ...files.slice(0, 80).map((file) => `- ${file}`),
+    "",
+    "Common raw context dump:",
+    ...snippets,
+    "",
+    "Find the right files, make the change, and run relevant verification.",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
 export async function runCodexOptimizerEval(repoRoot: string): Promise<CodexEvalReport> {
-  const baseline = await runContextEvals(repoRoot);
+  const discoveredCases = await discoverCodexEvalCases(repoRoot);
+  const baselineCases = [];
   const cases = [];
-  for (const entry of baseline.cases) {
+  for (const entry of discoveredCases) {
+    const rawPrompt = await buildRawCodexPrompt(repoRoot, entry.task);
+    const rawPromptTokens = estimateTokens(rawPrompt);
+    baselineCases.push({
+      id: entry.id,
+      task: entry.task,
+      tokenEstimate: rawPromptTokens,
+      rawPrompt,
+    });
     const prep = await createPrepBrief(repoRoot, entry.task, { memoryProfile: "conservative" });
     cases.push({
       id: entry.id,
       task: entry.task,
-      legacyPacketTokens: entry.tokenEstimate,
+      rawPromptTokens,
       prepPromptTokens: prep.promptTokenEstimate,
-      reduction: Math.max(0, entry.tokenEstimate - prep.promptTokenEstimate),
+      reduction: Math.max(0, rawPromptTokens - prep.promptTokenEstimate),
       firstReads: prep.firstReads,
     });
   }
-  const averageLegacyPacketTokens =
-    cases.length === 0 ? 0 : cases.reduce((sum, entry) => sum + entry.legacyPacketTokens, 0) / cases.length;
+  const averageRawPromptTokens = cases.length === 0 ? 0 : cases.reduce((sum, entry) => sum + entry.rawPromptTokens, 0) / cases.length;
   const averagePrepPromptTokens = cases.length === 0 ? 0 : cases.reduce((sum, entry) => sum + entry.prepPromptTokens, 0) / cases.length;
-  const estimatedTokenReduction = Math.max(0, averageLegacyPacketTokens - averagePrepPromptTokens);
+  const estimatedTokenReduction = Math.max(0, averageRawPromptTokens - averagePrepPromptTokens);
+  const createdAt = new Date().toISOString();
   return {
     schemaVersion: 1,
-    createdAt: new Date().toISOString(),
-    baseline,
+    createdAt,
+    baseline: {
+      schemaVersion: 1,
+      createdAt,
+      cases: baselineCases,
+      summary: {
+        cases: baselineCases.length,
+        averageTokens: averageRawPromptTokens,
+      },
+    },
     optimizer: {
       cases: cases.length,
       averagePrepPromptTokens,
-      averageLegacyPacketTokens,
+      averageRawPromptTokens,
       estimatedTokenReduction,
       estimatedTokenReductionRatio:
-        averageLegacyPacketTokens === 0 ? 0 : Number((estimatedTokenReduction / averageLegacyPacketTokens).toFixed(3)),
+        averageRawPromptTokens === 0 ? 0 : Number((estimatedTokenReduction / averageRawPromptTokens).toFixed(3)),
     },
     cases,
   };

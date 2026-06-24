@@ -1,14 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { resolveHarness } from "../src/core/harness/index.js";
-import { projectLockPath } from "../src/core/harness/paths.js";
 import { InitError, initHarness } from "../src/core/init/index.js";
 import { importVendorFiles } from "../src/core/init/import.js";
-import { readLockFile } from "../src/core/install/lock.js";
 
 let repo: string;
 
@@ -26,86 +23,68 @@ async function write(rel: string, content: string): Promise<void> {
   await writeFile(full, content, "utf8");
 }
 
+async function exists(rel: string): Promise<boolean> {
+  try {
+    await stat(path.join(repo, rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("initHarness", () => {
-  it("scaffolds built-ins, detects the profile, and stays local-only by default", async () => {
-    await mkdir(path.join(repo, ".git", "info"), { recursive: true });
-    await write("package.json", JSON.stringify({ name: "demo-app", bin: { demo: "cli.js" }, scripts: { test: "vitest", build: "tsup" } }));
+  it("initializes Codex-native state and AGENTS.md without .threadroot", async () => {
+    await write("package.json", JSON.stringify({ name: "demo-app", scripts: { test: "vitest", lint: "eslint ." } }, null, 2));
 
     const report = await initHarness(repo, { import: false });
 
     expect(report.name).toBe("demo-app");
-    expect(report.profile).toBe("node-cli");
     expect(report.adapters).toEqual([]);
-    expect(report.skills.length).toBe(7);
-    expect(report.tools).toEqual(expect.arrayContaining(["test", "build"]));
+    expect(report.skills).toEqual([]);
+    expect(report.tools).toEqual([]);
+    expect(report.stateDir).toBe(path.join(repo, ".codex", "threadroot"));
+    expect(report.compiled).toEqual([path.join(repo, "AGENTS.md")]);
     expect(report.nextSteps.map((step) => step.command)).toEqual(
-      expect.arrayContaining(["threadroot connections discover --json", "threadroot codex install --refresh-skill"]),
+      expect.arrayContaining([
+        "threadroot codex install --refresh-skill",
+        'threadroot prep "<task>" --memory tiny --json',
+        "threadroot codex doctor --json",
+      ]),
     );
 
-    const harness = await resolveHarness(repo);
-    expect(harness.skills.map((s) => s.name).sort()).toEqual([
-      "closing-loop-research",
-      "create-connection",
-      "create-skill",
-      "create-tool",
-      "find-skills",
-      "loop-automation-engineering",
-      "threadroot",
-    ]);
-    expect(harness.manifest.automation.mode).toBe("ask");
-    expect(harness.manifest.tools.allow).toEqual(expect.arrayContaining(["test", "build"]));
-    expect(harness.tools.map((t) => t.name)).toEqual(expect.arrayContaining(["test", "build"]));
+    const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
+    expect(agents).toContain("## Threadroot");
+    expect(agents).toContain('threadroot prep "<task>" --memory tiny --json');
+    expect(agents).toContain("Store local optimizer evidence only under `.codex/threadroot/`");
+    expect(agents).toContain("lint: `npm run lint`");
+    expect(agents).toContain("test: `npm run test`");
 
-    const lock = await readLockFile(projectLockPath(repo));
-    expect(lock.objects.filter((entry) => entry.kind === "skill").map((entry) => entry.name).sort()).toEqual([
-      "closing-loop-research",
-      "create-connection",
-      "create-skill",
-      "create-tool",
-      "find-skills",
-      "loop-automation-engineering",
-      "threadroot",
-    ]);
-    expect(lock.objects.find((entry) => entry.name === "find-skills")).toMatchObject({
-      source: "threadroot:seed/find-skills",
-      upstreamSource: "https://www.skills.sh/vercel-labs/skills/find-skills",
-      adaptedBy: "threadroot",
-      reviewed: true,
-    });
-
-    await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    expect(report.compiled).toEqual([]);
-    await expect(readFile(path.join(repo, ".threadroot/memory/repo-map.md"), "utf8")).resolves.toContain("# Repo Map");
-    await expect(readFile(path.join(repo, ".gitignore"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(path.join(repo, ".git/info/exclude"), "utf8")).resolves.toContain(".threadroot/");
+    const receipt = await readFile(path.join(repo, ".codex", "threadroot", "init.json"), "utf8");
+    expect(receipt).toContain("https://developers.openai.com/codex/guides/agents-md");
+    expect(await exists(".threadroot")).toBe(false);
+    expect(await readFile(path.join(repo, ".gitignore"), "utf8")).toContain(".codex/threadroot/");
   });
 
-  it("refuses to clobber an existing harness without force", async () => {
-    await initHarness(repo, { import: false });
+  it("refuses legacy .threadroot unless force is used, then removes it", async () => {
+    await write(".threadroot/harness.yaml", "name: stale\n");
+
     await expect(initHarness(repo, { import: false })).rejects.toThrow(InitError);
     await expect(initHarness(repo, { import: false, force: true })).resolves.toBeDefined();
+    expect(await exists(".threadroot")).toBe(false);
+    expect(await exists(".codex/threadroot/init.json")).toBe(true);
   });
 
-  it("imports existing AGENTS.md prose without injecting adapter output by default", async () => {
+  it("preserves existing AGENTS.md prose and upserts the Threadroot block", async () => {
     await write("AGENTS.md", "# Demo\n\nAlways run the tests before committing.\n");
 
     await initHarness(repo, {});
+    await initHarness(repo, { force: true });
 
     const agents = await readFile(path.join(repo, "AGENTS.md"), "utf8");
     expect(agents).toContain("Always run the tests before committing.");
-    expect(agents).not.toContain("<!-- threadroot:begin");
-    await expect(readFile(path.join(repo, ".threadroot/imports/report.json"), "utf8")).resolves.toContain("AGENTS.md");
+    expect((agents.match(/threadroot:begin codex-context-optimizer/g) ?? []).length).toBe(1);
+    expect(await exists(".threadroot")).toBe(false);
   });
-
-  it("ignores non-Codex instruction files during import", async () => {
-    await write("OTHER_AGENT.md", "# Other Agent\n\nUse pnpm for package commands.\n");
-
-    await initHarness(repo, {});
-
-    await expect(readFile(path.join(repo, "AGENTS.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(path.join(repo, ".threadroot/imports/canonical.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
 });
 
 describe("importVendorFiles", () => {
@@ -129,13 +108,5 @@ describe("importVendorFiles", () => {
     expect(report.canonicalSource).toBeUndefined();
     expect(report.canonicalBody).toBe("");
     expect(report.foldedFrom).toHaveLength(0);
-  });
-
-  it("does not import non-Codex rules", async () => {
-    await write(".other-agent/rules/api.md", "---\nglobs: src/api/**\n---\nKeep handlers thin.\n");
-
-    const report = await importVendorFiles(repo);
-
-    expect(report.importedRules).toHaveLength(0);
   });
 });

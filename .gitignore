@@ -5,19 +5,6 @@ coverage/
 .env
 .env.*
 
-# Threadroot is local-only for now. The platform will handle portable/project
-# harness distribution later.
-.threadroot/
-
-# Codex optimizer run state is local evidence and should not be committed.
-.codex/threadroot/
-
 # threadroot:begin local-state
-.threadroot/cache/
-.threadroot/tmp/
-.threadroot/logs/
-.threadroot/state/
-.threadroot/local.*
-.threadroot/*.local.*
-.threadroot/*.secret.*
+.codex/threadroot/
 # threadroot:end local-state

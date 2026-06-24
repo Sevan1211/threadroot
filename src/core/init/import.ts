@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { extractHandAuthored } from "../compile/managed.js";
-
 const CODEX_AGENTS_FILE = "AGENTS.md";
+const MANAGED_BLOCK_PATTERNS = [
+  /<!-- threadroot:begin codex-context-optimizer -->[\s\S]*?<!-- threadroot:end codex-context-optimizer -->/gu,
+  /<!-- threadroot:begin \(generated[\s\S]*?<!-- threadroot:end -->/gu,
+];
 
 export type ImportedRule = {
   name: string;
@@ -33,6 +35,14 @@ async function readIfExists(filePath: string): Promise<string | undefined> {
     }
     throw error;
   }
+}
+
+function extractHandAuthored(content: string): string {
+  let next = content;
+  for (const pattern of MANAGED_BLOCK_PATTERNS) {
+    next = next.replace(pattern, "\n");
+  }
+  return next.trim();
 }
 
 /**

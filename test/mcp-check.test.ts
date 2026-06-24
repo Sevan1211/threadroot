@@ -113,7 +113,7 @@ describe("checkCodexMcp", () => {
   });
 
   it("errors when required Threadroot tools are missing", async () => {
-    const server = await writeFakeMcpServer(["status"]);
+    const server = await writeFakeMcpServer(["codex_status"]);
     await writeCodexMcpConfig({ command: process.execPath, args: [server] });
 
     const report = await checkCodexMcp({ repoRoot: repo, home });

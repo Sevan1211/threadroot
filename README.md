@@ -2,131 +2,98 @@
 
 Threadroot is a Codex Context Optimizer.
 
-It makes Codex cheaper and better by turning repo work into small, evidence-backed, verified Codex runs. The primary metric is **tokens-to-green**: how many Codex input, cached-input, output, reasoning, tool-output, and retry tokens it takes to reach a verified result.
+It makes Codex cheaper and better by turning repo work into small, evidence-backed, verified Codex runs. The product is optimized around **tokens-to-green**: the input, cached input, output, reasoning, tool-output, retry, and verification cost required to reach a correct result.
 
-The new high-value path is:
+## What It Does
 
-- **Preflight**: locally compile the smallest useful Codex brief: goal, first reads, likely tests, verification commands, and risk notes.
-- **Flight Recorder**: run Codex through `codex exec --json`, capture usage/events/output, and verify the result.
-- **Autotuner**: score context waste and propose routing or guidance changes from real run evidence.
+- **Preflight**: builds a compact Codex-ready brief with the goal, first reads, likely tests, verification commands, and risk notes.
+- **Flight recorder**: runs `codex exec --json`, streams output to disk, captures token usage and event evidence, and verifies the result.
+- **Autotuner**: scores context waste and proposes routing or `AGENTS.md` improvements from real run evidence.
 
-Optimizer state is Codex-native and local:
+Project-local Threadroot state lives only under:
 
 ```text
 .codex/threadroot/
 ```
 
+Threadroot does not create or require `.threadroot/`.
+
 ## Quick Start
 
 ```bash
-npm exec --package=threadroot -- threadroot codex install --refresh-skill
-npm exec --package=threadroot -- threadroot prep "fix the failing test" --memory tiny --json
-npm exec --package=threadroot -- threadroot codex run "fix the failing test" --memory tiny --mode balanced --ephemeral --require "pnpm test"
-npm exec --package=threadroot -- threadroot score latest
-npm exec --package=threadroot -- threadroot tune latest
+npm install -g threadroot
+threadroot init
+threadroot codex install --refresh-skill
+threadroot codex doctor
+threadroot prep "fix the failing test" --memory tiny
+threadroot codex run "fix the failing test" --memory tiny --mode balanced --ephemeral --require "pnpm test"
+threadroot score latest
+threadroot tune latest
 ```
 
-After `codex install`, add the printed MCP setup command to Codex if it is not already configured:
+If Codex does not already list the Threadroot MCP server, run the setup command printed by `threadroot codex install`:
 
 ```bash
 codex mcp add threadroot -- threadroot mcp
 ```
 
-Then restart Codex so it sees the MCP server and refreshed Threadroot skill.
+Restart Codex after changing MCP config or refreshing the global Threadroot skill.
 
-## Product Shape
+## Codex-Native Files
 
-Threadroot focuses on Codex/OpenAI only:
+`threadroot init` creates or updates a compact root `AGENTS.md` because Codex reads `AGENTS.md` before work and the official guidance recommends keeping repo instructions small, practical, and close to the code they affect.
 
-- `threadroot prep "<task>"` compiles a compact Codex-ready brief without invoking Codex.
-- `threadroot codex run "<task>"` runs Preflight -> `codex exec --json` -> verification -> scoring.
-- `threadroot score latest` reports tokens-to-green, context waste, verification status, retries, and recommendations.
-- `threadroot tune latest` writes evidence-backed routing hints and proposes guidance changes.
-- `threadroot eval codex` compares compact preflight prompts against raw task packets on repo-specific eval cases.
-- `threadroot task "<task>"` remains as the legacy rich task-packet endpoint while the optimizer matures.
-- `threadroot codex install|status|doctor` manages the Codex-facing setup and health checks.
-- `threadroot mcp` exposes lazy MCP tools and resources to Codex.
+`threadroot codex install --refresh-skill` writes a global skill to:
 
-Threadroot does not require a Threadroot API key and does not make OpenAI API calls during normal local workflows. It uses the user's existing Codex installation and auth.
+```text
+$HOME/.agents/skills/threadroot/SKILL.md
+```
 
-## RAM And Context Control
+That `.agents` path is intentional: Codex documents `$HOME/.agents/skills` for global skills and `.agents/skills` for repo skills. Threadroot uses the global location so every repo can ask Codex to use the optimizer without committing a project skill.
 
-Threadroot defaults to the `conservative` memory profile. Use `--memory tiny` when Codex or the repo is pressuring local RAM; use `--memory standard` when you want broader preflight recall. Memory profiles cap local file walking, per-file sampling, ranked files, and prompt budgets before Codex runs.
-
-`threadroot codex run` streams `codex exec --json` output directly to `.codex/threadroot/runs/` while parsing token and file evidence incrementally. The score records the memory profile, raw Codex output bytes, whether output was streamed, and whether compact samples were truncated.
-
-Use `--ephemeral` for automation runs where Threadroot's run trace and score are the durable artifact. This asks Codex not to persist its own session state for that run.
-
-## Core Commands
+## Commands
 
 ```bash
+threadroot init [--force]
+threadroot prep "<task>" [--memory tiny|conservative|standard] [--json]
+threadroot codex run "<task>" [--mode cheap|balanced|deep] [--ephemeral] [--require "pnpm test"] [--json]
 threadroot codex install [--refresh-skill] [--check] [--status] [--undo] [--json]
 threadroot codex status [--json]
 threadroot codex doctor [--json]
-
-threadroot prep "<task>" [--mode cheap|balanced|deep] [--memory tiny|conservative|standard] [--json]
-threadroot codex run "<task>" [--mode cheap|balanced|deep] [--memory tiny|conservative|standard] [--ephemeral] [--require "pnpm test"] [--json]
 threadroot score latest [--json]
 threadroot tune latest [--json]
 threadroot eval codex [--json]
-
-threadroot init
-threadroot task "<task>" [--json] [--debug-ranking] [--force-index]
-threadroot refresh [--json]
-threadroot index [--status] [--json]
-threadroot map [--write|--check] [--json]
-
-threadroot trace start "<task>" [--json]
-threadroot trace event note --message "<note>" [--json]
-threadroot trace finish --status partial [--json]
-threadroot eval context [--json]
-threadroot eval traces --latest [--json]
-threadroot improve latest [--json]
-
-threadroot loop start "<goal>" --max-iterations 3 [--json]
-threadroot loop next [--json]
-threadroot loop run --iterations 1 --require "pnpm test" [--json]
-threadroot loop report [--json]
-threadroot loop finish [--json]
+threadroot mcp
+threadroot mcp check [--json]
 ```
+
+`threadroot status` and `threadroot doctor` are aliases for the Codex-focused status and doctor commands.
 
 ## MCP Surface
 
-Codex should call `context_budget` or `task_packet` before broad repo exploration. MCP also exposes:
+Codex should call `context_budget` or `task_packet` before broad repo exploration. The MCP server exposes only the optimizer-focused tools:
 
+- `task_packet`
 - `context_budget`
+- `repo_search`
+- `repo_read`
 - `score_latest`
+- `trace_latest`
 - `tune_latest`
 - `codex_status`
-- `index_status`, `refresh_context`, `trace_context`, `eval_context`
-- trace, eval, improve, and loop tools
-- repo map/search/read tools
-- skills, tools, connections, memory, web fetch, status, and doctor tools
 
-Key resources:
+Resources:
 
 - `threadroot://brief/latest`
 - `threadroot://score/latest`
 - `threadroot://tuning/latest`
-- `threadroot://task/latest`
-- `threadroot://index`
 - `threadroot://codex`
-- `threadroot://repo-map`
-- `threadroot://trace/latest`
-- `threadroot://loop/current`
+- `threadroot://repo/{path}`
 
-## Codex Loops
+## RAM And Context Control
 
-`threadroot loop run` uses Codex only. It builds the next evidence-backed prompt, runs:
+Threadroot defaults to the `conservative` memory profile. Use `--memory tiny` when Codex or the repo is pressuring local RAM; use `--memory standard` when you want broader preflight recall.
 
-```bash
-codex exec --json --sandbox workspace-write -C <repo> -
-```
+`threadroot codex run` streams Codex JSONL output directly to `.codex/threadroot/runs/` and stores bounded compact samples, so large tool output does not have to stay in memory or get fed back into Codex uncompressed.
 
-then captures Codex JSONL events, verification output, trace evals, improvement candidates, and a final report. Use `--codex-bin <path>` only for advanced local testing.
-
-## Local State
-
-Keep `.codex/threadroot/` local unless a future sync/versioning workflow explicitly says otherwise. The npm package does not ship optimizer indexes, run traces, scores, tuning reports, caches, memory, Codex install receipts, or generated local state.
-
-Generated Codex-native files stay where Codex expects them, such as `AGENTS.md` and `.agents/skills`, only when explicitly requested.
+Use `--ephemeral` for automation runs where Threadroot's score and trace are the durable artifact and Codex does not need to persist its own session state.

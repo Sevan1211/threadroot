@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -28,6 +28,15 @@ async function write(rel: string, content: string): Promise<void> {
   await writeFile(full, content, "utf8");
 }
 
+async function exists(rel: string): Promise<boolean> {
+  try {
+    await stat(path.join(repo, rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function run(...args: string[]): Promise<string> {
   vi.restoreAllMocks();
   const lines: string[] = [];
@@ -43,49 +52,32 @@ async function run(...args: string[]): Promise<string> {
 }
 
 describe("CLI smoke", () => {
-  it("walks the core first-run command flow", async () => {
+  it("walks the Codex-native first-run flow", async () => {
     const init = await run("init", "--yes", "--no-import");
-    expect(init).toContain("Initialized harness `demo`");
-    expect(init).toContain("adapters: none (local-only)");
+    expect(init).toContain("Initialized Codex optimizer `demo`");
+    expect(init).toContain("state: .codex/threadroot");
+    expect(init).toContain("guidance: AGENTS.md");
+    expect(await exists(".threadroot")).toBe(false);
+    expect(await readFile(path.join(repo, "AGENTS.md"), "utf8")).toContain("threadroot prep");
 
     const install = await run("codex", "install");
     expect(install).toContain("Threadroot Codex install: written");
     expect(install).toContain("codex mcp add threadroot");
-
-    const status = await run("status");
-    expect(status).toContain("harness: demo");
-    expect(status).toContain("adapters: none (local-only)");
+    expect(await exists(".codex/threadroot/install.json")).toBe(true);
+    expect(await exists(".threadroot")).toBe(false);
 
     const codex = await run("codex", "status");
     expect(codex).toContain("Codex:");
     expect(codex).toContain("runner: codex exec --json");
 
-    const statusJson = JSON.parse(await run("status", "--json")) as { exists: boolean; manifest: { name: string } };
-    expect(statusJson.exists).toBe(true);
-    expect(statusJson.manifest.name).toBe("demo");
+    const status = await run("status");
+    expect(status).toContain("Codex:");
 
-    const index = await run("index");
-    expect(index).toContain("index:");
-    expect(index).toContain("objects:");
-
-    const refresh = await run("refresh");
-    expect(refresh).toContain("context: refreshed");
-    expect(refresh).toContain("repo map:");
-    expect(refresh).toContain("index:");
-
-    const task = await run("task", "write tests");
-    expect(task).toContain("task: write tests");
-    expect(task).toContain("index:");
-    expect(task).toContain("freshness:");
-
-    const taskJson = JSON.parse(await run("task", "write tests", "--json")) as { task: string; index: { exists: boolean } };
-    expect(taskJson.task).toBe("write tests");
-    expect(taskJson.index.exists).toBe(true);
-
-    const prep = await run("prep", "fix retryInvoice billing");
+    const prep = await run("prep", "fix retryInvoice billing", "--memory", "tiny");
     expect(prep).toContain("prep:");
     expect(prep).toContain("prompt tokens:");
     expect(prep).toContain(".codex/threadroot/briefs/");
+    expect(await exists(".threadroot")).toBe(false);
 
     const codexDryRun = await run("codex", "run", "fix retryInvoice billing", "--dry-run", "--require", "npm run test");
     expect(codexDryRun).toContain("codex run: blocked");
@@ -93,56 +85,15 @@ describe("CLI smoke", () => {
 
     const score = await run("score", "latest");
     expect(score).toContain("score: blocked");
-    expect(score).toContain("tokens-to-green: n/a");
 
     const tune = await run("tune", "latest");
     expect(tune).toContain("tune:");
     expect(tune).toContain(".codex/threadroot/tuning/");
 
-    const evalContext = await run("eval", "context");
-    expect(evalContext).toContain("context eval:");
-    expect(evalContext).toContain("No built-in eval cases apply");
+    const evalCodex = await run("eval", "codex");
+    expect(evalCodex).toContain("codex eval:");
 
-    const embeddings = await run("embeddings", "status");
-    expect(embeddings).toContain("embeddings:");
-
-    const map = await run("map", "--check");
-    expect(map).toContain("repo map: current");
-
-    const web = await run("web", "status");
-    expect(web).toContain("web fetch: available");
-    expect(web).toContain("web search:");
-
-    const skills = await run("skills", "validate");
-    expect(skills).toContain("Skills valid.");
-
-    const matchedSkills = await run("skills", "match", "write tests");
-    expect(matchedSkills).toContain("skill matches: write tests");
-
-    const skillsJson = JSON.parse(await run("skills", "list", "--json")) as { skills: Array<{ name: string }> };
-    expect(skillsJson.skills.map((skill) => skill.name)).toContain("find-skills");
-
-    const doctor = await run("doctor");
-    expect(doctor).toContain("Threadroot doctor:");
-    expect(process.exitCode).toBeUndefined();
-
-    const toolsJson = JSON.parse(await run("tools", "list", "--json")) as { tools: unknown[] };
-    expect(Array.isArray(toolsJson.tools)).toBe(true);
-
-    const addedTool = await run("tools", "add", "say-ok", "--description", "Say ok", "--run", "echo ok");
-    expect(addedTool).toContain("Created project tool `say-ok`");
-    const brief = await run("run", "say-ok", "--brief");
-    expect(brief).toContain("Command succeeded");
-    expect(brief).toContain("raw output:");
-
-    const connectionsJson = JSON.parse(await run("connections", "list", "--json")) as { connections: unknown[] };
-    expect(Array.isArray(connectionsJson.connections)).toBe(true);
-
-    const automationJson = JSON.parse(await run("automation", "status", "--json")) as { mode: string };
-    expect(automationJson.mode).toBe("ask");
-
-    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "start", "write tests"])).rejects.toThrow();
-    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "working-set", "write tests"])).rejects.toThrow();
-    await expect(createProgram(repo).exitOverride().parseAsync(["node", "threadroot", "context", "write tests"])).rejects.toThrow();
+    const publicCommands = createProgram(repo).commands.map((command) => command.name());
+    expect(publicCommands).not.toEqual(expect.arrayContaining(["task", "map", "tools", "skills", "connections", "memory", "web", "loop", "trace", "improve"]));
   }, 15000);
 });
